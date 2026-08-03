@@ -1,0 +1,27 @@
+[project]
+name = "stockopt"
+version = "0.1.0"
+description = "A Dockerized FastAPI project with uv"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "pydantic-settings>=2.0.0",
+    
+    
+    
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.3.0",
+    
+]
+data = [
+    "pandas>=2.2.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

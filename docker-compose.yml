@@ -1,0 +1,22 @@
+services:
+
+  api:
+    build: .
+    container_name: fastapi_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    working_dir: /app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+    networks:
+      - app_network
+    restart: unless-stopped
+
+networks:
+  app_network:
+    driver: bridge

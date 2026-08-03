@@ -1,0 +1,46 @@
+{
+  "family": "stockopt",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::978439335053:role/stockopt-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::978439335053:role/stockopt-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "fastapi-api",
+      "image": "978439335053.dkr.ecr.us-east-1.amazonaws.com/stockopt-repository:latest",
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "command": [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "environment": [
+        {
+          "name": "PYTHONPATH",
+          "value": "/app"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/aws/ecs/stockopt-logs",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "stockopt-stream"
+        }
+      }
+    }
+  ]
+}

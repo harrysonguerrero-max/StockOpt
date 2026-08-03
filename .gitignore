@@ -1,0 +1,65 @@
+# Ignorar la carpeta node_modules en proyectos
+source/
+catboost_info/
+
+# Ignorar archivos texto
+*.csv
+*.xls
+*.xlsx
+
+# Ignorar archivos de configuración de entornos
+.env
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+
+# Ignorar archivos temporales o de backup
+*~
+
+# Ignorar archivos de compilación
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+
+# Ignorar archivos generados por el sistema operativo
+# MacOS
+.DS_Store
+# Windows
+Thumbs.db
+
+# Ignorar archivos de logs
+*.log
+
+
+# Ignarar archivos generados por el IDE
+.idea/
+.vscode/
+
+# Archivos temporales
+*.swp
+*.swo
+*.bak
+
+# Archivos de pruebas de cobertura (por ejemplo, coverage.py)
+.coverage
+.coverage.*
+nosetests.xml
+test-*.xml
+
+# Archivos de distribución de Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+wheels/
+lightning_logs/
+# config.yaml

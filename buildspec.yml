@@ -1,0 +1,60 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: us-east-1
+    ECR_REGISTRY: 978439335053.dkr.ecr.us-east-1.amazonaws.com
+    ECR_REPOSITORY: stockopt-repository
+    IMAGE_TAG: latest
+    RULE_NAME: stockopt-shutdown-rule
+    RULE_RATE: 1 hour
+    LAMBDA_ARN: arn:aws:lambda:us-east-1:978439335053:function:stockopt-lambda
+    ECS_CLUSTER: stockopt-cluster
+    ECS_SERVICE: stockopt-service
+  secrets-manager:
+    GITLAB_DEPLOY_USER: codebuild/mlops-sdk-token:GITLAB_DEPLOY_USER
+    GITLAB_DEPLOY_TOKEN: codebuild/mlops-sdk-token:GITLAB_DEPLOY_TOKEN
+
+phases:
+  pre_build:
+    commands:
+      - set -e
+      # 1. Authenticate with ECR
+      - aws ecr get-login-password --region $AWS_REGION |
+        docker login --username AWS --password-stdin $ECR_REGISTRY
+
+  build:
+    commands:
+      # 2. Build the image
+      - docker build --build-arg GITLAB_DEPLOY_USER=$GITLAB_DEPLOY_USER --build-arg GITLAB_DEPLOY_TOKEN=$GITLAB_DEPLOY_TOKEN -f Dockerfile -t $ECR_REPOSITORY:$IMAGE_TAG .
+
+      # ── Verificar que mlops_sdk quedó instalado en la imagen ─────────
+      - echo "Verificando mlops_sdk en la imagen..."
+      - |
+        docker run --rm $ECR_REPOSITORY:$IMAGE_TAG python -c "
+        from mlops_sdk.tracking.mlflow_client import MLflowClient
+        import importlib.metadata as meta
+        version = meta.version('mlops-sdk')
+        print(f'[OK] mlops_sdk instalado — version: {version}')
+        print('[OK] import MLflowClient')
+        "
+      # ─────────────────────────────────────────────────────────────────
+
+      # 3. Tag the image
+      - docker tag $ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+  post_build:
+    commands:
+      # 4. Push to ECR
+      - docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      # 5. Deploy to ECS
+      - aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --desired-count 1 --force-new-deployment
+
+      # 6. Compute shutdown time (+1 hour)
+
+      # 7. Create / overwrite EventBridge shutdown rule
+      - aws events put-rule --name $RULE_NAME --schedule-expression "rate($RULE_RATE)" --state ENABLED
+
+      # 8. Attach shutdown Lambda target (idempotent)
+      - aws events put-targets --rule $RULE_NAME --targets "Id=shutdown,Arn=${LAMBDA_ARN}"

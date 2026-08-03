@@ -1,0 +1,189 @@
+stages:
+  - analyze
+  - build
+  - deploy
+
+variables:
+  APP_NAME: "stockopt"
+  BRANCH_NAME: "dev"
+  AWS_DEFAULT_REGION: "us-east-1"
+  FRONTEND_DIR: "frontend"
+  DIST_DIR: "dist"
+  FRONTEND_ZIP: "stockopt.zip"
+  AWS_ACCOUNT_ID: "978439335053"
+  BACKEND_ZIP: "stockopt-backend.zip"
+  S3_BUCKET: "stockopt-bucket"
+  CODEBUILD_PROJECT: "stockopt-image-builder"
+  ECS_CLUSTER: "stockopt-cluster"
+  ECS_SERVICE: "stockopt-service"
+
+.base_ruff:
+  stage: analyze
+  interruptible: true
+  image:
+    name: ghcr.io/astral-sh/ruff:0.14.10-alpine
+  before_script:
+    - cd $CI_PROJECT_DIR
+    - ruff --version
+
+Ruff Check:
+  extends: .base_ruff
+  script:
+    - ruff check --output-format=gitlab --output-file=code-quality-report.json
+  artifacts:
+    reports:
+      codequality: $CI_PROJECT_DIR/code-quality-report.json
+
+Ruff Format:
+  extends: .base_ruff
+  script:
+    - ruff format --diff
+  allow_failure: true
+
+build_frontend:
+  stage: build
+  image: node:20
+  script:
+    - echo "Building frontend..."
+    - cd "$FRONTEND_DIR"
+    - npm install
+    - npm run build
+    - |
+      if [ ! -d "$CI_PROJECT_DIR/$FRONTEND_DIR/$DIST_DIR" ]; then
+        echo "Dist folder not found"
+        exit 1
+      fi
+  artifacts:
+    paths:
+      - $FRONTEND_DIR/$DIST_DIR
+
+deploy:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  dependencies:
+    - build_frontend
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^(dev|develop|development)$/'
+
+  before_script:
+    - apt-get update
+    - apt-get install -y zip jq
+
+  script:
+    - echo "Zipping dist..."
+    - cd "$FRONTEND_DIR/$DIST_DIR"
+    - rm -f "$FRONTEND_ZIP"
+    - |
+      zip -r "$FRONTEND_ZIP" . \
+        -x ".venv/*" \
+        -x "**/.venv/*" \
+        -x "__pycache__/*" \
+        -x "**/__pycache__/*" \
+        -x "*.pyc" \
+        -x ".git/*" \
+        -x "$FRONTEND_ZIP"
+
+    - echo "Uploading frontend ZIP to S3..."
+    - aws s3 cp "$FRONTEND_ZIP" "s3://$S3_BUCKET/$FRONTEND_ZIP"
+
+    - echo "Generating presigned URL..."
+    - PRESIGNED_URL=$(aws s3 presign s3://$S3_BUCKET/$FRONTEND_ZIP --expires-in 3600)
+
+    - echo "Fetching Amplify App ID..."
+    - |
+      APP_ID=$(aws amplify list-apps \
+        --region $AWS_DEFAULT_REGION \
+        --query "apps[?name=='$APP_NAME'].appId | [0]" \
+        --output text)
+
+    - echo "Starting deployment..."
+    - |
+      aws amplify start-deployment \
+        --region $AWS_DEFAULT_REGION \
+        --app-id $APP_ID \
+        --branch-name $BRANCH_NAME \
+        --source-url $PRESIGNED_URL
+
+    - echo "Deployment triggered successfully."
+
+    # ========================
+    # Create Linux-safe ZIP
+    # ========================
+
+    - cd "$CI_PROJECT_DIR"
+    - echo "Creating ZIP..."
+    - rm -f "$BACKEND_ZIP"
+    - |
+      zip -r "$BACKEND_ZIP" . \
+        -x ".venv/*" \
+        -x "**/.venv/*" \
+        -x "__pycache__/*" \
+        -x "**/__pycache__/*" \
+        -x "*.pyc" \
+        -x ".git/*" \
+        -x "$FRONTEND_DIR/*" \
+        -x "**/$FRONTEND_DIR/*" \
+        -x "$BACKEND_ZIP"
+
+    - |
+      if [ ! -f "$BACKEND_ZIP" ]; then
+        echo "ZIP was not created"
+        exit 1
+      fi
+
+    # ========================
+    # Upload to S3
+    # ========================
+    - echo "Uploading ZIP to S3..."
+    - aws s3 cp "$BACKEND_ZIP" "s3://$S3_BUCKET/$BACKEND_ZIP" --region "$AWS_DEFAULT_REGION"
+
+    # ========================
+    # Start CodeBuild
+    # ========================
+    - echo "Starting CodeBuild..."
+    - |
+      BUILD_ID=$(aws codebuild start-build \
+        --project-name "$CODEBUILD_PROJECT" \
+        --region "$AWS_DEFAULT_REGION" \
+        --environment-variables-override \
+          name=GITLAB_TOKEN,value=$GITLAB_TOKEN,type=PLAINTEXT \
+        --query 'build.id' \
+        --output text)
+
+      if [ -z "$BUILD_ID" ]; then
+        echo "Failed to start CodeBuild"
+        exit 1
+      fi
+
+      echo "Build started: $BUILD_ID"
+
+    # ========================
+    # Wait for CodeBuild
+    # ========================
+    - |
+      while true; do
+        STATUS=$(aws codebuild batch-get-builds --ids "$BUILD_ID" --query 'builds[0].buildStatus' --output text)
+
+        echo "CodeBuild status: $STATUS"
+
+        case "$STATUS" in
+          SUCCEEDED)
+            echo "CodeBuild succeeded"
+            break
+            ;;
+          FAILED|FAULT|STOPPED|TIMED_OUT)
+            echo "CodeBuild failed"
+            exit 1
+            ;;
+        esac
+
+        sleep 30
+      done
+
+    # ========================
+    # Wait for ECS deployment
+    # ========================
+    - echo "Waiting for ECS service to become stable..."
+    - aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --region "$AWS_DEFAULT_REGION"
+
+    - echo "Deployment completed successfully"
