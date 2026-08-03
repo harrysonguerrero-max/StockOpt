@@ -3,7 +3,7 @@ source/
 catboost_info/
 
 # Ignorar archivos texto
-*.csv
+
 *.xls
 *.xlsx
 
