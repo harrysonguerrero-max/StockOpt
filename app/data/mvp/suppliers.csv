@@ -1,6 +1,6 @@
 supplier_id,name,city_id,active,contact_email,lead_time_avg_days,lead_time_min_days,lead_time_max_days,lead_time_std_days
-SUP-01,Alpha_Inc,PUNE,True,ordenes@alpha-inc.com,10.7,1,20,5.46
-SUP-02,Beta_Supplies,CHEN,True,ordenes@beta-supplies.com,11.3,1,20,5.67
-SUP-03,Delta_Logistics,DHAR,True,ordenes@delta-logistics.com,10.9,1,20,6.01
-SUP-04,Epsilon_Group,PUNE,True,ordenes@epsilon-group.com,10.9,1,20,5.73
-SUP-05,Gamma_Co,CHEN,True,ordenes@gamma-co.com,10.2,1,20,5.47
+SUP-01,Alpha_Inc,NAVA,True,ordenes@alpha-inc.com,10.7,1,20,5.46
+SUP-02,Beta_Supplies,OBRE,True,ordenes@beta-supplies.com,11.3,1,20,5.67
+SUP-03,Delta_Logistics,NAVA,True,ordenes@delta-logistics.com,10.9,1,20,6.01
+SUP-04,Epsilon_Group,OBRE,True,ordenes@epsilon-group.com,10.9,1,20,5.73
+SUP-05,Gamma_Co,NAVA,True,ordenes@gamma-co.com,10.2,1,20,5.47

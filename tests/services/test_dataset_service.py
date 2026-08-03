@@ -3,9 +3,10 @@
 import numpy as np
 import pytest
 
-from app.data.build_mvp_dataset import FILE_NAMES, build_all, main
-from app.dataprep import config
-from app.dataprep.builders import (
+from app.data.build_mvp_dataset import main
+from app.services.dataset_builder import FILE_NAMES, build_all
+from app.core import dataset_config as config
+from app.services.dataset_service import (
     build_demand_history,
     build_inventory_current,
     build_parts_master,
@@ -14,7 +15,7 @@ from app.dataprep.builders import (
     load_procurement,
     load_spine,
 )
-from app.dataprep.validate import validate
+from app.services.validation_service import validate
 
 FAMILIES = {
     "Bearing", "Coupling", "Drive Belt", "Electrical", "Fastener",
@@ -73,7 +74,7 @@ def test_parts_master_shelf_life_covers_every_family(tables):
 
 def test_inventory_has_one_row_per_sku_city(tables):
     inv = tables["inventory"]
-    assert len(inv) == 60
+    assert len(inv) == 20 * len(config.CITY_IDS)
     assert not inv.duplicated(["sku_id", "city_id"]).any()
     assert (inv["on_hand_qty"] >= 0).all()
     assert (inv["reorder_qty"] >= 1).all()
@@ -97,9 +98,17 @@ def test_inventory_mixes_both_sides_of_the_reorder_point(tables):
 # Entrada 3: demanda historica
 # --------------------------------------------------------------------------- #
 
-def test_demand_preserves_total_quantity(tables):
+def test_demand_preserves_quantity_of_complete_months(tables):
+    """El agregado mensual no debe perder ni inventar consumo.
+
+    Solo se excluye lo registrado en meses incompletos, que el build descarta
+    para no leerlos como una caida de la demanda.
+    """
     spine = load_spine(config.RAW_DIR)
-    assert tables["demand"]["qty_issued"].sum() == spine["qty_issued"].sum()
+    days = spine.groupby(spine["transaction_date"].dt.strftime("%Y-%m"))["transaction_date"].nunique()
+    complete = days[days >= config.MIN_DAYS_PER_MONTH].index
+    expected = spine[spine["transaction_date"].dt.strftime("%Y-%m").isin(complete)]["qty_issued"].sum()
+    assert tables["demand"]["qty_issued"].sum() == expected
 
 
 def test_demand_grain_is_sku_city_month(tables):
@@ -112,6 +121,17 @@ def test_demand_grain_is_sku_city_month(tables):
 def test_demand_covers_at_least_twelve_months(tables):
     """El spec pide 6-12 meses de historico como minimo."""
     assert tables["demand"]["period_month"].nunique() >= 12
+
+
+def test_demand_ends_at_configured_horizon(tables):
+    """La serie debe llegar al mes que exige la operacion."""
+    assert tables["demand"]["period_month"].max() == config.DEMAND_HORIZON
+
+
+def test_cities_are_the_configured_ones(tables):
+    cities = tables["cities"]
+    assert list(cities["city_id"]) == config.CITY_IDS
+    assert (cities["country"] == "Mexico").all()
 
 
 # --------------------------------------------------------------------------- #

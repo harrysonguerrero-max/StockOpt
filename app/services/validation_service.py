@@ -1,12 +1,34 @@
-"""Validacion de las tablas del MVP (Etapa 1.1 del spec).
+"""Validacion del dataset MVP antes de publicarlo.
 
-Levanta ValueError ante errores criticos; devuelve la lista de advertencias.
+Funcionalidad:
+    Aplica los controles de calidad exigidos por la etapa de ingesta: integridad
+    referencial entre tablas, rangos operativos, ausencia de nulos, duplicados de
+    llave y reglas de negocio minimas. Separa lo que impide procesar de lo que
+    solo requiere revision humana.
 """
 
 
 def validate(tables: dict) -> list:
-    errors: list = []
-    warnings: list = []
+    """Valida el conjunto de tablas generadas.
+
+    Entrada:
+        tables: diccionario con las claves cities, parts, inventory, demand,
+            suppliers y offers, cada una con su DataFrame.
+
+    Salida:
+        Lista de advertencias que no bloquean el proceso. Levanta ValueError con
+        el detalle de todos los fallos si encuentra algun error critico.
+
+    Funcionalidad:
+        Comprueba que las llaves sku_id, city_id y supplier_id existan en sus
+        catalogos, que precios y cantidades esten en rango, que ninguna tabla
+        traiga nulos ni llaves repetidas, y que cada pieza tenga al menos dos
+        ofertas, ya que sin alternativas el optimizador no tiene nada que
+        decidir. Como advertencias reporta el stock agotado, las piezas bajo el
+        punto de reorden y los proveedores con entregas especialmente lentas.
+    """
+    errors = []
+    warnings = []
 
     parts = tables["parts"]
     cities = tables["cities"]
@@ -24,7 +46,6 @@ def validate(tables: dict) -> list:
         if orphans:
             errors.append(f"Integridad {label}: huerfanos {sorted(orphans)[:5]}")
 
-    # Integridad referencial
     check_subset(inventory["sku_id"], sku_set, "inventory.sku_id")
     check_subset(demand["sku_id"], sku_set, "demand.sku_id")
     check_subset(offers["sku_id"], sku_set, "offers.sku_id")
@@ -32,7 +53,6 @@ def validate(tables: dict) -> list:
     check_subset(demand["city_id"], city_set, "demand.city_id")
     check_subset(offers["supplier_id"], supplier_set, "offers.supplier_id")
 
-    # Rangos operativos
     if (parts["unit_cost_usd"] < 0).any():
         errors.append("parts.unit_cost_usd < 0")
     if (offers["unit_price_usd"] < 0).any():
@@ -46,18 +66,15 @@ def validate(tables: dict) -> list:
     if (inventory["on_hand_qty"] < 0).any():
         errors.append("inventory.on_hand_qty < 0")
 
-    # Cada pieza necesita alternativas para que el optimizador pueda elegir
     counts = offers.groupby("sku_id").size()
     without_options = sku_set - set(counts[counts >= 2].index)
     if without_options:
         errors.append(f"SKUs con menos de 2 ofertas: {sorted(without_options)[:5]}")
 
-    # Nulos
-    for name, df in tables.items():
-        if df.isna().any().any():
+    for name, frame in tables.items():
+        if frame.isna().any().any():
             errors.append(f"{name}: contiene nulos")
 
-    # Duplicados de llave
     if not parts["sku_id"].is_unique:
         errors.append("parts.sku_id duplicado")
     if not offers["offer_id"].is_unique:
@@ -67,16 +84,17 @@ def validate(tables: dict) -> list:
     if demand.duplicated(["sku_id", "city_id", "period_month"]).any():
         errors.append("demand: llave (sku_id, city_id, period_month) duplicada")
 
-    # Advertencias: no bloquean, requieren revision humana
     stockouts = int((inventory["on_hand_qty"] == 0).sum())
     if stockouts:
         warnings.append(f"{stockouts} combinaciones sku/ciudad con stock en cero")
+
     below = int(inventory["below_reorder"].sum())
     if below:
         warnings.append(f"{below} combinaciones sku/ciudad por debajo del punto de reorden")
-    high_lead = suppliers.loc[suppliers["lead_time_max_days"] > 30, "supplier_id"].tolist()
-    if high_lead:
-        warnings.append(f"Proveedores con lead time maximo > 30 dias: {high_lead}")
+
+    slow = suppliers.loc[suppliers["lead_time_max_days"] > 30, "supplier_id"].tolist()
+    if slow:
+        warnings.append(f"Proveedores con lead time maximo mayor a 30 dias: {slow}")
 
     if errors:
         raise ValueError("Errores criticos de validacion:\n- " + "\n- ".join(errors))

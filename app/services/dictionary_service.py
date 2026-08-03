@@ -1,11 +1,20 @@
-"""Genera el diccionario de datos del dataset MVP."""
+"""Generacion del diccionario de datos del dataset MVP.
+
+Funcionalidad:
+    Escribe un documento que describe cada tabla generada, sus columnas, la
+    unidad en que estan expresadas y si el dato proviene de las fuentes crudas o
+    fue sintetizado durante la construccion.
+"""
 
 from pathlib import Path
 
-_CONTENT = """# Diccionario de datos - MVP StockOpt
+CONTENIDO = """# Diccionario de datos - MVP StockOpt
 
 Generado por `app/data/build_mvp_dataset.py`. Montos en USD (1 USD = 83 INR).
-Alcance: 20 piezas MRO x 3 ciudades x 5 proveedores, demanda mensual.
+Alcance: 20 piezas MRO x 2 ciudades x 5 proveedores, demanda mensual.
+Ciudades: Nava (Coahuila) y Ciudad Obregon (Sonora).
+El historico se desplaza para terminar en el horizonte configurado, sin generar
+meses sinteticos: todas las observaciones son reales.
 
 ## Fuentes
 | Tabla generada | Fuente cruda |
@@ -46,7 +55,7 @@ Vida util por familia: Lubrication 180, Filter 365, Seal & Gasket 730,
 Drive Belt 1095, Bearing 1825, Coupling 2555, Electrical 1825, Sensor 1825,
 Fastener 3650.
 
-## inventory_current.csv - Inventario actual (60 filas)
+## inventory_current.csv - Inventario actual (40 filas)
 | Columna | Tipo | Unidad | Origen |
 |---|---|---|---|
 | sku_id | str | - | FK parts_master |
@@ -81,7 +90,7 @@ es intermitente y el forecast necesita metodos robustos.
 |---|---|---|---|
 | supplier_id | str | - | asignado |
 | name | str | - | real |
-| city_id | str | - | asignado round-robin |
+| city_id | str | - | asignado de forma ciclica entre las ciudades |
 | active | bool | - | fijo True |
 | contact_email | str | - | sintetico |
 | lead_time_avg_days | float | dias | real, Delivery_Date - Order_Date |
@@ -107,7 +116,18 @@ Cada sku recibe 2 o 3 ofertas.
 
 
 def write_data_dictionary(out_dir: Path) -> Path:
+    """Escribe el diccionario de datos en la carpeta de salida.
+
+    Entrada:
+        out_dir: carpeta donde se publica el dataset.
+
+    Salida:
+        Ruta del archivo data_dictionary.md escrito.
+
+    Funcionalidad:
+        Crea la carpeta si no existe y vuelca el contenido documental completo.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "data_dictionary.md"
-    path.write_text(_CONTENT, encoding="utf-8")
+    path.write_text(CONTENIDO, encoding="utf-8")
     return path
