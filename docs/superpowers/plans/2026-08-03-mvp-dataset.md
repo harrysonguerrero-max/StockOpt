@@ -1039,5 +1039,7 @@ git commit -m "feat(dataprep): entrypoint build, diccionario y salidas MVP"
 
 ## Notas de ejecución
 
-- El `.gitignore` puede excluir CSV; verificar antes del commit del Task 8 que `app/data/mvp/*.csv` no esté ignorado (si lo está, forzar con `git add -f` o ajustar `.gitignore` para permitir `app/data/mvp/`).
+- **`.gitignore` verificado:** contiene `parts/` (ignora *directorios* llamados `parts`, no nuestro `parts_master.csv`) y no excluye `*.csv`. Las salidas en `app/data/mvp/` **sí** se pueden commitear. Confirmar con `git check-ignore -v app/data/mvp/parts_master.csv` antes del commit del Task 8; si aparece ignorado, usar `git add -f`.
+- **No existe `app/__init__.py`** (sí existen `app/api/__init__.py` y `app/core/__init__.py`). Los imports `from app.dataprep import config` funcionan vía *namespace packages* (Python ≥3.3) siempre que pytest corra desde la raíz del repo. Si algún import falla, crear `app/__init__.py` vacío en el Task 0.
+- Correr pytest **siempre desde la raíz del repo** para que `app` sea importable.
 - Si `pandas` no importa por versión de Python 3.10, usar `pandas==2.2.*` (compatible con 3.10).
