@@ -34,6 +34,10 @@ Thumbs.db
 # Ignorar archivos de logs
 *.log
 
+# Worktrees y scratch de agentes
+.claude/worktrees/
+.superpowers/
+
 
 # Ignarar archivos generados por el IDE
 .idea/
