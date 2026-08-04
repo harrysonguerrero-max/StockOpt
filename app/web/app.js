@@ -121,8 +121,17 @@ function rowMarkup(item) {
   const supplier = item.supplier_name
     ? `${item.supplier_name}<br><span class="sub mono">${item.lead_time_days} días</span>`
     : '<span class="sub">—</span>';
-  const qty = item.recommended_qty ? item.recommended_qty : "—";
-  const cost = item.total_cost_usd ? money(item.total_cost_usd) : "—";
+  const revisar = item.decision === "REVISAR";
+  const qty = item.recommended_qty
+    ? (revisar
+        ? `<span class="hypo">lote mín. ${item.recommended_qty}</span>
+           <span class="hypo hypo--warn">≈${item.coverage_months} meses</span>`
+        : item.recommended_qty)
+    : "—";
+  const cost = item.total_cost_usd
+    ? (revisar ? `<span class="hypo">(${money(item.total_cost_usd)})</span>`
+               : money(item.total_cost_usd))
+    : "—";
 
   return `
     <td>
@@ -135,7 +144,7 @@ function rowMarkup(item) {
     <td>${gaugeMarkup(item)}</td>
     <td class="num">
       <span class="tag tag--${item.decision}">${item.decision.replace("_", " ")}</span>
-      <div class="mono" style="margin-top:4px">${qty}</div>
+      <div class="qty">${qty}</div>
     </td>
     <td>${supplier}</td>
     <td class="num mono">${cost}</td>

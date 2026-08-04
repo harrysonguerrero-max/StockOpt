@@ -64,7 +64,7 @@ COLUMNS = [
     "sku_id", "city_id", "description", "criticality",
     "on_hand_qty", "inventory_min", "inventory_max",
     "demand_monthly", "forecast_source", "shelf_life_days",
-    "target_qty", "max_allowed_qty",
+    "target_qty", "max_allowed_qty", "coverage_months",
     "decision", "recommended_qty", "supplier_id", "supplier_name",
     "unit_price_usd", "freight_cost_usd", "lead_time_days",
     "total_cost_usd", "alternatives_evaluated", "confidence", "needs_review",
@@ -294,6 +294,7 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
         quantity = 0
         chosen = None
         total_cost = 0.0
+        coverage_months = 0.0
 
         smallest_moq = 0 if applicable.empty else int(applicable["moq"].min())
 
@@ -315,6 +316,7 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
                 total_cost = solution["total_cost"]
                 decision = DECISION_REVIEW
                 months = quantity / monthly_demand if monthly_demand > 0 else 0
+                coverage_months = round(months, 1)
                 reason = (
                     f"El minimo de orden de {chosen['name']} es {int(chosen['moq'])} "
                     f"unidades y el maximo permitido es {max_allowed}. Comprar el "
@@ -332,6 +334,7 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
                 chosen = solution["offer"]
                 total_cost = solution["total_cost"]
                 months = quantity / monthly_demand if monthly_demand > 0 else 0
+                coverage_months = round(months, 1)
                 reason = (
                     f"Quedan {on_hand} unidades y el minimo es {inventory_min}. "
                     f"Con una demanda proyectada de {monthly_demand:.1f} al mes se "
@@ -362,6 +365,7 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
             "shelf_life_days": shelf_life,
             "target_qty": target,
             "max_allowed_qty": max(0, max_allowed),
+            "coverage_months": coverage_months,
             "decision": decision,
             "recommended_qty": quantity,
             "supplier_id": None if chosen is None else chosen["supplier_id"],

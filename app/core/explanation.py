@@ -121,14 +121,22 @@ def build_explanation(record: dict) -> dict:
             f"considerando precio unitario y flete."
         )
     elif decision == DECISION_REVIEW:
-        headline = f"Requiere tu decision: el lote minimo supera el maximo permitido"
+        missing = max(0, record["inventory_min"] - record["on_hand_qty"])
+        headline = (
+            f"No se recomienda comprar {record['recommended_qty']} unidades: "
+            f"es el lote minimo de {record['supplier_name']}"
+        )
         body = (
-            f"En {city} faltan unidades de {sku} para llegar al minimo de "
-            f"{record['inventory_min']}, pero el lote minimo de "
-            f"{record['supplier_name']} es mayor que las {record['max_allowed_qty']} "
-            f"unidades que la operacion admite en bodega. Comprar el lote completo "
-            f"cuesta {record['total_cost_usd']:.2f} USD. No es una compra "
-            f"automatica: depende de si prefieres sobrestock a quedarte corto."
+            f"En {city} quedan {record['on_hand_qty']} unidades de {sku} y el "
+            f"minimo operativo es {record['inventory_min']}, asi que "
+            f"{'falta ' + str(missing) + ' unidad' + ('es' if missing != 1 else '') if missing else 'no falta nada'} "
+            f"para cubrirlo. El problema es que {record['supplier_name']} no vende "
+            f"menos de {record['recommended_qty']} unidades, y en bodega solo caben "
+            f"{record['inventory_max']}. Aceptar ese lote cuesta "
+            f"{record['total_cost_usd']:.2f} USD y deja "
+            f"{record['coverage_months']} meses de inventario. La cifra que ves no "
+            f"es una recomendacion del sistema sino la condicion del proveedor: "
+            f"decide si prefieres el sobrestock o quedarte sin la pieza."
         )
     else:
         headline = "Sin accion requerida"
