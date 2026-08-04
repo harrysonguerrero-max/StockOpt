@@ -109,6 +109,13 @@ def detect_outliers_mad(series: pd.Series, threshold: float = MAD_THRESHOLD) -> 
         Usa la mediana en lugar de la media, asi que un puñado de valores
         extremos no desplaza el criterio como ocurre con la desviacion tipica.
         Es el metodo adecuado cuando se sospecha contaminacion en los datos.
+
+        Cuando mas de la mitad de las observaciones son identicas, la desviacion
+        mediana vale cero y el criterio se ciega por completo. Es el caso normal
+        en consumo de refacciones, donde muchos meses repiten el mismo valor. En
+        esa situacion se recurre a la desviacion media respecto de la mediana,
+        que es la correccion habitual y conserva la robustez frente a la media
+        aritmetica.
     """
     clean = series.dropna()
     if len(clean) < 4:
@@ -116,11 +123,15 @@ def detect_outliers_mad(series: pd.Series, threshold: float = MAD_THRESHOLD) -> 
 
     median = clean.median()
     deviation = (clean - median).abs().median()
-    if deviation == 0:
-        return pd.Series(False, index=series.index)
+    scale = MAD_SCALE / deviation if deviation > 0 else None
 
-    scores = MAD_SCALE * (series - median).abs() / deviation
-    return scores > threshold
+    if scale is None:
+        mean_deviation = (clean - median).abs().mean()
+        if mean_deviation == 0:
+            return pd.Series(False, index=series.index)
+        scale = MEAN_AD_SCALE / mean_deviation
+
+    return scale * (series - median).abs() > threshold
 
 
 def outlier_summary(frame: pd.DataFrame) -> dict:
