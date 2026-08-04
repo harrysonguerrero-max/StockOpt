@@ -4,52 +4,55 @@
 
 ## 0. Estado actual de la implementación
 
-**Última actualización:** 2026-08-03
+**Última actualización:** 2026-08-04
 
 ### Qué está hecho
 
 | Etapa | Estado | Dónde vive |
 |---|---|---|
+| **0 · Perfilado y limpieza de fuentes** | ✅ | `app/core/profiling.py`, `app/core/cleaning.py` |
 | 1 · Ingesta y preparación | ✅ | `app/core/dataset.py` |
-| 1.1 · Validación | ✅ parcial | `app/core/validation.py` |
+| 1.1 · Validación | ✅ | `app/core/validation.py` |
 | 1.2 · Ingesta manual de proveedores | ⬜ | — |
 | 1.3 · Clasificación de patrones | ✅ | `app/core/patterns.py` |
 | 2 · Proyección de demanda | ✅ | `app/core/forecast.py` |
-| 2.b · **Modelo ML entrenado** | ✅ | `app/core/training.py` |
+| 2.b · Modelo ML entrenado | ✅ | `app/core/training.py` |
+| **2.c · Historia sintética** | ✅ | `app/core/synthesis.py` |
 | 3 · Optimización MILP | ✅ | `app/core/optimization.py` |
 | 4 · Reglas de negocio | ✅ | dentro del optimizador |
 | 5 · Explicación con LLM | ✅ código listo, ⏸️ sin clave | `app/services/llm_agent.py` |
 | 6 · Interfaz | ✅ | `app/api/` + `app/web/` |
 | 9 · Feedback y reentrenamiento | ⬜ | — |
 
-**116 tests** en `tests/core/`.
+**151 tests** en `tests/core/`.
+
+### Arquitectura
+
+Tres capas con dependencias en una sola dirección `api → services → core`,
+verificado por regla: `core` no importa nada de las otras dos.
+
+| Capa | Responsabilidad |
+|---|---|
+| `app/core/` | Dominio puro: perfilado, limpieza, síntesis, política de inventario, patrones, proyección, optimización y modelo ML. No toca disco ni red |
+| `app/services/` | Casos de uso y adaptadores externos: SQLite, Gemini, MLflow, archivos, y los scripts ejecutables |
+| `app/api/` | Único puerto HTTP, con DTOs |
+| `app/data/` | Solo CSV, sin código |
+| `artifacts/` | Modelo serializado, métricas y gráficas |
+
+Los parámetros viven al inicio del módulo que los usa. No hay archivos de
+configuración aparte.
 
 ### Cómo se levanta
 
 ```
+python -m app.services.profile_data           # perfila y limpia las fuentes
 python -m app.services.build_dataset          # dataset relacional validado
 python -m app.services.build_patterns         # clasificación de patrones
-python -m app.services.train_model            # entrena el modelo + gráficas
-python -m app.services.build_forecast         # proyección (modelo + estadística)
+python -m app.services.train_model            # modelo ML + métricas + gráficas
+python -m app.services.build_forecast         # proyección e inventario mínimo
 python -m app.services.build_recommendations  # decisiones de compra
 python -m uvicorn app.main:app --port 8000
 ```
-
-**Arquitectura en tres capas** con dependencias en una sola dirección
-`api → services → core`:
-
-- `app/core/` — dominio puro (política de inventario, patrones, proyección,
-  optimización, modelo ML). No importa de `services` ni `api`, ni toca disco.
-- `app/services/` — casos de uso y adaptadores externos (SQLite, Gemini,
-  MLflow, archivos) más los scripts ejecutables.
-- `app/api/` — único puerto de entrada HTTP con DTOs.
-- `app/data/` — solo CSV, sin código. `artifacts/` — salidas del entrenamiento.
-
-Los parámetros viven al inicio del módulo que los usa; no hay archivos de
-configuración aparte.
-
-Interfaz en `http://localhost:8000`, con dos vistas: la cola de compras y las
-métricas del modelo.
 
 ### Archivos generados en `app/data/mvp/`
 
@@ -57,7 +60,7 @@ métricas del modelo.
 |---|---|---|
 | `parts_master.csv` | 20 | Maestro de piezas |
 | `inventory_current.csv` | 40 | Inventario por pieza y ciudad |
-| `demand_history.csv` | 1.440 | 36 meses reales, hasta 2026-01 |
+| `demand_history.csv` | 2.880 | **72 meses** (2020-02 a 2026-01), con `is_synthetic` |
 | `suppliers.csv` | 5 | Proveedores con lead time real |
 | `supplier_offers.csv` | 52 | Precio, MOQ y capacidad por pieza |
 | `supplier_coverage.csv` | 10 | Qué proveedor atiende qué ciudad |
@@ -65,32 +68,28 @@ métricas del modelo.
 | `demand_patterns.csv` | 40 | Patrón y confianza por serie |
 | `demand_forecast.csv` | 40 | Proyección, inventario mínimo, confianza |
 | `purchase_recommendations.csv` | 40 | **Decisión final con su motivo** |
-
-Las salidas del entrenamiento (modelo, métricas y 5 gráficas) viven en
-`artifacts/`, fuera de `app/data/`, que queda con datos únicamente.
-
+| `quality/` | — | Informe de calidad y meses de consumo atípico |
 
 ### Resultado actual
 
 | Decisión | Casos |
 |---|---|
-| COMPRAR | 9 · 3.085,49 USD · 597 unidades |
-| NO_COMPRAR | 24 |
+| COMPRAR | 11 · 4.003,38 USD · 676 unidades |
+| NO_COMPRAR | 22 |
 | REVISAR | 7 |
+
+Patrones: 26 Estable · 9 Volátil · 5 Estacional.
+Modelo: **WMAPE 21,1 %**, mejora 28,2 % sobre repetir el último mes y 3,2 %
+sobre el promedio móvil. Sesgo −0,62 unidades/mes.
 
 ### Observabilidad con `mlops_sdk`
 
-Instalado desde el GitLab interno (`v0.5.0`). En uso:
+Instalado desde el GitLab interno (`v0.5.0`). En uso: `BaseModel` en
+`DemandModel`, `MLObserver` para Prometheus, y `BaseAgent` con
+`llm_provider="gemini"` en `ExplanationAgent`.
 
-- **`BaseModel`** en `DemandModel` — cada entrenamiento registra parámetros,
-  métricas y el modelo serializado.
-- **`MLObserver`** — expone las métricas de entrenamiento a Prometheus.
-- **`BaseAgent`** con `llm_provider="gemini"` en `ExplanationAgent` — traza la
-  llamada al modelo de lenguaje con latencia y tokens.
-
-**MLflow no está configurado.** Sin `MLFLOW_TRACKING_URI`, el SDK guarda los
-artefactos en `./artifacts/<run_id>/` y no falla. Para centralizar, definir esa
-variable en `.env`.
+**MLflow no está configurado.** Sin `MLFLOW_TRACKING_URI` el SDK guarda en
+`./artifacts/<run_id>/` y no falla.
 
 ---
 
@@ -111,6 +110,54 @@ El MVP debe permitir:
 - Mostrar una explicación en lenguaje natural de la recomendación final [web:14][web:27][web:41][web:64].
 
 ## 4. Etapas de la solución
+
+### Etapa 0. Perfilado y limpieza de fuentes — ✅ COMPLETADA
+
+Etapa que no estaba en el spec original y resultó necesaria: se validaba el
+dataset generado pero nunca se limpiaba el crudo.
+
+**Implementación:** `app/core/profiling.py` y `app/core/cleaning.py`,
+entrypoint `python -m app.services.profile_data`, salida en
+`app/data/mvp/quality/`.
+
+**Perfilado.** Por cada fuente reporta tipos, nulos, cardinalidad, rangos,
+duplicados exactos y por llave, y valores atípicos con dos criterios a la vez:
+rango intercuartílico y desviación absoluta mediana. Se reportan ambos porque
+discrepan de forma informativa — cuando el robusto marca muchos más que el
+clásico, la columna tiene cola pesada.
+
+**Problemas reales encontrados y corregidos:**
+
+| Problema | Magnitud | Tratamiento |
+|---|---|---|
+| **Órdenes canceladas contadas como entregas** | 130 de 689 | Se filtran por `Order_Status`. Era un error nuestro: sesgaba el lead time ~0,2 días a la baja |
+| Órdenes sin fecha de pedido o entrega | 87 | Se descartan: sin ambas fechas no hay plazo medible |
+| Plazo de entrega ≤ 0 | 1 | Se descarta |
+| `Defective_Units` nulo | 136 | Se imputa cero: la ausencia significa que no se reportaron defectos |
+| Mes con un solo día registrado (2025-01) | 200 filas | Se descarta: se leería como caída de la demanda |
+
+**Dos cosas que parecen anomalías y no lo son.** El 90 % de filas con consumo
+cero es la intermitencia natural del consumo de refacciones, no un defecto, y
+se conserva porque la ausencia de consumo es información. El 80 % de nulos en
+`wo_type` tampoco: esa columna solo aplica cuando el movimiento nace de una
+orden de trabajo, así que se rellena con `SIN_ORDEN` en lugar de descartarla.
+
+**Los atípicos de sensor se marcan, no se eliminan.** Son 44.860 lecturas. Una
+vibración o temperatura extrema suele ser justamente la señal de que la máquina
+va a fallar, es decir el evento que anticipa el consumo. Borrarlas eliminaría la
+información más valiosa del conjunto.
+
+**Los meses de consumo atípico se reportan, no se corrigen.** Son 9, evaluados
+contra la propia serie y no contra el conjunto, porque una pieza de 100
+unidades al mes y otra de 2 tienen escalas incomparables. Requieren
+confirmación de mantenimiento: puede haber sido una parada mayor real.
+
+**Limitación asumida del detector robusto.** Cuando más de la mitad de las
+observaciones son idénticas —el caso normal en refacciones— la desviación
+mediana vale cero y el criterio se ciega. Se recurre entonces a la desviación
+media respecto de la mediana. Con un tercio de valores extremos ningún criterio
+univariante debería marcarlos: eso ya es una distribución con dos grupos y el
+problema es de segmentación, no de limpieza.
 
 ### Etapa 1. Ingesta y preparación de datos — ✅ COMPLETADA
 Se consolidan los datos necesarios para la recomendación: inventario actual, historial de consumo, catálogo de piezas, proveedores, ciudades, precios, lead time y vida útil. En el MVP estos datos pueden provenir de archivos CSV o tablas simples para reducir complejidad inicial.
@@ -133,8 +180,11 @@ Se consolidan los datos necesarios para la recomendación: inventario actual, hi
 - Las 3 plantas del dato crudo se consolidan en 2 ciudades: dos van a Nava, que
   es el complejo mayor, y una a Obregón. Así no se descarta historia y el
   desbalance de volumen (Nava mueve 2,3× lo de Obregón) es realista.
-- El histórico se **desplaza** para terminar en 2026-01 en vez de generar meses
-  sintéticos. Ver Etapa 2 y `shift_demand_to_horizon`.
+- El histórico se **desplaza** para terminar en 2026-01 (`shift_demand_to_horizon`)
+  y luego se **amplía hacia atrás** con meses simulados (`extend_history`), lo
+  que da 72 meses en total. Ver Etapa 2.c.
+- La carga de fuentes aplica las reglas de limpieza de la Etapa 0 antes de
+  construir nada.
 
 #### 1.1 Validación explícita de datos — ✅ COMPLETADA
 Antes de procesar los datos, el sistema debe validar:

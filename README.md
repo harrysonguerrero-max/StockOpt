@@ -48,9 +48,10 @@ Copia `.env.example` a `.env` y completa lo que tengas. Todo es opcional: sin
 
 ## Ejecución
 
-Cinco comandos, en este orden. Cada uno deja su salida en `app/data/mvp/`.
+Los comandos, en este orden. Cada uno deja su salida en `app/data/mvp/`.
 
 ```bash
+python -m app.services.profile_data           # 0. perfila y limpia las fuentes
 python -m app.services.build_dataset          # 1. dataset relacional validado
 python -m app.services.build_patterns         # 2. patrón de demanda por serie
 python -m app.services.train_model            # 3. modelo ML + métricas + gráficas
@@ -76,6 +77,12 @@ métodos estadísticos. Todos son idempotentes.
 ---
 
 ## Qué hace cada paso
+
+**0. Perfilado y limpieza.** Analiza las fuentes crudas (tipos, nulos,
+duplicados, rangos, atípicos) y aplica las reglas de limpieza. Publica el
+informe en `app/data/mvp/quality/`. Es opcional para el pipeline —la limpieza ya
+va incrustada en la carga— pero es el paso que deja evidencia de qué se hizo con
+los datos.
 
 **1. Dataset.** Lee los CSV crudos de `app/data/` (no los modifica) y construye
 las cuatro entradas del proyecto: maestro de piezas, inventario, demanda mensual
@@ -104,9 +111,14 @@ capacidad, el inventario máximo y la vida útil. Devuelve `COMPRAR`,
 ## La interfaz
 
 **Cola de compras.** Una fila por pieza y ciudad, ordenadas poniendo delante lo
-que exige acción. Cada fila lleva un medidor que muestra las existencias frente
-al mínimo. Al abrirla aparecen la justificación, los supuestos aplicados, el
-contacto del proveedor y los botones de decisión.
+que exige acción. La tabla se pinta al instante con la justificación
+determinista; cuando abres una fila, el sistema pide la redacción del modelo de
+lenguaje **solo para esa fila** y muestra un indicador mientras llega. Si el
+modelo tarda más de 12 segundos o falla, se queda la versión determinista.
+
+Cada fila lleva un medidor que muestra las existencias frente al mínimo. Al
+abrirla aparecen la justificación, los supuestos aplicados, el contacto del
+proveedor y los botones de decisión.
 
 El flujo de aprobación es `Pendiente → Aprobado → Contactado proveedor → Orden
 confirmada`, con rechazo desde cualquier punto previo. Las transiciones se
@@ -124,6 +136,7 @@ SQLite y sobreviven a regenerar el dataset.
 | `GET /api/v1/health` | Estado del servicio y si el dataset está listo |
 | `GET /api/v1/recommendations` | Cola completa con resumen y filtros |
 | `POST /api/v1/recommendations/state` | Aplica una decisión del comprador |
+| `GET /api/v1/recommendations/{sku}/{ciudad}/explanation` | Justificación de **una** fila, redactada por el LLM |
 | `GET /api/v1/recommendations/audit` | Historial de decisiones |
 | `GET /api/v1/recommendations/export` | Descarga la cola en CSV |
 | `GET /api/v1/training/metrics` | Métricas del último entrenamiento |
@@ -139,7 +152,7 @@ Documentación interactiva en `/api/v1/docs`.
 python -m pytest tests/ -q
 ```
 
-116 pruebas en `tests/core/`. Cubren integridad del dataset, calibración del
+151 pruebas en `tests/core/`. Cubren integridad del dataset, calibración del
 clasificador, política de inventario, restricciones del optimizador, flujo de
 aprobación y endpoints.
 
@@ -151,8 +164,10 @@ aprobación y endpoints.
   cantidad mínima de orden, capacidad y flete los genera el build con semilla
   fija; no provienen de ningún sistema real.
 - **No hay autenticación.** El usuario que aprueba es texto libre.
-- **El modelo apenas supera al promedio móvil** (0,8 %). Con series cortas y
+- **El modelo apenas supera al promedio móvil** (3,2 %). Con series cortas y
   mayormente planas es un resultado esperable, y está a la vista en la interfaz.
+- **Parte del histórico es simulado.** Los meses anteriores a 2023-02 se generan
+  para dar profundidad al entrenamiento y llevan `is_synthetic = 1`.
 
 El detalle completo de lo que falta, las mejoras posibles y los puntos ciegos
 está en [`Spec.md`](Spec.md), sección 11.

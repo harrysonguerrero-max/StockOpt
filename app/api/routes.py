@@ -17,11 +17,13 @@ from pydantic import BaseModel
 from app.core import training
 from app.services import approvals as workflow
 from app.services.approvals import audit_trail, update_state
+from app.services.llm_agent import explain_with_model
 from app.services.recommendations import (
     build_queue,
     build_summary,
     dataset_is_available,
     filter_options,
+    find_recommendation,
 )
 
 router = APIRouter()
@@ -122,6 +124,33 @@ def change_state(change: StateChange):
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/recommendations/{sku_id}/{city_id}/explanation")
+def read_explanation(sku_id: str, city_id: str):
+    """Redacta la justificacion de una recomendacion con el modelo de lenguaje.
+
+    Entrada:
+        sku_id: identificador de la pieza.
+        city_id: identificador de la ciudad.
+
+    Salida:
+        Diccionario con headline, body, assumptions y source, que indica si el
+        texto lo escribio el modelo o la plantilla.
+
+    Funcionalidad:
+        Se invoca solo cuando el comprador abre una fila. Separar esta llamada
+        del listado evita que cargar la pantalla dispare una peticion al modelo
+        por cada una de las cuarenta filas, que era lo que dejaba la interfaz
+        colgada. Si el modelo no responde a tiempo devuelve la version
+        deterministica, de modo que la fila nunca se quede sin explicacion.
+    """
+    record = find_recommendation(sku_id, city_id)
+    if record is None:
+        raise HTTPException(
+            status_code=404, detail=f"No existe la recomendacion {sku_id} / {city_id}"
+        )
+    return explain_with_model(record)
 
 
 @router.get("/recommendations/audit")
