@@ -8,74 +8,89 @@
 
 ### Qué está hecho
 
-**Etapas 1, 1.1 (Ingesta y validación) y 1.3 (Clasificación de patrones): COMPLETADAS.**
-
-Existe un dataset relacional y validado que materializa las 4 entradas de datos del
-proyecto. Se construye con `python -m app.data.build_mvp_dataset`, que lee los CSV
-crudos de `app/data/` (**no los modifica**) y escribe las tablas en `app/data/mvp/`.
-
-| Archivo generado | Filas | Entrada del proyecto |
+| Etapa | Estado | Dónde vive |
 |---|---|---|
-| `parts_master.csv` | 20 | Maestro de piezas: SKU, categoría, criticidad, vida útil |
-| `inventory_current.csv` | 60 | Inventario actual por ciudad/bodega |
-| `demand_history.csv` | 2.220 | Demanda histórica mensual + señal operativa |
-| `suppliers.csv` | 5 | Proveedores: ciudad, lead time (avg/min/max/std) |
-| `supplier_offers.csv` | 51 | Proveedores: precio, MOQ, capacidad, flete por pieza |
-| `cities.csv` | 3 | Catálogo de ciudades y bodegas |
-| `demand_patterns.csv` | 60 | Patrón, confianza y modelo recomendado por serie (Etapa 1.3) |
-| `data_dictionary.md` | — | Origen de cada columna (dato real vs. sintético) |
+| 1 · Ingesta y preparación | ✅ | `app/core/dataset.py` |
+| 1.1 · Validación | ✅ parcial | `app/core/validation.py` |
+| 1.2 · Ingesta manual de proveedores | ⬜ | — |
+| 1.3 · Clasificación de patrones | ✅ | `app/core/patterns.py` |
+| 2 · Proyección de demanda | ✅ | `app/core/forecast.py` |
+| 2.b · **Modelo ML entrenado** | ✅ | `app/core/training.py` |
+| 3 · Optimización MILP | ✅ | `app/core/optimization.py` |
+| 4 · Reglas de negocio | ✅ | dentro del optimizador |
+| 5 · Explicación con LLM | ✅ código listo, ⏸️ sin clave | `app/services/llm_agent.py` |
+| 6 · Interfaz | ✅ | `app/api/` + `app/web/` |
+| 9 · Feedback y reentrenamiento | ⬜ | — |
 
-**Llaves:** `sku_id`, `city_id`, `supplier_id`. El join de las 6 tablas produce
-153 filas sin nulos ni huérfanos. `supplier_offers` es la tabla puente
-muchos-a-muchos que le da al optimizador alternativas de proveedor por pieza.
+**116 tests** en `tests/core/`.
 
-**Código:**
-- `app/dataprep/` (`config`, `builders`, `validate`, `dictionary`) + entrypoint
-  `app/data/build_mvp_dataset.py`. Build idempotente, semilla `SEED = 20260803`.
-- `app/forecasting/` (`config`, `patterns`) + entrypoint `app/data/build_patterns.py`.
+### Cómo se levanta
 
-**47 tests** en `tests/dataprep/` y `tests/forecasting/`.
+```
+python -m app.services.build_dataset          # dataset relacional validado
+python -m app.services.build_patterns         # clasificación de patrones
+python -m app.services.train_model            # entrena el modelo + gráficas
+python -m app.services.build_forecast         # proyección (modelo + estadística)
+python -m app.services.build_recommendations  # decisiones de compra
+python -m uvicorn app.main:app --port 8000
+```
 
-### Origen de los datos
+**Arquitectura en tres capas** con dependencias en una sola dirección
+`api → services → core`:
 
-- **Real:** criticidad, familia, costo unitario, descripción, consumo diario y
-  fallas de máquina provienen de `synthetic_industrial_machine_data.csv`.
-  Los lead times se calculan de `Delivery_Date − Order_Date` en
-  `Procurement KPI Analysis Dataset.csv`.
-- **Sintético (semilla fija):** vida útil, stock actual, punto de reorden, MOQ,
-  capacidad y flete. No existían en ninguna fuente.
-- **Fuera de alcance:** `parts.csv`, `manufacturers.csv`, `locations.csv`,
-  `reorder_options.csv` (dominio de componentes electrónicos) y `ai4i2020.csv`
-  (sensores). Se verificó que **no comparten ninguna llave** con el dataset MVP
-  (`SKU-00048` vs `MRO-10045`; `WH-Central` vs `PUN-01`). Unirlos habría producido
-  relaciones sin sentido operativo. `inventory-levels.csv` no aportó datos pero sí
-  el esquema de columnas de `inventory_current.csv`.
+- `app/core/` — dominio puro (política de inventario, patrones, proyección,
+  optimización, modelo ML). No importa de `services` ni `api`, ni toca disco.
+- `app/services/` — casos de uso y adaptadores externos (SQLite, Gemini,
+  MLflow, archivos) más los scripts ejecutables.
+- `app/api/` — único puerto de entrada HTTP con DTOs.
+- `app/data/` — solo CSV, sin código. `artifacts/` — salidas del entrenamiento.
 
-### Qué sigue
+Los parámetros viven al inicio del módulo que los usa; no hay archivos de
+configuración aparte.
 
-**Siguiente paso: Etapa 2 — Proyección de demanda.**
-`demand_patterns.csv` ya dice qué modelo usar en cada una de las 60 series.
-Ver §11 para el orden completo y los bloqueantes detectados.
+Interfaz en `http://localhost:8000`, con dos vistas: la cola de compras y las
+métricas del modelo.
 
-**Resultado de la clasificación (Etapa 1.3):**
+### Archivos generados en `app/data/mvp/`
 
-| Patrón | Series | Modelo a usar en la Etapa 2 |
+| Archivo | Filas | Contenido |
 |---|---|---|
-| Estable | 32 (53 %) | media móvil |
-| Volátil | 16 (27 %) | mediana móvil + percentiles |
-| Estacional | 11 (18 %) | Prophet |
-| Tendencia | 1 (2 %) | regresión lineal |
-| Insuficiente | 0 | — |
+| `parts_master.csv` | 20 | Maestro de piezas |
+| `inventory_current.csv` | 40 | Inventario por pieza y ciudad |
+| `demand_history.csv` | 1.440 | 36 meses reales, hasta 2026-01 |
+| `suppliers.csv` | 5 | Proveedores con lead time real |
+| `supplier_offers.csv` | 52 | Precio, MOQ y capacidad por pieza |
+| `supplier_coverage.csv` | 10 | Qué proveedor atiende qué ciudad |
+| `cities.csv` | 2 | Nava (Coahuila) y Ciudad Obregón (Sonora) |
+| `demand_patterns.csv` | 40 | Patrón y confianza por serie |
+| `demand_forecast.csv` | 40 | Proyección, inventario mínimo, confianza |
+| `purchase_recommendations.csv` | 40 | **Decisión final con su motivo** |
 
-Confianza media 0,80 (rango 0,57–0,90). Ninguna serie quedó sin clasificar.
+Las salidas del entrenamiento (modelo, métricas y 5 gráficas) viven en
+`artifacts/`, fuera de `app/data/`, que queda con datos únicamente.
 
-### Bloqueante conocido antes de la Etapa 3
 
-La regla *"no seleccionar proveedores que no operen para la ciudad requerida"*
-(Etapa 4) **no es satisfacible con el modelo de datos actual**: cada proveedor
-tiene una sola `city_id` y 15 de las 60 combinaciones pieza-ciudad quedarían sin
-ningún proveedor válido, haciendo el MILP infactible. Debe resolverse **antes**
-de implementar la Etapa 3. Ver §11.2.
+### Resultado actual
+
+| Decisión | Casos |
+|---|---|
+| COMPRAR | 9 · 3.085,49 USD · 597 unidades |
+| NO_COMPRAR | 24 |
+| REVISAR | 7 |
+
+### Observabilidad con `mlops_sdk`
+
+Instalado desde el GitLab interno (`v0.5.0`). En uso:
+
+- **`BaseModel`** en `DemandModel` — cada entrenamiento registra parámetros,
+  métricas y el modelo serializado.
+- **`MLObserver`** — expone las métricas de entrenamiento a Prometheus.
+- **`BaseAgent`** con `llm_provider="gemini"` en `ExplanationAgent` — traza la
+  llamada al modelo de lenguaje con latencia y tokens.
+
+**MLflow no está configurado.** Sin `MLFLOW_TRACKING_URI`, el SDK guarda los
+artefactos en `./artifacts/<run_id>/` y no falla. Para centralizar, definir esa
+variable en `.env`.
 
 ---
 
@@ -106,14 +121,20 @@ Se consolidan los datos necesarios para la recomendación: inventario actual, hi
 - CSV / SQLite / Postgres
 
 **Implementación realizada**
-- Paquete `app/dataprep/`: `config.py` (constantes y semilla), `builders.py`
-  (un constructor por tabla, funciones puras), `validate.py`, `dictionary.py`.
-- Entrypoint `app/data/build_mvp_dataset.py` (`python -m app.data.build_mvp_dataset`).
+- `app/core/dataset.py`: constantes al inicio y un constructor por tabla, todas
+  funciones puras.
+- Orquestación en `app/services/dataset_builder.py`, entrypoint
+  `python -m app.services.build_dataset`.
 - Persistencia: **CSV** en `app/data/mvp/`. SQLite/Postgres se pospone hasta que
   haya escritura desde la UI (Etapa 1.2 y 6); mientras el flujo sea de sólo
   lectura, CSV es suficiente y mantiene el dataset versionable y diffeable.
-- Decisiones tomadas: **3 ciudades** (Pune, Chennai, Dharuhera), montos en **USD**
-  (1 USD = 83 INR), demanda a grano **mensual**.
+- Decisiones tomadas: **2 ciudades** (Nava, Coahuila y Ciudad Obregón, Sonora),
+  montos en **USD** (1 USD = 83 INR), demanda a grano **mensual**.
+- Las 3 plantas del dato crudo se consolidan en 2 ciudades: dos van a Nava, que
+  es el complejo mayor, y una a Obregón. Así no se descarta historia y el
+  desbalance de volumen (Nava mueve 2,3× lo de Obregón) es realista.
+- El histórico se **desplaza** para terminar en 2026-01 en vez de generar meses
+  sintéticos. Ver Etapa 2 y `shift_demand_to_horizon`.
 
 #### 1.1 Validación explícita de datos — ✅ COMPLETADA
 Antes de procesar los datos, el sistema debe validar:
@@ -130,7 +151,7 @@ Antes de procesar los datos, el sistema debe validar:
 - Reporte de advertencias (no bloquean pero requieren revisión).
 - Flag por pieza/proveedor/ciudad indicando si pasó validación.
 
-**Implementación realizada** — `app/dataprep/validate.py`
+**Implementación realizada** — `app/core/validation.py`
 
 `validate(tables) -> list[str]` levanta `ValueError` ante error crítico y
 devuelve las advertencias. Cubre: integridad referencial de las tres llaves,
@@ -174,7 +195,7 @@ Para casos donde los datos de proveedores no están en sistema centralizado, se 
 
 ### Etapa 1.3 Clasificación de patrones de demanda — ✅ COMPLETADA
 
-**Implementación:** `app/forecasting/patterns.py`, entrypoint
+**Implementación:** `app/core/patterns.py`, entrypoint
 `python -m app.data.build_patterns`, salida `app/data/mvp/demand_patterns.csv`
 (60 filas, una por serie `sku_id × city_id`).
 
@@ -182,7 +203,8 @@ Para casos donde los datos de proveedores no están en sistema centralizado, se 
 La fuerza estacional por sí sola **no sirve** con esta cantidad de historia: con
 3 ciclos, `seasonal_decompose` extrae un componente estacional aparente incluso
 de ruido puro (fuerza media 0,32; supera 0,40 en el **26 %** de los casos). Con
-el umbral original, 26 de 60 series se habrían mandado a Prophet sin motivo.
+el umbral original, 26 de 60 series se habrían mandado al modelo estacional sin
+motivo (medido sobre el dataset de 3 ciudades vigente entonces).
 
 La regla final exige **dos** condiciones: fuerza ≥ 0,45 **y** efecto de mes
 significativo (Kruskal-Wallis, p < 0,05). Medido sobre 400 simulaciones:
@@ -201,8 +223,8 @@ El test `test_noise_is_rarely_labelled_seasonal` blinda esta calibración.
 se detectaría jamás, porque tiene CV alto por definición.
 
 **Decisión de grano:** se clasifica por `sku_id × city_id`, no sólo por pieza.
-Lo confirman los datos: **11 de 20 piezas cambian de patrón según la ciudad**
-(p. ej. MRO-10045 es Estable en Pune y Chennai, pero Estacional en Dharuhera).
+Lo confirman los datos: **8 de 20 piezas cambian de patrón según la ciudad**
+(p. ej. MRO-30011 es Estacional en Nava pero Estable en Ciudad Obregón).
 Una etiqueta única por pieza habría ocultado esa diferencia.
 
 Antes de hacer la proyección, se analiza el historial de consumo para clasificar el patrón de demanda de cada pieza, informando qué modelo y qué nivel de confianza esperar:
@@ -220,7 +242,7 @@ Antes de hacer la proyección, se analiza el historial de consumo para clasifica
 | Categoría *Insuficiente* | **0 series** | Ninguna pieza tiene menos de 30 días de historial |
 
 **Decisión de grano:** clasificar por combinación `sku_id + city_id`. Una misma
-pieza puede ser estable en Pune y volátil en Chennai; una etiqueta única por
+pieza puede ser estable en una planta y volátil en otra; una etiqueta única por
 pieza ocultaría esa diferencia y degradaría el forecast de la Etapa 2.
 
 **Nota sobre el umbral de volatilidad:** con CV mediano 0,42, el umbral de 0,5
@@ -247,7 +269,30 @@ darlo por bueno.
 - Confianza inicial (0–1) según estabilidad del patrón.
 - Recomendación de modelo a usar (Prophet para estacional, regresión lineal para tendencia, media móvil para estable, métodos robustos para volátil).
 
-### Etapa 2. Proyección de demanda
+### Etapa 2. Proyección de demanda — ✅ COMPLETADA
+
+**Implementación:** `app/core/forecast.py` y `app/services/inventory_policy.py`,
+entrypoint `python -m app.data.build_forecast`, salida `demand_forecast.csv`.
+
+**Se sustituyó Prophet por Holt-Winters** para las series estacionales. Razones:
+con 36 observaciones mensuales y 3 ciclos, Prophet está sobredimensionado y
+sobreajusta; además exige compilar Stan, que en Windows complica la demo.
+Holt-Winters viene en `statsmodels`, ya instalado, y es igual de explicable.
+Solo 6 de 40 series ajustan un modelo: el 85 % se resuelve con métodos
+estadísticos simples, que es lo correcto para este volumen de datos.
+
+**Métrica de error: WMAPE** (error absoluto sobre el total), no MAPE clásico.
+La demanda de repuestos tiene meses en cero y el MAPE dividiría entre cero,
+inflando el error artificialmente.
+
+**Política de inventario unificada.** Durante esta etapa se detectó que
+convivían dos definiciones de inventario mínimo: el dataset cubría un mes
+completo de demanda y la proyección solo el plazo de entrega real (10,8 días).
+El umbral del dataset quedaba 1,9× más alto y ambas etapas daban respuestas
+opuestas — 18 piezas a reponer según una, 3 según la otra. Ahora ambas usan
+`app/services/inventory_policy.py`, que calcula el mínimo como demanda durante
+el plazo de entrega más un colchón que absorbe la variabilidad de la demanda
+**y** la del propio plazo (σ/μ ≈ 0,53 en estos proveedores).
 Un modelo de ML estima la demanda futura por pieza y horizonte de tiempo. Para el MVP se recomienda usar un modelo sencillo y explicable como Prophet, XGBoost o un baseline de series de tiempo, priorizando rapidez de implementación y comparación de resultados [web:14][web:27].
 
 El modelo se selecciona según el patrón de demanda clasificado en Etapa 1.3:
@@ -312,7 +357,33 @@ Escala 0–1; mostrar siempre al usuario.
 - Usar intervalo más amplio para demanda volátil o low-confidence.
 - En optimización, considerar scenarios múltiples (pesimista, base, optimista).
 
-### Etapa 3. Optimización de abastecimiento
+### Etapa 3. Optimización de abastecimiento — ✅ COMPLETADA
+
+**Implementación:** `app/core/optimization.py`, entrypoint
+`python -m app.data.build_recommendations`, salida `purchase_recommendations.csv`.
+
+**Solver: PuLP con CBC** (gratuito). Cada pieza-ciudad se resuelve como un
+modelo independiente de a lo sumo 3 ofertas: milisegundos por caso. No se
+necesita Gurobi.
+
+**Formulación.** Variables por oferta: cantidad entera y binaria de activación.
+Objetivo: minimizar precio × cantidad + flete. Restricciones: cubrir el faltante
+hasta el mínimo, no pasar del máximo, respetar MOQ solo si se activa el
+proveedor, no exceder su capacidad, y un único proveedor por pieza-ciudad para
+que la orden sea simple de ejecutar.
+
+**Se añadió un tercer estado de decisión: `REVISAR`.** Al implementar, 9 de 18
+casos volvían "no factible". No era un fallo del solver sino una tensión real
+de compras: el mínimo de orden del proveedor supera el máximo que la pieza
+admite en bodega. Por ejemplo, el O-ring MRO-20032 se vende en lotes de 100 pero
+solo caben 48. Devolver "infactible" escondía la decisión; ahora el sistema
+resuelve igualmente, informa cuánto costaría y cuántos meses de inventario
+dejaría, y lo marca para que decida el comprador.
+
+**Inventario máximo**, que faltaba como dato, se deriva de una cobertura
+objetivo de 3 meses sobre la demanda proyectada (`MAX_COVERAGE_MONTHS`), nunca
+por debajo del mínimo.
+
 La salida del modelo de demanda alimenta un módulo de optimización que calcula cuánto comprar y a qué proveedor asignar la compra. La técnica recomendada para el MVP es programación lineal entera mixta (MILP), porque permite modelar cantidades, selección de proveedor y restricciones operativas de forma auditable [web:41][web:42].
 
 **Tecnologías posibles**
@@ -321,7 +392,7 @@ La salida del modelo de demanda alimenta un módulo de optimización que calcula
 - Pyomo
 - Solver CBC / Gurobi (si existe licencia)
 
-**Dimensión real del problema** — 60 combinaciones pieza-ciudad y 51 ofertas de
+**Dimensión real del problema** — 40 combinaciones pieza-ciudad y 52 ofertas de
 proveedor (2 o 3 por pieza). Es un MILP **pequeño**: **PuLP con el solver CBC
 (gratuito, incluido) resuelve esto en milisegundos**. No hace falta Gurobi ni su
 licencia; introducirlo sería complejidad sin beneficio.
@@ -349,10 +420,10 @@ Antes de emitir la recomendación final, la solución debe aplicar reglas operat
 
 | Regla | Estado | Observación |
 |---|---|---|
-| No comprar si está por encima del mínimo | ✅ Se ejercita | 22 de 60 combinaciones están bajo el punto de reorden y 38 por encima: el dataset activa **ambas ramas** de la decisión |
+| No comprar si está por encima del mínimo | ✅ Se ejercita | 18 de 40 combinaciones están bajo el inventario mínimo y 22 por encima: el dataset activa **ambas ramas** de la decisión |
 | No superar el inventario máximo | ⚠️ Falta el dato | `inventory_current.csv` **no tiene** columna de inventario máximo. Hay que definirlo (p. ej. cobertura objetivo en meses) al implementar la Etapa 3 |
 | No exceder la vida útil | ⚠️ Rara vez se activa | La vida útil más corta (180 d, lubricación) supera al peor lead time (20 d) por 160 días. La regla **sólo** se activará por la vía de *cantidad > demanda consumible en la vida útil*, no por la vía del lead time |
-| Proveedor debe operar en la ciudad | 🚫 **Bloqueante** | Ver §11.2: dejaría 15 de 60 combinaciones sin proveedor |
+| Proveedor debe operar en la ciudad | 🚫 **Bloqueante** | Ver §11.2: dejaría 7 de 40 combinaciones sin proveedor |
 | No exceder capacidad / presupuesto | ✅ Dato disponible | `capacity_per_month` existe por oferta. El presupuesto del escenario aún no está definido: es un parámetro de entrada a definir |
 | Marcar casos para revisión humana | ✅ Insumo disponible | La clasificación de patrón y el score de confianza (Etapas 1.3 y 2.2) alimentan este flag |
 
@@ -392,7 +463,30 @@ Genera una explicación clara, breve y orientada a compras que:
 - Prompt template con entrada JSON
 - FastAPI para exponer la explicación
 
-### Etapa 6. Interfaz de usuario y flujo manual de compra
+### Etapa 6. Interfaz de usuario y flujo manual de compra — ✅ COMPLETADA
+
+**Implementación:** FastAPI sirve tanto la API (`app/api/routes.py`) como la
+interfaz estática (`app/web/`). Un solo proceso y una sola imagen de contenedor,
+en lugar de levantar Streamlit aparte.
+
+**Concepto de pantalla: una cola de decisiones, no un tablero.** El usuario es
+un comprador que debe despachar 40 casos, así que la pantalla se ordena poniendo
+delante lo que exige acción (revisiones y compras) y al final lo que no requiere
+nada. La densidad es deliberada: cifras tabulares, tipografía monoespaciada para
+los datos y filas compactas, como un instrumento de trabajo.
+
+**Elemento distintivo: el medidor de existencias.** Cada fila lleva una barra que
+muestra el stock actual sobre la escala del máximo permitido, con una marca en el
+punto mínimo. Codifica de un vistazo la tensión que decide cada caso — si la
+barra no llega a la marca, hay que reponer — sin obligar a leer tres números.
+Los colores de estado del spec se usan solo aquí y en las etiquetas de decisión,
+nunca como decoración.
+
+**Flujo de estados** con transiciones validadas en servidor:
+`Pendiente aprobación → Aprobado → Contactado proveedor → Orden confirmada`,
+más `Rechazado` desde cualquier punto previo, con motivo obligatorio y texto
+libre. Cada cambio queda auditado con autor y fecha en `audit_log`.
+
 El MVP debe incluir una interfaz simple donde se visualicen inputs, resultado del forecast, recomendación final, proveedor elegido y justificación textual. También puede incluir una acción de aprobación o rechazo humano.
 
 **Flujo operativo actual (MVP)**
@@ -434,7 +528,7 @@ Para mantener el MVP controlado y demostrable, se propone limitar el alcance ini
 | Restricción propuesta | Realizado | Nota |
 |---|---|---|
 | 10 a 20 piezas | **20 piezas** | En el tope del rango |
-| 2 ciudades | **3 ciudades** | Se subió a 3 porque el dato crudo trae 3 plantas naturales (Pune, Chennai, Dharuhera); recortar a 2 habría sido descartar datos reales |
+| 2 ciudades | **2 ciudades** | Nava (Coahuila) y Ciudad Obregón (Sonora). Las 3 plantas del dato crudo se consolidan en 2 sin descartar historia |
 | 3 a 5 proveedores | **5 proveedores** | En el tope del rango |
 | 6 a 12 meses de histórico | **37 meses** | Muy por encima de lo pedido. Habilita detectar estacionalidad, que con 12 meses sería imposible |
 
@@ -459,15 +553,15 @@ Por cada pieza, el sistema debe entregar:
 | # | Componente | Estado | Ubicación prevista |
 |---|---|---|---|
 | 1 | Fuente de datos de inventario y proveedores | ✅ Hecho | `app/data/mvp/` |
-| 2 | Módulo de validación y limpieza | ✅ Hecho | `app/dataprep/validate.py` |
+| 2 | Módulo de validación y limpieza | ✅ Hecho | `app/core/validation.py` |
 | 3 | Entrada manual de proveedores | ⏸️ Pendiente | `app/api/` + UI |
-| 4 | Clasificador de patrones de demanda | ✅ Hecho | `app/forecasting/patterns.py` |
-| 5 | Modelo ML de proyección | ⏭️ Siguiente | `app/forecasting/models.py` |
-| 6 | Módulo de optimización MILP | ⬜ Pendiente | `app/optimization/` |
-| 7 | Motor de reglas de negocio | ⬜ Pendiente | `app/rules/` |
-| 8 | Capa LLM de explicación | ⬜ Pendiente | `app/explain/` |
+| 4 | Clasificador de patrones de demanda | ✅ Hecho | `app/core/patterns.py` |
+| 5 | Modelo ML de proyección | ✅ Hecho | `app/core/forecast.py` |
+| 6 | Módulo de optimización MILP | ⏭️ Siguiente | `app/core/optimization.py` |
+| 7 | Motor de reglas de negocio | ⬜ Pendiente | `app/services/rules_service.py` |
+| 8 | Capa LLM de explicación | ⬜ Pendiente | `app/services/explanation_service.py` |
 | 9 | Interfaz de usuario | ⬜ Pendiente | Streamlit o FastAPI + front |
-| 10 | Feedback y reentrenamiento | ⬜ Pendiente | `app/feedback/` |
+| 10 | Feedback y reentrenamiento | ⬜ Pendiente | `app/services/feedback_service.py` |
 
 **Convención establecida en la Etapa 1** (conviene mantenerla en los módulos
 siguientes): cada módulo expone **funciones puras** que reciben y devuelven
@@ -520,85 +614,121 @@ Cada período (p.ej., cada mes):
 El MVP se considera exitoso si logra demostrar que, para un conjunto acotado de piezas, puede transformar datos operativos en una recomendación explicable de compra, con trazabilidad suficiente para revisión de negocio y validación humana [web:27][web:41][web:64]. Además, debe capturar suficiente feedback del usuario y de resultados reales para permitir reentrenamiento y mejora continua del modelo.
 
 
-## 11. Plan de trabajo y próximos pasos
+## 11. Qué falta, qué mejorar y qué no se está teniendo en cuenta
 
-### 11.1 Orden de ejecución
+### 11.1 Lo que falta para cerrar el alcance del spec
 
-| Paso | Etapa | Depende de | Bloqueado por |
+| # | Pendiente | Esfuerzo | Por qué importa |
 |---|---|---|---|
-| ✅ 1 | Ingesta, preparación y validación (1, 1.1) | — | — |
-| ✅ 2 | Clasificación de patrones de demanda (1.3) | Paso 1 | — |
-| ⏭️ 3 | Proyección de demanda y confianza (2, 2.1, 2.2) | Paso 2 | Nada — **listo para empezar** |
-| 4 | Optimización MILP (3) | Paso 3 | **§11.2 y §11.3** |
-| 5 | Motor de reglas de negocio (4) | Paso 4 | **§11.3** |
-| 6 | Explicación con LLM (5) | Paso 5 | Nada |
-| 7 | Interfaz de usuario (6) | Paso 6 | Nada |
-| 8 | Ingesta manual de proveedores (1.2) | Paso 7 | Requiere SQLite |
-| 9 | Feedback y reentrenamiento (9) | Paso 7 | Nada |
+| 1 | **Clave de Gemini** (`GEMINI_API_KEY` en `.env`) | minutos | El agente está escrito y probado; sin clave cae a plantilla |
+| 2 | **Servidor MLflow** (`MLFLOW_TRACKING_URI`) | minutos | Hoy los runs quedan en disco local y no se comparan entre sí |
+| 3 | **Feedback loop** (§9) | alto | Es la mitad del valor del sistema y hoy no existe nada |
+| 4 | **Detección de outliers** (§1.1) | bajo | Un consumo atípico hoy entra al modelo sin marcarse |
+| 5 | **Presupuesto de escenario** | medio | La restricción existe en el spec pero no hay dato ni parámetro |
+| 6 | **Ingesta manual de proveedores** (§1.2) | medio | Depende de mover la persistencia a base de datos |
+| 7 | **Reentrenamiento periódico** | medio | Hoy el modelo se entrena a mano |
 
-Los pasos 2 y 3 pueden avanzar de inmediato. Los bloqueantes §11.2 y §11.3 sólo
-afectan del paso 4 en adelante, pero **conviene resolverlos ya** porque ambos son
-cambios en el dataset, no en el modelo.
+### 11.2 Mejoras sobre lo ya construido
 
-### 11.2 Bloqueante: cobertura proveedor-ciudad
+**El modelo apenas supera al promedio móvil (0,8%).** Es el hallazgo más
+importante del entrenamiento y conviene no taparlo. Con 36 meses y series
+mayormente planas, no hay mucha estructura que aprender. Tres caminos reales:
 
-**El problema.** El modelo actual asigna a cada proveedor **una sola** `city_id`
-(la ciudad donde opera):
+1. **Más historia o más series.** Un modelo global mejora con volumen. Con 20
+   piezas y 3 años está en el límite de lo que puede aprender.
+2. **Variables externas.** Hoy el modelo solo mira su propio pasado. Órdenes de
+   trabajo programadas, paros de planta, horas de operación de la máquina o
+   plan de producción son las variables que de verdad explican el consumo de
+   refacciones. Esa es la mejora con mayor retorno esperado.
+3. **Aceptar el resultado.** Si el promedio móvil basta, el valor del sistema
+   está en la optimización y la trazabilidad, no en el forecast. Es una
+   conclusión legítima y vale la pena decirla en la demo.
 
-| Ciudad | Proveedores que operan ahí |
-|---|---|
-| Pune | SUP-01, SUP-04 |
-| Chennai | SUP-02, SUP-05 |
-| Dharuhera | SUP-03 |
+**Otras mejoras concretas:**
 
-Las ofertas de `supplier_offers.csv`, en cambio, se asignaron por pieza sin mirar
-la ciudad. Al cruzar ambas cosas con la regla *"no seleccionar proveedores que no
-operen para la ciudad requerida"*, el resultado es:
+- **Cantidad económica de pedido.** Hoy `TARGET_COVERAGE_MONTHS = 1.5` es un
+  parámetro fijo. El óptimo real sale de equilibrar el costo de ordenar contra
+  el de mantener inventario (fórmula de Wilson), que además usaría el flete que
+  ya está en los datos.
+- **Presupuesto global.** Cada pieza se optimiza por separado. Con un
+  presupuesto compartido el problema pasa a ser una mochila y habría que
+  priorizar por criticidad, lo cual es más realista y más vistoso en la demo.
+- **Intervalos del modelo.** El modelo da un valor puntual; los cuartiles
+  vienen de la parte estadística. Una regresión cuantílica daría intervalos
+  propios y un stock de seguridad mejor fundado.
+- **Consolidación de órdenes.** Hoy cada pieza genera su orden y paga su flete.
+  Agrupar por proveedor ahorraría dinero real y es una restricción natural del
+  MILP.
 
-- Pune: 3 piezas sin proveedor válido
-- Chennai: 5 piezas sin proveedor válido
-- Dharuhera: 7 piezas sin proveedor válido
-- **Total: 15 de 60 combinaciones pieza-ciudad quedarían sin ninguna opción de compra**, y el MILP sería infactible para ellas.
+### 11.3 Lo que no se está teniendo en cuenta
 
-**Opciones de solución** (recomendada primero):
+Esto es lo que un revisor externo preguntaría y hoy no tiene respuesta.
 
-1. **Modelar la cobertura como muchos-a-muchos** — nueva tabla
-   `supplier_coverage(supplier_id, city_id, freight_cost_usd, lead_time_extra_days)`.
-   Un proveedor puede despachar a varias ciudades, pero fuera de su sede cuesta
-   más flete y tarda más. Es lo más fiel a la operación real y convierte la
-   restricción dura en un trade-off económico, que es justamente lo que un MILP
-   sabe resolver bien.
-2. **Reinterpretar `suppliers.city_id` como "ciudad sede"**, no como restricción
-   dura, penalizando el envío a otras ciudades vía flete. Más simple, menos
-   explícito.
-3. **Garantizar en el build ≥ 1 oferta por pieza y ciudad.** Resuelve la
-   factibilidad pero fuerza los datos para que encajen con la regla, en vez de
-   modelar la realidad.
+**No hay autenticación.** `updated_by` es texto libre que manda el navegador.
+Cualquiera puede aprobar una compra como cualquier otro. Para una demo interna
+es aceptable; para mostrarlo a un cliente hay que decirlo antes de que
+pregunten.
 
-### 11.3 Datos que aún faltan definir
+**El dataset es sintético en sus campos críticos.** Vida útil, stock actual,
+MOQ, capacidad y flete no vienen de ningún sistema real: los generó el build con
+semilla fija. Las decisiones del optimizador son correctas *dado ese dato*, pero
+no son decisiones de compra reales. Conviene decirlo explícitamente en la demo
+para que nadie confunda el ejercicio con una recomendación operativa.
 
-Estos campos no existen en el dataset y son necesarios para las Etapas 3 y 4:
+**El lead time asume que el pasado se repite.** Se calcula de órdenes
+históricas y no contempla aduanas, cierres de planta ni estacionalidad del
+proveedor. Con σ/μ ≈ 0,53 la variabilidad ya es alta; un evento excepcional la
+rompe.
 
-- **Inventario máximo por pieza/ciudad.** La regla *"no superar el inventario
-  máximo"* no se puede evaluar hoy. Propuesta: derivarlo de una cobertura
-  objetivo en meses de demanda proyectada, en vez de fijar un número por pieza.
-- **Presupuesto del escenario.** Parámetro de entrada de la corrida; hoy no está
-  definido ni como dato ni como constante.
-- **Horizonte de proyección.** Cuántos meses proyectar (sugerido: 1 a 3 meses,
-  coherente con un lead time máximo de 20 días).
+**No hay costo de quiebre.** El sistema minimiza el costo de compra, pero nunca
+compara contra lo que cuesta parar una línea por falta de una pieza. Para una
+pieza de criticidad A ese costo domina cualquier ahorro de flete. Hoy la
+criticidad solo afecta el nivel de servicio, no la función objetivo.
 
-### 11.4 Deuda técnica registrada
+**El horizonte es de un mes.** El sistema decide como si cada mes fuera
+independiente. No hay noción de que comprar hoy afecta la decisión del mes
+siguiente, ni de trayectoria de inventario.
 
-- **Outliers sin detectar** (Etapa 1.1): falta el chequeo de valores atípicos en
-  demanda, precio y lead time.
-- **Flag de validación global, no por fila**: el spec pide un flag por
-  pieza/proveedor/ciudad; hoy la validación es todo-o-nada.
-- **`app/data/__init__,py`**: archivo con una coma en lugar de punto, remanente
-  del scaffold inicial. Inofensivo pero conviene borrarlo.
-- **Token de GitHub expuesto**: el remote `origin` tiene un Personal Access Token
-  en texto plano en la URL. **Debe revocarse y rotarse.**
+**No se modela el tiempo de tránsito entre plantas.** Si Nava tiene exceso de
+una pieza y Obregón está en quiebre, la respuesta correcta puede ser mover
+stock, no comprar. El sistema nunca considera esa opción.
 
----
+**Una sola moneda y sin impuestos.** Todo está en USD sin IVA, aranceles ni tipo
+de cambio, con proveedores mexicanos. En una compra real eso cambia el ranking
+de proveedores.
+
+**No hay pruebas de carga ni de concurrencia.** SQLite con varios compradores
+aprobando a la vez no se ha probado. Para un MVP de un usuario está bien; con
+diez, hay que revisarlo.
+
+**El pipeline es manual y sin orquestación.** Son cinco comandos en orden y
+nada impide correrlos mal. Si alguien entrena el modelo sin regenerar el
+dataset, el sistema no avisa.
+
+**No hay versionado del dataset.** Las recomendaciones no guardan contra qué
+versión de datos se generaron. Si mañana cambian los datos, no hay forma de
+reconstruir por qué se recomendó lo de hoy.
+
+### 11.4 Orden sugerido
+
+1. Configurar `GEMINI_API_KEY` y `MLFLOW_TRACKING_URI` — desbloquea lo ya escrito.
+2. Decir en la demo qué es sintético y qué es real.
+3. Feedback loop (§9): es lo que convierte el MVP en un sistema que aprende.
+4. Costo de quiebre en la función objetivo: es el argumento de negocio más fuerte.
+5. Variables externas en el modelo: la única vía para que el forecast mejore.
+
+### 11.5 Deuda técnica registrada
+
+- **Flag de validación global, no por fila** — el spec pide un flag por
+  pieza/proveedor/ciudad; hoy la validación es todo o nada.
+- **`app/data/__init__,py`** — archivo con coma en vez de punto, remanente del
+  scaffold. Inofensivo, conviene borrarlo.
+- **Token de GitLab expuesto** — el comando de instalación del SDK lleva el
+  deploy token en la URL y quedó en el historial de la conversación. Conviene
+  rotarlo.
+- **Token de GitHub expuesto** — el remote `origin` sigue con un Personal Access
+  Token en texto plano. **Debe revocarse.**
+- **`requires-python`** decía 3.12 y el entorno corre 3.10; ya corregido.
 
 ## 12. Colores de MVP
 

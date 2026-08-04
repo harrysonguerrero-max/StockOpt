@@ -1,0 +1,141 @@
+{
+  "run_id": "a0f1a6e0-6e65-48a9-ab5e-472ce5442dff",
+  "project": "stockopt-demanda",
+  "metrics": {
+    "mae": 4.0488577629935225,
+    "rmse": 6.9280974406703075,
+    "mape": 0.33448734745181496,
+    "smape": 0.33514117849835845,
+    "wmape": 0.2110153882993367,
+    "bias": -0.6212887452656811,
+    "wmape_ultimo_mes": 0.2938110749185668,
+    "mejora_vs_ultimo_mes": 0.2818,
+    "wmape_promedio_movil": 0.21798769453492578,
+    "mejora_vs_promedio_movil": 0.032,
+    "seconds": 4.696,
+    "n_train": 2160,
+    "n_val": 240
+  },
+  "baselines": {
+    "ultimo_mes": {
+      "mae": 5.6375,
+      "rmse": 9.721753956977105,
+      "mape": 0.4741646060798037,
+      "smape": 0.492507385611315,
+      "wmape": 0.2938110749185668,
+      "bias": -0.7625
+    },
+    "promedio_movil": {
+      "mae": 4.182638888888889,
+      "rmse": 7.0410749258271,
+      "mape": 0.35903801779413824,
+      "smape": 0.3525519996570213,
+      "wmape": 0.21798769453492578,
+      "bias": -0.5826388888888888
+    }
+  },
+  "charts": {
+    "comparison": "modelo_vs_baseline.png",
+    "scatter": "prediccion_vs_real.png",
+    "errors": "distribucion_error.png",
+    "importance": "importancia_variables.png",
+    "series": "series_validacion.png"
+  },
+  "features": [
+    "is_synthetic",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_6",
+    "lag_12",
+    "roll_mean_3",
+    "roll_std_3",
+    "roll_mean_6",
+    "roll_std_6",
+    "issue_events_lag_1",
+    "breakdown_lag_1",
+    "month_sin",
+    "month_cos",
+    "unit_cost_usd",
+    "shelf_life_days",
+    "criticality_rank",
+    "is_nava"
+  ],
+  "importance": [
+    {
+      "variable": "roll_mean_6",
+      "aporte": 0.453127846166823
+    },
+    {
+      "variable": "roll_mean_3",
+      "aporte": 0.07720083995761275
+    },
+    {
+      "variable": "lag_12",
+      "aporte": 0.06972687737032014
+    },
+    {
+      "variable": "lag_3",
+      "aporte": 0.0354825544987072
+    },
+    {
+      "variable": "lag_6",
+      "aporte": 0.026126998351246877
+    },
+    {
+      "variable": "month_cos",
+      "aporte": 0.010474103658582307
+    },
+    {
+      "variable": "lag_2",
+      "aporte": 0.004469207410491999
+    },
+    {
+      "variable": "issue_events_lag_1",
+      "aporte": 0.0029189954859918156
+    },
+    {
+      "variable": "lag_1",
+      "aporte": 0.002264580745696598
+    },
+    {
+      "variable": "roll_std_3",
+      "aporte": 0.0013647872920951932
+    },
+    {
+      "variable": "shelf_life_days",
+      "aporte": 0.0010142682467822628
+    },
+    {
+      "variable": "is_nava",
+      "aporte": 5.05841407245744e-05
+    },
+    {
+      "variable": "is_synthetic",
+      "aporte": 0.0
+    },
+    {
+      "variable": "criticality_rank",
+      "aporte": -5.2033048036281836e-05
+    },
+    {
+      "variable": "breakdown_lag_1",
+      "aporte": -0.0008022934498796818
+    },
+    {
+      "variable": "month_sin",
+      "aporte": -0.001776857191739456
+    },
+    {
+      "variable": "unit_cost_usd",
+      "aporte": -0.0018242114316375456
+    },
+    {
+      "variable": "roll_std_6",
+      "aporte": -0.003008198330609896
+    }
+  ],
+  "n_series": 40,
+  "train_months": "2021-02 a 2025-07",
+  "validation_months": "2025-08 a 2026-01"
+}

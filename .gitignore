@@ -67,3 +67,5 @@ sdist/
 wheels/
 lightning_logs/
 # config.yaml
+# Estado local de aprobaciones
+app/data/state/

@@ -4,10 +4,10 @@ Funcionalidad:
     Ejecuta el build completo y reporta por consola las tablas generadas y las
     advertencias de validacion. Los CSV crudos nunca se modifican.
 
-    Uso: python -m app.data.build_mvp_dataset
+    Uso: python -m app.services.build_dataset
 """
 
-from app.core import dataset_config as config
+from app.core.dataset import OUT_DIR
 from app.services.dataset_builder import FILE_NAMES, build_all, publish
 
 
@@ -27,7 +27,7 @@ def main() -> None:
     tables = build_all()
     warnings = publish(tables)
 
-    print(f"Dataset MVP generado en {config.OUT_DIR}")
+    print(f"Dataset MVP generado en {OUT_DIR}")
     for key, filename in FILE_NAMES.items():
         print(f"  {filename:<24} {len(tables[key]):>5} filas")
     print("  data_dictionary.md")

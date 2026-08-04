@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.core import dataset_config as data_config
-from app.core import forecast_config as config
-from app.services.pattern_service import (
+from app.core import patterns as config
+from app.core.dataset import CITY_IDS, OUT_DIR
+from app.core.patterns import (
     COLUMNS,
     build_demand_patterns,
     classify_series,
@@ -193,12 +193,12 @@ def test_recent_shift_lowers_confidence():
 
 @pytest.fixture(scope="module")
 def real_patterns():
-    demand = pd.read_csv(data_config.OUT_DIR / "demand_history.csv")
+    demand = pd.read_csv(OUT_DIR / "demand_history.csv")
     return build_demand_patterns(demand)
 
 
 def test_one_row_per_series(real_patterns):
-    assert len(real_patterns) == 20 * len(data_config.CITY_IDS)
+    assert len(real_patterns) == 20 * len(CITY_IDS)
     assert not real_patterns.duplicated(["sku_id", "city_id"]).any()
     assert list(real_patterns.columns) == COLUMNS
 
@@ -220,5 +220,5 @@ def test_label_matches_recommended_model(real_patterns):
 
 
 def test_classification_is_deterministic(real_patterns):
-    demand = pd.read_csv(data_config.OUT_DIR / "demand_history.csv")
+    demand = pd.read_csv(OUT_DIR / "demand_history.csv")
     assert build_demand_patterns(demand).equals(real_patterns)

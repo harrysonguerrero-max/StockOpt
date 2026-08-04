@@ -5,12 +5,12 @@ Funcionalidad:
     que piezas necesitan compra, como se ve la demanda, quien puede surtir cada
     referencia y como quedo clasificado cada patron. Es de solo lectura.
 
-    Uso: python -m app.data.show_dataset
+    Uso: python -m app.services.show_dataset
 """
 
 import pandas as pd
 
-from app.core import dataset_config as config
+from app.core.dataset import OUT_DIR
 
 pd.set_option("display.width", 200)
 pd.set_option("display.max_columns", 30)
@@ -44,16 +44,16 @@ def main() -> None:
         contrario recorre las tablas mostrando los datos mas relevantes para
         revisar el estado del dataset.
     """
-    missing = [f for f, _ in TABLES if not (config.OUT_DIR / f).exists()]
+    missing = [f for f, _ in TABLES if not (OUT_DIR / f).exists()]
     if missing:
         raise SystemExit(
             "Faltan archivos: " + ", ".join(missing)
             + "\nCorre primero:\n"
-            "  python -m app.data.build_mvp_dataset\n"
-            "  python -m app.data.build_patterns"
+            "  python -m app.services.build_dataset\n"
+            "  python -m app.services.build_patterns"
         )
 
-    data = {f: pd.read_csv(config.OUT_DIR / f) for f, _ in TABLES}
+    data = {f: pd.read_csv(OUT_DIR / f) for f, _ in TABLES}
 
     _rule("1. QUE SE GENERO")
     for filename, label in TABLES:

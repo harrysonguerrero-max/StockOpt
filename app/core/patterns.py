@@ -5,6 +5,16 @@ Funcionalidad:
     estacional, con tendencia, estable o volatil, cuanta confianza merece la
     proyeccion y que modelo conviene aplicarle en la etapa de forecast. Todas
     las funciones son puras.
+
+    Los umbrales viven al inicio del archivo. Sobre la estacionalidad: con tres
+    ciclos de historia, seasonal_decompose extrae un componente aparente incluso
+    de ruido puro (fuerza media 0.32, supera 0.40 en el 26 por ciento de los
+    casos). Por eso no basta la fuerza y se exige ademas significancia del efecto
+    de mes. Con ambas condiciones el falso positivo baja al 2 por ciento.
+
+    Sobre PRECEDENCE: los patrones explicables se evaluan antes que volatil. Una
+    serie estacional tiene coeficiente de variacion alto por definicion, asi que
+    si volatil ganara, ninguna estacionalidad se detectaria.
 """
 
 import warnings as warning_control
@@ -14,7 +24,36 @@ import pandas as pd
 from scipy import stats
 from statsmodels.tsa.seasonal import seasonal_decompose
 
-from app.core import forecast_config as config
+MIN_PERIODS = 6
+SEASONAL_PERIOD = 12
+MIN_PERIODS_SEASONAL = 2 * SEASONAL_PERIOD
+
+SEASONAL_STRENGTH_MIN = 0.45
+SEASONAL_PVALUE_MAX = 0.05
+TREND_PVALUE_MAX = 0.05
+CV_VOLATILE = 0.50
+
+SEASONAL = "Estacional"
+TREND = "Tendencia"
+STABLE = "Estable"
+VOLATILE = "Volatil"
+INSUFFICIENT = "Insuficiente"
+
+PRECEDENCE = [INSUFFICIENT, SEASONAL, TREND, VOLATILE, STABLE]
+
+RECOMMENDED_MODEL = {
+    SEASONAL: "holt_winters",
+    TREND: "linear_regression",
+    STABLE: "moving_average",
+    VOLATILE: "moving_median",
+    INSUFFICIENT: "manual_input",
+}
+
+W_VOLUME = 0.30
+W_VOLATILITY = 0.45
+W_RECENT = 0.25
+
+RECENT_WINDOW = 3
 
 COLUMNS = [
     "sku_id", "city_id", "n_periods", "mean_monthly", "std_monthly", "cv",
@@ -36,7 +75,7 @@ def seasonal_strength(values: np.ndarray) -> float:
         Descompone la serie y calcula la proporcion de varianza atribuible al
         componente estacional frente a la suma de estacional y residuo.
     """
-    if len(values) < config.MIN_PERIODS_SEASONAL:
+    if len(values) < MIN_PERIODS_SEASONAL:
         return 0.0
     if np.std(values) == 0:
         return 0.0
@@ -45,7 +84,7 @@ def seasonal_strength(values: np.ndarray) -> float:
         warning_control.simplefilter("ignore")
         try:
             decomposed = seasonal_decompose(
-                values, model="additive", period=config.SEASONAL_PERIOD,
+                values, model="additive", period=SEASONAL_PERIOD,
                 extrapolate_trend="freq",
             )
         except ValueError:
@@ -78,10 +117,10 @@ def seasonality_pvalue(values: np.ndarray) -> float:
         tipica del consumo de repuestos. Complementa a seasonal_strength, que
         por si sola produce falsos positivos cuando hay pocos ciclos.
     """
-    if len(values) < config.MIN_PERIODS_SEASONAL or np.std(values) == 0:
+    if len(values) < MIN_PERIODS_SEASONAL or np.std(values) == 0:
         return 1.0
 
-    groups = [values[i::config.SEASONAL_PERIOD] for i in range(config.SEASONAL_PERIOD)]
+    groups = [values[i::SEASONAL_PERIOD] for i in range(SEASONAL_PERIOD)]
     groups = [g for g in groups if len(g) >= 2]
     if len(groups) < 3:
         return 1.0
@@ -135,18 +174,18 @@ def confidence_score(n_periods: int, cv: float, values: np.ndarray) -> float:
         lo que sugeriria un cambio de patron reciente. La dispersion pesa mas
         porque es lo que mas degrada la precision del forecast.
     """
-    if n_periods < config.MIN_PERIODS:
+    if n_periods < MIN_PERIODS:
         volume_factor = 0.20
-    elif n_periods < config.SEASONAL_PERIOD:
+    elif n_periods < SEASONAL_PERIOD:
         volume_factor = 0.55
-    elif n_periods < config.MIN_PERIODS_SEASONAL:
+    elif n_periods < MIN_PERIODS_SEASONAL:
         volume_factor = 0.80
     else:
         volume_factor = 1.00
 
     if cv <= 0.25:
         volatility_factor = 1.00
-    elif cv <= config.CV_VOLATILE:
+    elif cv <= CV_VOLATILE:
         volatility_factor = 0.80
     elif cv <= 1.00:
         volatility_factor = 0.50
@@ -154,17 +193,17 @@ def confidence_score(n_periods: int, cv: float, values: np.ndarray) -> float:
         volatility_factor = 0.25
 
     recent_factor = 1.00
-    if len(values) >= config.RECENT_WINDOW * 2:
-        recent = float(np.mean(values[-config.RECENT_WINDOW:]))
-        historical = float(np.mean(values[:-config.RECENT_WINDOW]))
+    if len(values) >= RECENT_WINDOW * 2:
+        recent = float(np.mean(values[-RECENT_WINDOW:]))
+        historical = float(np.mean(values[:-RECENT_WINDOW]))
         if historical > 0:
             shift = abs(recent - historical) / historical
             recent_factor = float(np.clip(1.0 - shift, 0.0, 1.0))
 
     score = (
-        config.W_VOLUME * volume_factor
-        + config.W_VOLATILITY * volatility_factor
-        + config.W_RECENT * recent_factor
+        W_VOLUME * volume_factor
+        + W_VOLATILITY * volatility_factor
+        + W_RECENT * recent_factor
     )
     return round(float(np.clip(score, 0.0, 1.0)), 2)
 
@@ -197,19 +236,19 @@ def classify_series(values) -> dict:
     seasonal_p = seasonality_pvalue(values)
     tau, trend_p = trend_test(values)
 
-    if n_periods < config.MIN_PERIODS or mean == 0:
-        pattern = config.INSUFFICIENT
-    elif strength >= config.SEASONAL_STRENGTH_MIN and seasonal_p < config.SEASONAL_PVALUE_MAX:
-        pattern = config.SEASONAL
-    elif trend_p < config.TREND_PVALUE_MAX:
-        pattern = config.TREND
-    elif cv > config.CV_VOLATILE:
-        pattern = config.VOLATILE
+    if n_periods < MIN_PERIODS or mean == 0:
+        pattern = INSUFFICIENT
+    elif strength >= SEASONAL_STRENGTH_MIN and seasonal_p < SEASONAL_PVALUE_MAX:
+        pattern = SEASONAL
+    elif trend_p < TREND_PVALUE_MAX:
+        pattern = TREND
+    elif cv > CV_VOLATILE:
+        pattern = VOLATILE
     else:
-        pattern = config.STABLE
+        pattern = STABLE
 
     confidence = confidence_score(n_periods, cv, values)
-    if pattern == config.INSUFFICIENT:
+    if pattern == INSUFFICIENT:
         confidence = 0.0
 
     return {
@@ -224,7 +263,7 @@ def classify_series(values) -> dict:
         "trend_pvalue": round(trend_p, 4),
         "pattern": pattern,
         "confidence": confidence,
-        "recommended_model": config.RECOMMENDED_MODEL[pattern],
+        "recommended_model": RECOMMENDED_MODEL[pattern],
     }
 
 

@@ -1,171 +1,158 @@
 # StockOpt
 
-Plantilla de producción para proyectos Python 3.12+ utilizando **uv** para la gestión de paquetes, **Docker** para la contenedorización y una arquitectura completa en **AWS** (ECS + Amplify).
-
-## ⚡ Stack Tecnológico
-
-- **Core:** FastAPI, Uvicorn.
-- **Gestor de Paquetes:** `uv` (Rendimiento ultra rápido).
-- **Infraestructura:** Docker Multi-stage, AWS ECS (Fargate), AWS Amplify.
-- **CI/CD:** GitLab CI + AWS CodeBuild.
-- **Calidad:** Ruff (Linter/Formatter).
+Recomienda qué refacciones comprar, cuántas y a qué proveedor, para las plantas
+de Nava (Coahuila) y Ciudad Obregón (Sonora). Proyecta la demanda con un modelo
+de machine learning, resuelve la compra óptima con programación entera y entrega
+cada decisión con su justificación para que un comprador la apruebe o la
+rechace.
 
 ---
 
-## 🛠️ Requisitos Previos
+## Arquitectura
 
-Asegúrate de tener instalado lo siguiente antes de comenzar:
+Tres capas con dependencias en una sola dirección: `api → services → core`.
 
-1. **[uv](https://github.com/astral-sh/uv):** Gestor de paquetes.
-2. **[Docker Desktop](https://www.docker.com/products/docker-desktop/):** Para ejecución local y construcción de imágenes.
-3. **[AWS CLI](https://aws.amazon.com/cli/):** Configurado con `aws configure`.
-4. **PowerShell (Core o Windows):** Para ejecutar los scripts de despliegue en `deployment/`.
+| Capa | Responsabilidad | Regla |
+|---|---|---|
+| **`app/core/`** | Dominio puro: política de inventario, clasificación de patrones, proyección, optimización y modelo ML | No importa nada de `services` ni de `api`, ni toca disco |
+| **`app/services/`** | Casos de uso y adaptadores externos: SQLite, Gemini, MLflow, lectura y escritura de archivos, y los scripts ejecutables | Orquesta `core`; una responsabilidad por módulo |
+| **`app/api/`** | Único puerto de entrada HTTP: valida con DTOs y formatea respuestas | No contiene lógica de negocio |
+| **`app/data/`** | Solo datos: CSV crudos y generados | Sin código |
+| **`app/web/`** | Interfaz estática que sirve la propia aplicación | — |
+| **`artifacts/`** | Salidas del entrenamiento: modelo, métricas y gráficas | — |
 
----
-
-## 🚀 Inicio Rápido (Desarrollo Local)
-
-### 1. Instalación y Entorno
-Este proyecto utiliza el stack **standard**. Sincroniza el entorno para instalar todas las dependencias (dev y prod):
-
-```bash
-uv sync
-```
-
-### 2. Ejecuta el Servidor
-
-Puedes activar el entorno virtual o usar `uv run` directamente:
-
-```bash
-uv run uvicorn app.main:app --reload
-```
-
-El servidor estará disponible en ``http://localhost:8000``.
+Los parámetros viven al inicio del módulo que los usa, no en archivos de
+configuración aparte. Cuando otro módulo los necesita, los importa de ahí.
 
 ---
 
-## 🐳 Docker 
+## Instalación
 
-El proyecto incluye un ``Dockerfile`` multi-etapa optimizado. El archivo ``compose.yml`` monta el directorio ./app como un volumen, habilitando el Hot-Reload.
-
-### Ejecutar con Docker Compose (Hot-reload habilitado):
 ```bash
-docker compose up --build
+python -m venv .venv
+.venv/Scripts/activate          # Linux/macOS: source .venv/bin/activate
+pip install -e .
 ```
 
-### Construir y probar la imagen de producción manualmente:
+El SDK de observabilidad se instala aparte, desde el GitLab interno:
+
 ```bash
-docker build -t stockopt .
-docker run -p 8000:8000 stockopt
+pip install "git+https://<usuario>:<token>@gitlab.digitalcoedevops.com/harryson.guerrero/mlops-sdk.git@v0.5.0"
 ```
 
-**Nota:** El ``Dockerfile`` instala solo las dependencias de producción por defecto. Si requieres grupos adicionales, modifica el paso ``uv sync`` dentro del Dockerfile.
+Copia `.env.example` a `.env` y completa lo que tengas. Todo es opcional: sin
+`GEMINI_API_KEY` las justificaciones usan plantillas, y sin
+`MLFLOW_TRACKING_URI` los entrenamientos se guardan en `artifacts/`.
 
 ---
 
-## 📂 Estructura del Proyecto
+## Ejecución
 
-```text
-.
-├── app/
-│   ├── api/
-│   │   └── routes.py                  # Endpoints (Rutas FastAPI)
-│   ├── core/
-│   │   └── config.py                  # Configuración global (Env vars, Logging)
-│   ├── services/
-│   │   └── ...                        # Lógica de negocio pura (Desacoplada de HTTP)
-│   └── main.py                        # Entrypoint (CORS, Middleware)
-├── deployment/
-│   ├── aws-service-deployment.ps1     # Script de despliegue de servicios AWS
-│   ├── redeploy.ps1                   # Script de CICD (API y Frontend)
-│   └── ...                            # Archivos de configuración
-├── frontend/                          # Source del Frontend (npm run build compatible)
-├── pyproject.toml                     # Dependencias
-├── Dockerfile
-├── docker-compose.yml
-├── buildspec.yml                      # Constructor de imágenes Docker en CodeBuild
-├── .gitlab-ci.yml                     # GitLab CICD
-├── .gitignore
-└── .dockerignore
+Cinco comandos, en este orden. Cada uno deja su salida en `app/data/mvp/`.
+
+```bash
+python -m app.services.build_dataset          # 1. dataset relacional validado
+python -m app.services.build_patterns         # 2. patrón de demanda por serie
+python -m app.services.train_model            # 3. modelo ML + métricas + gráficas
+python -m app.services.build_forecast         # 4. proyección e inventario mínimo
+python -m app.services.build_recommendations  # 5. decisiones de compra
 ```
+
+Después, la interfaz:
+
+```bash
+python -m uvicorn app.main:app --port 8000
+```
+
+Abre `http://localhost:8000`. Para ver el dataset por consola sin levantar nada:
+
+```bash
+python -m app.services.show_dataset
+```
+
+Los pasos 1 y 2 son requisito del 3; el 4 usa el modelo si existe y si no cae a
+métodos estadísticos. Todos son idempotentes.
 
 ---
 
-## Variables de entorno
+## Qué hace cada paso
 
-Este proyecto usa `MLFLOW_TRACKING_URI` para decidir dónde se guardan los experimentos y artefactos de MLflow.
+**1. Dataset.** Lee los CSV crudos de `app/data/` (no los modifica) y construye
+las cuatro entradas del proyecto: maestro de piezas, inventario, demanda mensual
+y proveedores con su catálogo. Valida integridad referencial, rangos, nulos y
+duplicados antes de escribir.
 
-### Para desarrollo local
-Si quieres probar en tu máquina y registrar en un MLflow local, usa:
+**2. Patrones.** Clasifica cada serie de pieza y ciudad en estacional, con
+tendencia, estable o volátil, y le asigna un método de proyección y un nivel de
+confianza.
 
-```bash
-export MLFLOW_TRACKING_URI=http://localhost:5000
-```
+**3. Entrenamiento.** Ajusta un modelo global sobre las 40 series con rezagos y
+medias móviles. Valida sobre los últimos 6 meses y compara contra dos
+referencias. Publica métricas y cinco gráficas en `artifacts/training/`.
 
-### Para usar el MLflow de la nube
-Si quieres registrar en el MLflow centralizado del equipo, usa la URL del tracking server de la nube:
+**4. Proyección.** Combina el modelo con la proyección estadística y calcula el
+inventario mínimo de cada pieza: demanda durante el plazo de entrega más un
+colchón que absorbe la variabilidad de la demanda y la del propio plazo.
 
-```bash
-export MLFLOW_TRACKING_URI=http://<tu-mlflow-cloud>:5000
-```
-
-### Flujo esperado
-- Si `MLFLOW_TRACKING_URI` apunta a `localhost`, el entrenamiento registra en MLflow local.
-- Si apunta a la nube, el entrenamiento registra en el MLflow compartido.
-
-### 🏗️ Guía de Implementación
-- ``app/main.py``: Es exclusivamente el **punto de entrada**. Úsalo solo para configurar middlewares, CORS y montar rutas. No escribas lógica de negocio aquí.
-- ``app/services/``: Aquí reside el corazón de la aplicación. Las funciones deben ser puras y agnósticas al framework HTTP.
-- ``app/api/``: La capa de interfaz. Se encarga de recibir la petición HTTP, llamar al servicio correspondiente y devolver la respuesta.
-
-### ☁️ Infraestructura y Despliegue (AWS)
-
-El despliegue se maneja mediante scripts de PowerShell ubicados en ``deployment/``.
-
-#### Scripts de Despliegue
-
-1. `aws-service-deployment.ps1`:  
-   Este script es el **inicializador**. Crea toda la infraestructura base necesaria en AWS. Requiere un rol de AWS CLI con permisos de Administrador o suficientes para crear VPCs, ECS, ECR, etc.
-2. `redeploy.ps1`:  
-   Este script es el inicializador. Crea toda la infraestructura base necesaria en AWS. Requiere un rol de AWS CLI con permisos de Administrador o suficientes para crear VPCs, ECS, ECR, etc.
-
-#### Arquitectura de Recursos
-
-<details><summary><b>👁️ Ver lista detallada de servicios creados</b></summary>
-
-##### Networking & Seguridad
-- VPC: Configurada con 2 subnets privadas (AZ 1a/1b), Internet Gateway y Route Tables.
-- ALB (Application Load Balancer): Target groups y Listeners configurados.
-- Seguridad: Security Groups específicos para el ALB y los contenedores.
-##### Cómputo & Contenedores
-- ECS Cluster: Ejecución de tareas Fargate.
-- ECR Repository: Almacenamiento de imágenes Docker.
-- Auto-scaling: Configurado por horario (9:00 - 17:00 CST) para optimización de costos.
-##### Frontend & Almacenamiento
-- AWS Amplify: Hosting del frontend.
-- S3 Bucket: Almacenamiento de assets estáticos.
-##### CI/CD & Observabilidad
-- CodeBuild: Proyecto para construcción de imágenes.
-- CloudWatch: Grupo de logs centralizado.
-- IAM Roles: Roles de ejecución y tarea con principio de menor privilegio.
-</details>
+**5. Recomendaciones.** Resuelve un modelo entero mixto por pieza y ciudad que
+minimiza precio más flete, respetando el mínimo de orden del proveedor, su
+capacidad, el inventario máximo y la vida útil. Devuelve `COMPRAR`,
+`NO_COMPRAR` o `REVISAR`, siempre con el motivo.
 
 ---
 
-### 🔄 Workflow de Desarrollo & CI/CD
+## La interfaz
 
-#### Gestión de Dependencias
-- **Agregar librería:** ``uv add <paquete>``
-- **Agregar herramienta dev:** ``uv add --dev <paquete>``
-- **Actualizar entorno:** ``uv sync``
-#### Calidad de Código (Linting)
-El pipeline fallará si el código no cumple los estándares. Antes de hacer commit, ejecuta:
+**Cola de compras.** Una fila por pieza y ciudad, ordenadas poniendo delante lo
+que exige acción. Cada fila lleva un medidor que muestra las existencias frente
+al mínimo. Al abrirla aparecen la justificación, los supuestos aplicados, el
+contacto del proveedor y los botones de decisión.
+
+El flujo de aprobación es `Pendiente → Aprobado → Contactado proveedor → Orden
+confirmada`, con rechazo desde cualquier punto previo. Las transiciones se
+validan en el servidor y cada cambio queda auditado. Las aprobaciones viven en
+SQLite y sobreviven a regenerar el dataset.
+
+**Modelo de demanda.** Métricas de validación y las gráficas del entrenamiento.
+
+---
+
+## API
+
+| Endpoint | Qué devuelve |
+|---|---|
+| `GET /api/v1/health` | Estado del servicio y si el dataset está listo |
+| `GET /api/v1/recommendations` | Cola completa con resumen y filtros |
+| `POST /api/v1/recommendations/state` | Aplica una decisión del comprador |
+| `GET /api/v1/recommendations/audit` | Historial de decisiones |
+| `GET /api/v1/recommendations/export` | Descarga la cola en CSV |
+| `GET /api/v1/training/metrics` | Métricas del último entrenamiento |
+| `GET /api/v1/training/charts/{nombre}` | Gráfica del entrenamiento |
+
+Documentación interactiva en `/api/v1/docs`.
+
+---
+
+## Pruebas
+
 ```bash
-ruff format       # Formateo automático
-ruff check --fix  # Linter y corrección de errores
+python -m pytest tests/ -q
 ```
-#### Pipeline de GitLab
-El archivo ``.gitlab-ci.yml`` activa despliegues automáticos al hacer push a las ramas:
-- ``dev``
-- ``develop``
-- ``development``
+
+116 pruebas en `tests/core/`. Cubren integridad del dataset, calibración del
+clasificador, política de inventario, restricciones del optimizador, flujo de
+aprobación y endpoints.
+
+---
+
+## Advertencias antes de una demo
+
+- **El dataset es sintético en campos críticos.** Vida útil, existencias,
+  cantidad mínima de orden, capacidad y flete los genera el build con semilla
+  fija; no provienen de ningún sistema real.
+- **No hay autenticación.** El usuario que aprueba es texto libre.
+- **El modelo apenas supera al promedio móvil** (0,8 %). Con series cortas y
+  mayormente planas es un resultado esperable, y está a la vista en la interfaz.
+
+El detalle completo de lo que falta, las mejoras posibles y los puntos ciegos
+está en [`Spec.md`](Spec.md), sección 11.

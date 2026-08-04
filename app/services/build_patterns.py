@@ -5,14 +5,14 @@ Funcionalidad:
     resultado, informando el reparto por patron y las series que ameritan
     revision humana.
 
-    Uso: python -m app.data.build_patterns
+    Uso: python -m app.services.build_patterns
 """
 
 import pandas as pd
 
-from app.core import dataset_config as data_config
-from app.core import forecast_config as config
-from app.services.pattern_service import build_demand_patterns
+from app.core import patterns as config
+from app.core.dataset import CITY_IDS, OUT_DIR
+from app.core.patterns import build_demand_patterns
 
 OUTPUT_NAME = "demand_patterns.csv"
 
@@ -31,17 +31,17 @@ def main() -> None:
         terminar lista las series de menor confianza para que el equipo decida
         si necesitan intervencion manual.
     """
-    demand_path = data_config.OUT_DIR / "demand_history.csv"
+    demand_path = OUT_DIR / "demand_history.csv"
     if not demand_path.exists():
         raise SystemExit(
-            f"No existe {demand_path}. Corre antes: python -m app.data.build_mvp_dataset"
+            f"No existe {demand_path}. Corre antes: python -m app.services.build_dataset"
         )
 
     demand = pd.read_csv(demand_path)
     patterns = build_demand_patterns(demand)
-    patterns.to_csv(data_config.OUT_DIR / OUTPUT_NAME, index=False)
+    patterns.to_csv(OUT_DIR / OUTPUT_NAME, index=False)
 
-    print(f"Patrones de demanda generados en {data_config.OUT_DIR / OUTPUT_NAME}")
+    print(f"Patrones de demanda generados en {OUT_DIR / OUTPUT_NAME}")
     print(f"  {len(patterns)} series clasificadas\n")
 
     counts = patterns["pattern"].value_counts()

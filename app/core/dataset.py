@@ -6,6 +6,10 @@ Funcionalidad:
     proveedores con su catalogo de ofertas. Cada funcion es pura: recibe
     DataFrames y devuelve un DataFrame, sin escribir en disco ni alterar las
     fuentes.
+
+    Las constantes de construccion viven al inicio de este archivo por ser su
+    unico duenno. El nivel de servicio por criticidad y la politica de minimos
+    se importan de core.inventory, que es donde se definen una sola vez.
 """
 
 import math
@@ -13,9 +17,45 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.core import dataset_config as config
+from app.core.cleaning import clean_procurement, clean_spine
+from app.core.inventory import Z_BY_CRITICALITY, inventory_minimum, planning_lead_time
+from app.core.synthesis import extend_history
 
-CITY_TO_WAREHOUSE = {v["city_id"]: v["warehouse_id"] for v in config.CITY_MAP.values()}
+SEED = 20260803
+INR_TO_USD = 1 / 83
+
+RAW_DIR = Path(__file__).resolve().parents[1] / "data"
+OUT_DIR = RAW_DIR / "mvp"
+
+CITY_MAP = {
+    "PUN-01": {"city_id": "NAVA", "city_name": "Nava, Coahuila",
+               "country": "Mexico", "warehouse_id": "NAVA-01"},
+    "DHR-03": {"city_id": "NAVA", "city_name": "Nava, Coahuila",
+               "country": "Mexico", "warehouse_id": "NAVA-01"},
+    "CHN-02": {"city_id": "OBRE", "city_name": "Ciudad Obregon, Sonora",
+               "country": "Mexico", "warehouse_id": "OBRE-01"},
+}
+
+CITY_IDS = ["NAVA", "OBRE"]
+
+SHELF_LIFE_BY_FAMILY = {
+    "Lubrication": 180, "Filter": 365, "Seal & Gasket": 730, "Drive Belt": 1095,
+    "Bearing": 1825, "Coupling": 2555, "Electrical": 1825, "Sensor": 1825,
+    "Fastener": 3650,
+}
+
+COVERAGE_RANGE = (0.35, 1.75)
+
+DEMAND_HORIZON = "2026-01"
+
+MIN_DAYS_PER_MONTH = 20
+
+SYNTHETIC_EXTRA_YEARS = 3
+
+REMOTE_FREIGHT_MULTIPLIER = 2.5
+REMOTE_LEAD_TIME_EXTRA_DAYS = 4
+
+CITY_TO_WAREHOUSE = {v["city_id"]: v["warehouse_id"] for v in CITY_MAP.values()}
 
 
 def load_spine(raw_dir: Path) -> pd.DataFrame:
@@ -29,13 +69,13 @@ def load_spine(raw_dir: Path) -> pd.DataFrame:
         transaction_date convertida a fecha y breakdown_flag como entero.
 
     Funcionalidad:
-        Lee el dataset columna vertebral del proyecto, del que salen las piezas,
-        su criticidad, su costo y toda la serie de demanda.
+        Aplica las reglas de limpieza antes de devolver los datos: normaliza
+        tipos, elimina duplicados por llave y descarta los meses con cobertura
+        insuficiente.
     """
-    df = pd.read_csv(raw_dir / "synthetic_industrial_machine_data.csv")
-    df["transaction_date"] = pd.to_datetime(df["transaction_date"])
-    df["breakdown_flag"] = df["breakdown_flag"].fillna(0).astype(int)
-    return df
+    raw = pd.read_csv(raw_dir / "synthetic_industrial_machine_data.csv")
+    clean, _ = clean_spine(raw)
+    return clean
 
 
 def load_procurement(raw_dir: Path) -> pd.DataFrame:
@@ -48,13 +88,13 @@ def load_procurement(raw_dir: Path) -> pd.DataFrame:
         DataFrame de ordenes con Order_Date y Delivery_Date convertidas a fecha.
 
     Funcionalidad:
-        Provee la fuente de proveedores y de los tiempos de entrega reales, que
-        se calculan como la diferencia entre ambas fechas.
+        Aplica las reglas de limpieza antes de devolver los datos: descarta
+        ordenes sin fechas, conserva solo las realmente entregadas y valida el
+        plazo. Devuelve la columna lead_days ya calculada.
     """
-    df = pd.read_csv(raw_dir / "Procurement KPI Analysis Dataset.csv")
-    df["Order_Date"] = pd.to_datetime(df["Order_Date"], errors="coerce")
-    df["Delivery_Date"] = pd.to_datetime(df["Delivery_Date"], errors="coerce")
-    return df
+    raw = pd.read_csv(raw_dir / "Procurement KPI Analysis Dataset.csv")
+    clean, _ = clean_procurement(raw)
+    return clean
 
 
 def build_cities() -> pd.DataFrame:
@@ -71,9 +111,9 @@ def build_cities() -> pd.DataFrame:
         crudo pueden consolidarse en una misma ciudad de la operacion.
     """
     seen = {}
-    for entry in config.CITY_MAP.values():
+    for entry in CITY_MAP.values():
         seen.setdefault(entry["city_id"], entry)
-    rows = [seen[city_id] for city_id in config.CITY_IDS]
+    rows = [seen[city_id] for city_id in CITY_IDS]
     return pd.DataFrame(rows)[["city_id", "city_name", "country", "warehouse_id"]]
 
 
@@ -99,9 +139,9 @@ def build_parts_master(spine: pd.DataFrame) -> pd.DataFrame:
         "category": parts["part_family"],
         "criticality": parts["criticality"],
         "uom": parts["uom"],
-        "unit_cost_usd": (parts["unit_cost_inr"] * config.INR_TO_USD).round(2),
+        "unit_cost_usd": (parts["unit_cost_inr"] * INR_TO_USD).round(2),
         "currency": "USD",
-        "shelf_life_days": parts["part_family"].map(config.SHELF_LIFE_BY_FAMILY).astype(int),
+        "shelf_life_days": parts["part_family"].map(SHELF_LIFE_BY_FAMILY).astype(int),
     })
 
 
@@ -123,12 +163,8 @@ def build_demand_history(spine: pd.DataFrame) -> pd.DataFrame:
         demanda a cero.
     """
     df = spine.copy()
-    df["city_id"] = df["plant_code"].map(lambda p: config.CITY_MAP[p]["city_id"])
+    df["city_id"] = df["plant_code"].map(lambda p: CITY_MAP[p]["city_id"])
     df["period_month"] = df["transaction_date"].dt.strftime("%Y-%m")
-
-    days_per_month = df.groupby("period_month")["transaction_date"].nunique()
-    complete = days_per_month[days_per_month >= config.MIN_DAYS_PER_MONTH].index
-    df = df[df["period_month"].isin(complete)]
 
     grouped = df.groupby(["part_no", "city_id", "period_month"], as_index=False).agg(
         qty_issued=("qty_issued", "sum"),
@@ -177,12 +213,14 @@ def shift_demand_to_horizon(demand: pd.DataFrame, horizon: str) -> pd.DataFrame:
     return shifted.sort_values(["sku_id", "city_id", "period_month"]).reset_index(drop=True)
 
 
-def build_inventory_current(parts: pd.DataFrame, demand: pd.DataFrame, rng) -> pd.DataFrame:
+def build_inventory_current(parts: pd.DataFrame, demand: pd.DataFrame,
+                            suppliers: pd.DataFrame, rng) -> pd.DataFrame:
     """Construye la foto de inventario por pieza y ciudad.
 
     Entrada:
         parts: maestro de piezas.
         demand: demanda mensual por pieza y ciudad.
+        suppliers: catalogo de proveedores, del que sale el plazo de entrega.
         rng: generador aleatorio de numpy, para reproducibilidad.
 
     Salida:
@@ -192,14 +230,21 @@ def build_inventory_current(parts: pd.DataFrame, demand: pd.DataFrame, rng) -> p
     Funcionalidad:
         El dato crudo registra consumo, no existencias, de modo que el stock y
         los puntos de reorden se derivan de la estadistica mensual de demanda.
-        El punto de reorden usa un nivel de servicio mayor cuanto mas critica es
-        la pieza. Las existencias se sortean como multiplo del punto de reorden
-        y no de la media, para que el dataset traiga tanto piezas que requieren
-        compra como piezas que no, y el motor de reglas ejercite ambos caminos.
+
+        El punto de reorden usa la misma politica que la proyeccion de demanda,
+        es decir cubrir el consumo durante el plazo de entrega mas el colchon de
+        seguridad. Antes se cubria un mes completo de demanda, lo que producia
+        un umbral casi el doble de alto y hacia que ambas etapas dieran
+        respuestas opuestas sobre que piezas reponer.
+
+        Las existencias se sortean como multiplo del punto de reorden, para que
+        el dataset traiga tanto piezas que requieren compra como piezas que no y
+        el motor de reglas ejercite ambos caminos.
     """
     snapshot = demand["period_month"].max() + "-28"
     criticality = dict(zip(parts["sku_id"], parts["criticality"]))
     unit_costs = dict(zip(parts["sku_id"], parts["unit_cost_usd"]))
+    lead_time, lead_time_std = planning_lead_time(suppliers)
 
     stats = (
         demand.groupby(["sku_id", "city_id"])["qty_issued"]
@@ -213,10 +258,11 @@ def build_inventory_current(parts: pd.DataFrame, demand: pd.DataFrame, rng) -> p
     for _, record in stats.iterrows():
         sku, city = record["sku_id"], record["city_id"]
         mu, sigma = record["mu"], record["sigma"]
-        z = config.Z_BY_CRITICALITY[criticality[sku]]
-        reorder_point = math.ceil(mu + z * sigma)
+        z = Z_BY_CRITICALITY[criticality[sku]]
+        _, _, reorder_point = inventory_minimum(mu, sigma, lead_time, lead_time_std, z)
+        reorder_point = max(1, reorder_point)
         reorder_qty = max(1, math.ceil(mu))
-        coverage = float(rng.uniform(*config.COVERAGE_RANGE))
+        coverage = float(rng.uniform(*COVERAGE_RANGE))
         on_hand = int(round(reorder_point * coverage))
         unit_cost = unit_costs[sku]
         rows.append({
@@ -241,18 +287,15 @@ def build_suppliers(procurement: pd.DataFrame) -> pd.DataFrame:
         procurement: DataFrame de ordenes devuelto por load_procurement.
 
     Salida:
-        DataFrame con supplier_id, nombre, ciudad donde opera, contacto y las
-        cuatro metricas de lead time: promedio, minimo, maximo y desviacion.
+        DataFrame con supplier_id, nombre, ciudad sede, contacto, flete base y
+        las cuatro metricas de lead time: promedio, minimo, maximo y desviacion.
 
     Funcionalidad:
         Calcula los tiempos de entrega a partir de ordenes realmente entregadas,
         descartando las que no tienen ambas fechas. Reparte los proveedores
         entre las ciudades de la operacion de forma ciclica.
     """
-    df = procurement.dropna(subset=["Order_Date", "Delivery_Date"]).copy()
-    df["lead_days"] = (df["Delivery_Date"] - df["Order_Date"]).dt.days
-    df = df[df["lead_days"] > 0]
-
+    df = procurement
     rows = []
     for index, name in enumerate(sorted(procurement["Supplier"].unique())):
         lead = df.loc[df["Supplier"] == name, "lead_days"]
@@ -260,14 +303,54 @@ def build_suppliers(procurement: pd.DataFrame) -> pd.DataFrame:
         rows.append({
             "supplier_id": f"SUP-{index + 1:02d}",
             "name": name,
-            "city_id": config.CITY_IDS[index % len(config.CITY_IDS)],
+            "city_id": CITY_IDS[index % len(CITY_IDS)],
             "active": True,
             "contact_email": f"ordenes@{slug}.com",
+            "base_freight_usd": round(10 + 5 * index, 2),
             "lead_time_avg_days": round(float(lead.mean()), 1),
             "lead_time_min_days": int(lead.min()),
             "lead_time_max_days": int(lead.max()),
             "lead_time_std_days": round(float(lead.std(ddof=0)), 2),
         })
+    return pd.DataFrame(rows)
+
+
+def build_supplier_coverage(suppliers: pd.DataFrame) -> pd.DataFrame:
+    """Construye la cobertura geografica de cada proveedor.
+
+    Entrada:
+        suppliers: catalogo de proveedores con su ciudad sede.
+
+    Salida:
+        DataFrame con supplier_id, city_id, is_home, freight_cost_usd y
+        lead_time_extra_days: una fila por cada ciudad que el proveedor atiende.
+
+    Funcionalidad:
+        Un proveedor no atiende solo su ciudad sede. Puede despachar a las demas
+        pagando mas flete y tardando algunos dias mas.
+
+        Esta tabla existe para resolver un bloqueante detectado antes de la
+        optimizacion. Al asignar una sola ciudad por proveedor, 7 de las 40
+        combinaciones pieza-ciudad se quedaban sin ninguna opcion de compra y el
+        modelo era infactible para ellas. Modelar la cobertura como muchos a
+        muchos convierte esa restriccion rigida en un compromiso economico, que
+        es lo que el optimizador sabe resolver: comprar fuera de plaza es
+        posible, simplemente cuesta mas y tarda mas.
+    """
+    rows = []
+    for _, supplier in suppliers.iterrows():
+        for city_id in CITY_IDS:
+            is_home = city_id == supplier["city_id"]
+            rows.append({
+                "supplier_id": supplier["supplier_id"],
+                "city_id": city_id,
+                "is_home": int(is_home),
+                "freight_cost_usd": round(
+                    supplier["base_freight_usd"] if is_home
+                    else supplier["base_freight_usd"] * REMOTE_FREIGHT_MULTIPLIER, 2
+                ),
+                "lead_time_extra_days": 0 if is_home else REMOTE_LEAD_TIME_EXTRA_DAYS,
+            })
     return pd.DataFrame(rows)
 
 
@@ -283,7 +366,8 @@ def build_supplier_offers(parts: pd.DataFrame, demand: pd.DataFrame,
 
     Salida:
         DataFrame con offer_id, supplier_id, sku_id, precio unitario, cantidad
-        minima de orden, capacidad mensual y costo de flete.
+        minima de orden y capacidad mensual. El flete no vive aqui porque depende
+        de la ciudad de destino: esta en supplier_coverage.
 
     Funcionalidad:
         Asigna dos o tres proveedores a cada pieza para que el optimizador tenga
@@ -294,7 +378,6 @@ def build_supplier_offers(parts: pd.DataFrame, demand: pd.DataFrame,
     """
     supplier_ids = list(suppliers["supplier_id"])
     markup = {sid: round(1.05 + 0.03 * i, 4) for i, sid in enumerate(supplier_ids)}
-    freight = {sid: round(10 + 5 * i, 2) for i, sid in enumerate(supplier_ids)}
     unit_costs = dict(zip(parts["sku_id"], parts["unit_cost_usd"]))
     max_demand = demand.groupby("sku_id")["qty_issued"].max().to_dict()
 
@@ -313,7 +396,6 @@ def build_supplier_offers(parts: pd.DataFrame, demand: pd.DataFrame,
                 "unit_price_usd": round(unit_cost * markup[supplier_id], 2),
                 "moq": moq,
                 "capacity_per_month": capacity,
-                "freight_cost_usd": freight[supplier_id],
                 "currency": "USD",
             })
     return pd.DataFrame(rows).sort_values(["sku_id", "supplier_id"]).reset_index(drop=True)

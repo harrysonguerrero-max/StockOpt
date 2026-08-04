@@ -3,10 +3,14 @@
 import numpy as np
 import pytest
 
-from app.data.build_mvp_dataset import main
-from app.services.dataset_builder import FILE_NAMES, build_all
-from app.core import dataset_config as config
-from app.services.dataset_service import (
+from app.services.dataset_builder import FILE_NAMES, build_all, publish
+from app.core.dataset import (
+    CITY_IDS,
+    DEMAND_HORIZON,
+    MIN_DAYS_PER_MONTH,
+    OUT_DIR,
+    RAW_DIR,
+    SEED,
     build_demand_history,
     build_inventory_current,
     build_parts_master,
@@ -15,7 +19,7 @@ from app.services.dataset_service import (
     load_procurement,
     load_spine,
 )
-from app.services.validation_service import validate
+from app.core.validation import validate
 
 FAMILIES = {
     "Bearing", "Coupling", "Drive Belt", "Electrical", "Fastener",
@@ -33,7 +37,7 @@ def tables():
 # --------------------------------------------------------------------------- #
 
 def test_spine_loads_with_expected_scope():
-    spine = load_spine(config.RAW_DIR)
+    spine = load_spine(RAW_DIR)
     assert spine["part_no"].nunique() == 20
     assert set(spine["plant_code"]) == {"PUN-01", "CHN-02", "DHR-03"}
     assert (spine["qty_issued"] >= 0).all()
@@ -41,7 +45,7 @@ def test_spine_loads_with_expected_scope():
 
 def test_raw_files_are_not_modified_by_build():
     """El build solo lee: los CSV crudos deben quedar intactos."""
-    raw = config.RAW_DIR / "synthetic_industrial_machine_data.csv"
+    raw = RAW_DIR / "synthetic_industrial_machine_data.csv"
     before = raw.stat().st_mtime
     build_all()
     assert raw.stat().st_mtime == before
@@ -74,7 +78,7 @@ def test_parts_master_shelf_life_covers_every_family(tables):
 
 def test_inventory_has_one_row_per_sku_city(tables):
     inv = tables["inventory"]
-    assert len(inv) == 20 * len(config.CITY_IDS)
+    assert len(inv) == 20 * len(CITY_IDS)
     assert not inv.duplicated(["sku_id", "city_id"]).any()
     assert (inv["on_hand_qty"] >= 0).all()
     assert (inv["reorder_qty"] >= 1).all()
@@ -98,17 +102,44 @@ def test_inventory_mixes_both_sides_of_the_reorder_point(tables):
 # Entrada 3: demanda historica
 # --------------------------------------------------------------------------- #
 
-def test_demand_preserves_quantity_of_complete_months(tables):
-    """El agregado mensual no debe perder ni inventar consumo.
+def test_demand_preserves_observed_quantity(tables):
+    """El agregado mensual no debe perder ni inventar consumo observado.
 
-    Solo se excluye lo registrado en meses incompletos, que el build descarta
-    para no leerlos como una caida de la demanda.
+    La comparacion se limita a las filas reales. Los meses simulados que
+    anteponen historia llevan is_synthetic = 1 y no forman parte de lo
+    observado, asi que quedan fuera del cuadre.
     """
-    spine = load_spine(config.RAW_DIR)
-    days = spine.groupby(spine["transaction_date"].dt.strftime("%Y-%m"))["transaction_date"].nunique()
-    complete = days[days >= config.MIN_DAYS_PER_MONTH].index
-    expected = spine[spine["transaction_date"].dt.strftime("%Y-%m").isin(complete)]["qty_issued"].sum()
-    assert tables["demand"]["qty_issued"].sum() == expected
+    spine = load_spine(RAW_DIR)
+    demand = tables["demand"]
+    observed = demand[demand["is_synthetic"] == 0]
+    assert observed["qty_issued"].sum() == spine["qty_issued"].sum()
+
+
+def test_synthetic_history_is_marked_and_precedes_the_real_one(tables):
+    """Lo simulado debe ser distinguible y no puede pisar el presente."""
+    demand = tables["demand"]
+    synthetic = demand[demand["is_synthetic"] == 1]
+    observed = demand[demand["is_synthetic"] == 0]
+
+    assert len(synthetic) > 0, "el build debe ampliar la historia"
+    assert synthetic["period_month"].max() < observed["period_month"].min(), (
+        "los meses simulados van antes del primer mes real"
+    )
+    assert (synthetic["qty_issued"] >= 0).all()
+
+
+def test_synthetic_history_resembles_the_real_one(tables):
+    """La historia simulada debe ser estadisticamente indistinguible.
+
+    Si el nivel o la dispersion se desviaran, el modelo aprenderia de un
+    proceso que no es el de la planta.
+    """
+    demand = tables["demand"]
+    real = demand[demand["is_synthetic"] == 0]["qty_issued"]
+    fake = demand[demand["is_synthetic"] == 1]["qty_issued"]
+
+    assert abs(fake.mean() - real.mean()) / real.mean() < 0.25
+    assert abs(fake.std() - real.std()) / real.std() < 0.35
 
 
 def test_demand_grain_is_sku_city_month(tables):
@@ -125,12 +156,12 @@ def test_demand_covers_at_least_twelve_months(tables):
 
 def test_demand_ends_at_configured_horizon(tables):
     """La serie debe llegar al mes que exige la operacion."""
-    assert tables["demand"]["period_month"].max() == config.DEMAND_HORIZON
+    assert tables["demand"]["period_month"].max() == DEMAND_HORIZON
 
 
 def test_cities_are_the_configured_ones(tables):
     cities = tables["cities"]
-    assert list(cities["city_id"]) == config.CITY_IDS
+    assert list(cities["city_id"]) == CITY_IDS
     assert (cities["country"] == "Mexico").all()
 
 
@@ -210,27 +241,28 @@ def test_validate_rejects_negative_price(tables):
 # --------------------------------------------------------------------------- #
 
 def test_synthetic_fields_are_deterministic():
-    spine = load_spine(config.RAW_DIR)
+    spine = load_spine(RAW_DIR)
     parts = build_parts_master(spine)
     demand = build_demand_history(spine)
-    suppliers = build_suppliers(load_procurement(config.RAW_DIR))
+    suppliers = build_suppliers(load_procurement(RAW_DIR))
 
-    first = build_inventory_current(parts, demand, np.random.default_rng(config.SEED))
-    second = build_inventory_current(parts, demand, np.random.default_rng(config.SEED))
+    first = build_inventory_current(parts, demand, suppliers, np.random.default_rng(SEED))
+    second = build_inventory_current(parts, demand, suppliers, np.random.default_rng(SEED))
     assert first.equals(second)
 
-    offers_a = build_supplier_offers(parts, demand, suppliers, np.random.default_rng(config.SEED))
-    offers_b = build_supplier_offers(parts, demand, suppliers, np.random.default_rng(config.SEED))
+    offers_a = build_supplier_offers(parts, demand, suppliers, np.random.default_rng(SEED))
+    offers_b = build_supplier_offers(parts, demand, suppliers, np.random.default_rng(SEED))
     assert offers_a.equals(offers_b)
 
 
-def test_main_writes_every_file_and_is_idempotent(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "OUT_DIR", tmp_path)
-    main()
+def test_publish_writes_every_file_and_is_idempotent(tmp_path, monkeypatch):
+    import app.services.dataset_builder as pipeline
+    monkeypatch.setattr(pipeline, "OUT_DIR", tmp_path)
+    publish(build_all())
     for filename in list(FILE_NAMES.values()) + ["data_dictionary.md"]:
         assert (tmp_path / filename).exists(), filename
 
     snapshot = {f: (tmp_path / f).read_bytes() for f in FILE_NAMES.values()}
-    main()
+    publish(build_all())
     for filename, content in snapshot.items():
         assert (tmp_path / filename).read_bytes() == content, f"{filename} no es idempotente"
