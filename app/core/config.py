@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -12,7 +12,8 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "http://localhost:3000",  # Common frontend port
     ]
-
+    MLFLOW_TRACKING_URI: Optional[str] = "http://localhost:5000"
+    GEMINI_API_KEY: Optional[str] = None
     class Config:
         case_sensitive = True
         env_file = ".env"

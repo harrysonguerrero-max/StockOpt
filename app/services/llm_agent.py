@@ -31,7 +31,7 @@ from mlops_sdk import BaseAgent
 from app.core.explanation import build_assumptions, build_explanation
 from app.core.optimization import DECISION_HOLD
 
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-2.5-flash"
 API_KEY_VARIABLE = "GEMINI_API_KEY"
 
 REQUEST_TIMEOUT_SECONDS = 12
