@@ -1,0 +1,11 @@
+supplier_id,city_id,is_home,freight_cost_usd,lead_time_extra_days
+SUP-01,NAVA,1,10.0,0
+SUP-01,OBRE,0,25.0,4
+SUP-02,NAVA,0,37.5,4
+SUP-02,OBRE,1,15.0,0
+SUP-03,NAVA,1,20.0,0
+SUP-03,OBRE,0,50.0,4
+SUP-04,NAVA,0,62.5,4
+SUP-04,OBRE,1,25.0,0
+SUP-05,NAVA,1,30.0,0
+SUP-05,OBRE,0,75.0,4

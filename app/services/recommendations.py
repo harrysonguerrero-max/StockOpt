@@ -1,0 +1,228 @@
+"""Consulta de recomendaciones para la interfaz de compras.
+
+Funcionalidad:
+    Reune en un solo registro por pieza y ciudad todo lo que el comprador
+    necesita ver: la recomendacion del optimizador, el patron de demanda que la
+    sustenta, los datos de contacto del proveedor, la justificacion redactada y
+    el estado del flujo de aprobacion.
+
+    Los archivos generados se leen una vez y se conservan en memoria, ya que el
+    pipeline es por lotes y el dataset no cambia mientras la aplicacion corre.
+"""
+
+import pandas as pd
+
+from app.services.approvals import (
+    ALLOWED_TRANSITIONS,
+    REJECTION_REASONS,
+    STATE_PENDING,
+    STATE_APPROVED,
+    STATE_CONTACTED,
+    STATE_CONFIRMED,
+    STATE_REJECTED,
+    WORKFLOW_STATES,
+    load_states,
+)
+from app.core.dataset import OUT_DIR
+from app.services.llm_agent import explain_with_model
+from app.core.optimization import DECISION_BUY, DECISION_HOLD, DECISION_REVIEW
+
+SOURCES = [
+    "purchase_recommendations.csv",
+    "demand_patterns.csv",
+    "suppliers.csv",
+    "cities.csv",
+]
+
+_cache = {}
+
+
+def dataset_is_available() -> bool:
+    """Indica si el pipeline ya genero los archivos necesarios.
+
+    Entrada:
+        Ninguna.
+
+    Salida:
+        True si todas las fuentes existen en la carpeta de salida.
+
+    Funcionalidad:
+        Permite que la interfaz muestre un mensaje util en lugar de fallar
+        cuando alguien la abre antes de correr el pipeline.
+    """
+    return all((OUT_DIR / name).exists() for name in SOURCES)
+
+
+def load_sources(refresh: bool = False) -> dict:
+    """Carga los archivos generados por el pipeline.
+
+    Entrada:
+        refresh: fuerza releer desde disco descartando lo cacheado.
+
+    Salida:
+        Diccionario de DataFrames indexado por nombre de archivo.
+
+    Funcionalidad:
+        Mantiene los datos en memoria entre peticiones y solo vuelve a disco
+        cuando se pide expresamente, por ejemplo tras regenerar el dataset.
+    """
+    if refresh or not _cache:
+        _cache.clear()
+        for name in SOURCES:
+            _cache[name] = pd.read_csv(OUT_DIR / name)
+    return _cache
+
+
+def _stock_gauge(record: dict) -> dict:
+    """Calcula la lectura del medidor de existencias de una fila.
+
+    Entrada:
+        record: recomendacion con existencias, minimo y maximo.
+
+    Salida:
+        Diccionario con el porcentaje de llenado, la posicion del minimo y la
+        zona en que cae el stock.
+
+    Funcionalidad:
+        Traduce tres numeros a una sola lectura visual. La escala llega hasta el
+        maximo permitido, de modo que la posicion del minimo dentro de la barra
+        indica de un vistazo si la pieza esta en zona critica, ajustada o
+        holgada, que es la tension que decide cada fila.
+    """
+    ceiling = max(record["inventory_max"], record["on_hand_qty"], 1)
+    on_hand_ratio = min(1.0, record["on_hand_qty"] / ceiling)
+    minimum_ratio = min(1.0, record["inventory_min"] / ceiling)
+
+    if record["on_hand_qty"] < record["inventory_min"]:
+        zone = "critico"
+    elif record["on_hand_qty"] < record["inventory_min"] * 1.25:
+        zone = "ajustado"
+    else:
+        zone = "holgado"
+
+    return {
+        "fill_pct": round(on_hand_ratio * 100, 1),
+        "minimum_pct": round(minimum_ratio * 100, 1),
+        "zone": zone,
+    }
+
+
+def build_queue(refresh: bool = False) -> list:
+    """Arma la cola de decisiones que muestra la interfaz.
+
+    Entrada:
+        refresh: fuerza recargar los archivos del pipeline.
+
+    Salida:
+        Lista de diccionarios, uno por pieza y ciudad, listos para serializar.
+
+    Funcionalidad:
+        Cruza la recomendacion con el patron de demanda, el contacto del
+        proveedor y el estado de aprobacion guardado, y adjunta la explicacion
+        redactada. Ordena poniendo primero lo que exige atencion: las compras y
+        las revisiones pendientes por delante de lo que ya no requiere accion.
+    """
+    sources = load_sources(refresh)
+    recommendations = sources["purchase_recommendations.csv"]
+    patterns = sources["demand_patterns.csv"][["sku_id", "city_id", "pattern"]]
+    suppliers = sources["suppliers.csv"]
+    cities = sources["cities.csv"]
+
+    merged = recommendations.merge(patterns, on=["sku_id", "city_id"], how="left")
+    merged = merged.merge(
+        cities[["city_id", "city_name", "warehouse_id"]], on="city_id", how="left"
+    )
+    merged = merged.merge(
+        suppliers[["supplier_id", "contact_email", "lead_time_min_days",
+                   "lead_time_max_days"]],
+        on="supplier_id", how="left",
+    )
+
+    states = load_states()
+    priority = {
+        DECISION_REVIEW: 0,
+        DECISION_BUY: 1,
+        DECISION_HOLD: 2,
+    }
+
+    queue = []
+    for record in merged.to_dict(orient="records"):
+        clean = {
+            key: (None if pd.isna(value) else value) for key, value in record.items()
+        }
+        clean["pattern"] = clean.get("pattern") or "Sin clasificar"
+        stored = states.get((clean["sku_id"], clean["city_id"]))
+
+        clean["state"] = stored["state"] if stored else STATE_PENDING
+        clean["rejection_reason"] = stored["rejection_reason"] if stored else None
+        clean["comment"] = stored["comment"] if stored else None
+        clean["purchase_order"] = stored["purchase_order"] if stored else None
+        clean["updated_at"] = stored["updated_at"] if stored else None
+        clean["updated_by"] = stored["updated_by"] if stored else None
+        clean["gauge"] = _stock_gauge(clean)
+        clean["explanation"] = explain_with_model(clean)
+        clean["next_states"] = ALLOWED_TRANSITIONS.get(clean["state"], [])
+        clean["sort_key"] = priority.get(clean["decision"], 3)
+        queue.append(clean)
+
+    queue.sort(key=lambda item: (item["sort_key"], -item["total_cost_usd"]))
+    return queue
+
+
+def build_summary(queue: list) -> dict:
+    """Resume el estado global de la cola.
+
+    Entrada:
+        queue: lista de recomendaciones ya construida.
+
+    Salida:
+        Diccionario con los totales que encabezan la pantalla.
+
+    Funcionalidad:
+        Cuenta las decisiones por tipo, la inversion pendiente de aprobar y
+        cuantas filas siguen esperando accion del comprador, que es lo que
+        indica cuanto trabajo queda por delante.
+    """
+    pending = [item for item in queue if item["state"] == STATE_PENDING]
+    to_buy = [item for item in queue if item["decision"] == DECISION_BUY]
+    to_review = [item for item in queue if item["decision"] == DECISION_REVIEW]
+    approved = [item for item in queue
+                if item["state"] in (STATE_APPROVED, STATE_CONTACTED,
+                                     STATE_CONFIRMED)]
+
+    return {
+        "total": len(queue),
+        "to_buy": len(to_buy),
+        "to_review": len(to_review),
+        "no_action": len([i for i in queue if i["decision"] == DECISION_HOLD]),
+        "pending_decision": len(pending),
+        "approved": len(approved),
+        "investment_usd": round(sum(item["total_cost_usd"] for item in to_buy), 2),
+        "units": int(sum(item["recommended_qty"] for item in to_buy)),
+        "needs_review": len([i for i in queue if i["needs_review"] == 1]),
+    }
+
+
+def filter_options(queue: list) -> dict:
+    """Extrae los valores disponibles para los filtros de la interfaz.
+
+    Entrada:
+        queue: lista de recomendaciones ya construida.
+
+    Salida:
+        Diccionario con las ciudades, decisiones, estados y criticidades
+        presentes en los datos.
+
+    Funcionalidad:
+        Deja que la interfaz construya los filtros a partir de lo que realmente
+        hay, en lugar de mantener listas duplicadas en el frontend.
+    """
+    cities = sorted({(item["city_id"], item["city_name"]) for item in queue})
+    return {
+        "cities": [{"id": city_id, "name": name} for city_id, name in cities],
+        "decisions": [DECISION_BUY, DECISION_REVIEW,
+                      DECISION_HOLD],
+        "states": WORKFLOW_STATES + [STATE_REJECTED],
+        "criticalities": sorted({item["criticality"] for item in queue}),
+        "rejection_reasons": REJECTION_REASONS,
+    }

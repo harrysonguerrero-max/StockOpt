@@ -1,0 +1,21 @@
+sku_id,description,category,criticality,uom,unit_cost_usd,currency,shelf_life_days
+MRO-10045,Deep Groove Ball Bearing 6205-2RS,Bearing,A,EA,10.24,USD,1825
+MRO-10046,Cylindrical Roller Bearing NU-2210,Bearing,A,EA,25.3,USD,1825
+MRO-10047,Taper Roller Bearing 30206,Bearing,A,EA,17.47,USD,1825
+MRO-20031,Hydraulic Seal Kit 50mm Bore,Seal & Gasket,A,KIT,38.55,USD,730
+MRO-20032,O-Ring NBR 75 Shore 40x3mm,Seal & Gasket,C,EA,0.14,USD,730
+MRO-20033,V-Ring Shaft Seal VS-35,Seal & Gasket,B,EA,2.23,USD,730
+MRO-30011,V-Belt A-68 Classical,Drive Belt,B,EA,3.86,USD,1095
+MRO-30012,Poly-V Belt 6PK1780,Drive Belt,B,EA,10.72,USD,1095
+MRO-40021,Hydraulic Filter Element 10 Micron,Filter,B,EA,6.51,USD,365
+MRO-40022,Air Filter Cartridge AF-2500,Filter,B,EA,9.16,USD,365
+MRO-50008,Carbon Brush Set 12.5x25mm,Electrical,B,SET,5.18,USD,1825
+MRO-50009,Contactor LC1-D40 Coil 230V,Electrical,A,EA,22.29,USD,1825
+MRO-60015,Coupling Spider (Jaw) 65 Shore,Coupling,B,EA,8.07,USD,2555
+MRO-60016,Flexible Coupling Insert GR-38,Coupling,B,EA,11.08,USD,2555
+MRO-70004,Grease Nipple M6x1 Straight,Lubrication,C,EA,0.22,USD,180
+MRO-70005,Lithium EP-2 Grease 400g Cartridge,Lubrication,C,CTG,2.53,USD,180
+MRO-80001,Proximity Sensor PNP M12 2mm,Sensor,A,EA,13.25,USD,1825
+MRO-80002,Thermocouple Type-K 200mm,Sensor,B,EA,7.83,USD,1825
+MRO-90011,SS Fastener Hex Bolt M10x40 Gr8.8,Fastener,C,PKT,1.14,USD,3650
+MRO-90012,Lock Washer M10 Spring Type,Fastener,C,PKT,0.54,USD,3650

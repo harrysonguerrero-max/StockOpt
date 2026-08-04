@@ -34,6 +34,10 @@ Thumbs.db
 # Ignorar archivos de logs
 *.log
 
+# Worktrees y scratch de agentes
+.claude/worktrees/
+.superpowers/
+
 
 # Ignarar archivos generados por el IDE
 .idea/
@@ -63,3 +67,5 @@ sdist/
 wheels/
 lightning_logs/
 # config.yaml
+# Estado local de aprobaciones
+app/data/state/
