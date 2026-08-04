@@ -17,7 +17,8 @@ Funcionalidad:
     entrenamiento queda registrado en MLflow con sus parametros, sus metricas y
     sus artefactos sin escribir codigo de seguimiento.
 """
-
+import dotenv
+import os
 import time
 from pathlib import Path
 
@@ -217,6 +218,21 @@ def moving_average_baseline(validation: pd.DataFrame) -> dict:
         esta en produccion y no solo contra la referencia trivial.
     """
     return regression_metrics(validation["qty_issued"], validation["roll_mean_6"])
+
+
+# Load environment from .env and prefer configured tracking URI when available
+try:
+    dotenv.load_dotenv()
+except Exception:
+    pass
+
+try:
+    from app.core.config import settings
+    if getattr(settings, "MLFLOW_TRACKING_URI", None):
+        os.environ.setdefault("MLFLOW_TRACKING_URI", str(settings.MLFLOW_TRACKING_URI))
+except Exception:
+    # If importing settings fails or value missing, continue — environment may be set externally
+    pass
 
 
 class DemandModel(BaseModel):
