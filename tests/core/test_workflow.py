@@ -189,3 +189,98 @@ def test_interface_is_served_at_the_root(client):
     response = client.get("/")
     assert response.status_code == 200
     assert "StockOpt" in response.text
+
+
+# --------------------------------------------------------------------------- #
+# Explicacion bajo demanda
+# --------------------------------------------------------------------------- #
+
+def test_queue_does_not_call_the_language_model(queue):
+    """La tabla debe pintarse sin tocar el proveedor externo.
+
+    Generar las cuarenta explicaciones al construir la pantalla suponia cuarenta
+    llamadas HTTP en serie por carga y por aprobacion, y dejaba la interfaz
+    colgada. La cola entrega la version deterministica y el modelo interviene
+    solo en la fila que el comprador abre.
+    """
+    assert all(item["explanation"]["source"] == "plantilla" for item in queue)
+
+
+def test_queue_is_fast_enough_for_an_interactive_screen(queue):
+    import time
+    from app.services.recommendations import build_queue as build
+
+    started = time.perf_counter()
+    build(refresh=True)
+    assert time.perf_counter() - started < 2.0, "la cola debe armarse sin esperas"
+
+
+def test_explanation_endpoint_returns_a_single_row(client, queue):
+    item = queue[0]
+    response = client.get(
+        f"/api/v1/recommendations/{item['sku_id']}/{item['city_id']}/explanation"
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["headline"] and payload["body"]
+    assert payload["source"] in {"plantilla", "gemini"}
+
+
+def test_explanation_endpoint_is_404_for_an_unknown_row(client):
+    response = client.get("/api/v1/recommendations/NO-EXISTE/NAVA/explanation")
+    assert response.status_code == 404
+
+
+def test_explanation_falls_back_when_the_model_is_unavailable(queue, monkeypatch):
+    """Una falla del proveedor no puede dejar la fila sin explicacion."""
+    from app.services import llm_agent
+
+    monkeypatch.setattr(llm_agent, "api_key_available", lambda: True)
+    monkeypatch.setattr(llm_agent, "_get_agent", lambda: None)
+    monkeypatch.setattr(llm_agent, "_cache", {})
+
+    explanation = llm_agent.explain_with_model(queue[0])
+    assert explanation["source"] == "plantilla"
+    assert explanation["body"]
+
+
+def test_explanation_is_cached_per_recommendation(queue, monkeypatch):
+    from app.services import llm_agent
+
+    calls = {"n": 0}
+
+    class FakeAgent:
+        def execute(self, prompt, **kwargs):
+            calls["n"] += 1
+            return {"answer": "texto del modelo", "_trace_id": "t1"}
+
+    monkeypatch.setattr(llm_agent, "api_key_available", lambda: True)
+    monkeypatch.setattr(llm_agent, "_get_agent", lambda: FakeAgent())
+    monkeypatch.setattr(llm_agent, "_cache", {})
+
+    first = llm_agent.explain_with_model(queue[0])
+    second = llm_agent.explain_with_model(queue[0])
+
+    assert first["source"] == "gemini"
+    assert second == first
+    assert calls["n"] == 1, "la segunda consulta debe salir del cache"
+
+
+def test_model_never_alters_the_figures(queue, monkeypatch):
+    """El modelo reescribe el cuerpo, nunca el titular ni los supuestos."""
+    from app.services import llm_agent
+
+    class FakeAgent:
+        def execute(self, prompt, **kwargs):
+            return {"answer": "Compra 99999 unidades a otro proveedor."}
+
+    monkeypatch.setattr(llm_agent, "api_key_available", lambda: True)
+    monkeypatch.setattr(llm_agent, "_get_agent", lambda: FakeAgent())
+    monkeypatch.setattr(llm_agent, "_cache", {})
+
+    record = queue[0]
+    deterministic = record["explanation"]
+    generated = llm_agent.explain_with_model(record)
+
+    assert generated["headline"] == deterministic["headline"]
+    assert generated["assumptions"] == deterministic["assumptions"]
