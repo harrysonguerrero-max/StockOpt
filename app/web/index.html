@@ -21,6 +21,10 @@
     <button class="tab" data-view="model" type="button">Modelo de demanda</button>
   </nav>
   <div class="topbar__actions">
+    <button class="toggle" id="ai-toggle" type="button" role="switch" aria-checked="true">
+      <span class="toggle__track"><span class="toggle__knob"></span></span>
+      <span class="toggle__text">Redacción con IA</span>
+    </button>
     <a class="btn btn--ghost" href="/api/v1/recommendations/export">Descargar CSV</a>
     <button class="btn btn--ghost" id="refresh" type="button">Recargar datos</button>
   </div>
@@ -153,6 +157,10 @@
           <dl class="kv"></dl>
           <p class="label label--spaced">Acciones</p>
           <div class="actions"></div>
+          <div class="alts-wrap" hidden>
+            <p class="label label--spaced">Proveedores evaluados</p>
+            <table class="alts"><tbody></tbody></table>
+          </div>
         </div>
       </div>
     </td>

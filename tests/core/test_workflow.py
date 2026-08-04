@@ -252,7 +252,12 @@ def test_explanation_is_cached_per_recommendation(queue, monkeypatch):
     class FakeAgent:
         def execute(self, prompt, **kwargs):
             calls["n"] += 1
-            return {"answer": "texto del modelo", "_trace_id": "t1"}
+            return {
+                "answer": ("En la planta quedan pocas unidades frente al minimo "
+                           "operativo exigido. Se recomienda reponer con el "
+                           "proveedor de menor costo total."),
+                "_trace_id": "t1",
+            }
 
     monkeypatch.setattr(llm_agent, "api_key_available", lambda: True)
     monkeypatch.setattr(llm_agent, "_get_agent", lambda: FakeAgent())
@@ -272,7 +277,9 @@ def test_model_never_alters_the_figures(queue, monkeypatch):
 
     class FakeAgent:
         def execute(self, prompt, **kwargs):
-            return {"answer": "Compra 99999 unidades a otro proveedor."}
+            return {"answer": ("Compra 99999 unidades a otro proveedor distinto "
+                               "del elegido. Este texto intenta alterar las "
+                               "cifras de la recomendacion original.")}
 
     monkeypatch.setattr(llm_agent, "api_key_available", lambda: True)
     monkeypatch.setattr(llm_agent, "_get_agent", lambda: FakeAgent())
@@ -284,3 +291,164 @@ def test_model_never_alters_the_figures(queue, monkeypatch):
 
     assert generated["headline"] == deterministic["headline"]
     assert generated["assumptions"] == deterministic["assumptions"]
+
+
+# --------------------------------------------------------------------------- #
+# Cantidad hipotetica y alternativas de proveedor
+# --------------------------------------------------------------------------- #
+
+def test_review_quantity_is_the_supplier_lot_not_a_recommendation(queue):
+    """En REVISAR la cantidad es la condicion del proveedor, no un consejo.
+
+    Un caso real confundio al usuario: una pieza con maximo 6 y falta de 1
+    mostraba 39 en la columna de cantidad. Ese 39 es el lote minimo que impone
+    el proveedor, y la explicacion debe decirlo sin ambiguedad.
+    """
+    review = [item for item in queue if item["decision"] == "REVISAR"]
+    assert review, "el dataset debe producir casos de revision"
+
+    for item in review:
+        assert item["recommended_qty"] > item["max_allowed_qty"], (
+            "si el lote cabe en bodega no deberia ser REVISAR"
+        )
+        headline = item["explanation"]["headline"]
+        assert "No se recomienda comprar" in headline
+        assert item["supplier_name"] in headline
+
+
+def test_review_explains_the_resulting_overstock(queue):
+    """El comprador decide con los meses de cobertura, no con la cantidad."""
+    for item in queue:
+        if item["decision"] != "REVISAR":
+            continue
+        assert item["coverage_months"] > 0
+        assert str(item["coverage_months"]) in item["explanation"]["body"]
+        assert str(item["inventory_max"]) in item["explanation"]["body"]
+
+
+def test_coverage_months_is_consistent_with_the_quantity(queue):
+    for item in queue:
+        if not item["recommended_qty"] or not item["demand_monthly"]:
+            continue
+        expected = item["recommended_qty"] / item["demand_monthly"]
+        assert abs(item["coverage_months"] - expected) < 0.15
+
+
+def test_every_row_lists_the_suppliers_that_competed(queue):
+    """El spec exige comunicar las alternativas consideradas."""
+    for item in queue:
+        alternatives = item["alternatives"]
+        assert len(alternatives) == item["alternatives_evaluated"]
+        for offer in alternatives:
+            assert offer["supplier_name"]
+            assert offer["unit_price_usd"] > 0
+            assert offer["total_cost_usd"] > 0
+
+
+def test_alternatives_are_ranked_by_total_cost(queue):
+    for item in queue:
+        costs = [offer["total_cost_usd"] for offer in item["alternatives"]]
+        assert costs == sorted(costs)
+
+
+def test_the_chosen_supplier_is_the_cheapest_alternative(queue):
+    """Si el optimizador eligio a uno, debe ser el de menor costo total."""
+    for item in queue:
+        if not item["supplier_id"] or not item["alternatives"]:
+            continue
+        assert item["alternatives"][0]["chosen"], (
+            f"{item['sku_id']}: el elegido no encabeza el ranking de costo"
+        )
+
+
+def test_assumptions_name_a_competing_supplier(queue):
+    """Cada fila debe nombrar contra quien se comparo.
+
+    Si hay proveedor elegido se nombra el siguiente en costo; si no lo hay,
+    porque la fila no requiere compra, se nombra el que seria mas conveniente.
+    """
+    for item in queue:
+        if len(item["alternatives"]) < 2:
+            continue
+        assumptions = " ".join(item["explanation"]["assumptions"])
+        if item["supplier_id"]:
+            expected = item["alternatives"][1]["supplier_name"]
+        else:
+            expected = item["alternatives"][0]["supplier_name"]
+        assert expected in assumptions, f"{item['sku_id']}: falta nombrar a {expected}"
+
+
+# --------------------------------------------------------------------------- #
+# Validacion de la respuesta del modelo
+# --------------------------------------------------------------------------- #
+
+def test_a_bare_heading_is_not_accepted_as_an_explanation():
+    """El fallo que se reporto en uso real.
+
+    El modelo devolvia solo el rotulo "Justificacion de la recomendacion de NO
+    COMPRAR" y se mostraba tal cual, dejando la fila peor explicada que con la
+    plantilla.
+    """
+    from app.services.llm_agent import is_usable_answer, strip_heading
+
+    assert not is_usable_answer(strip_heading("Justificacion de la recomendacion de NO COMPRAR"))
+    assert not is_usable_answer(strip_heading("Compra."))
+    assert not is_usable_answer(strip_heading(""))
+
+
+def test_a_leading_heading_is_removed_but_the_body_survives():
+    from app.services.llm_agent import is_usable_answer, strip_heading
+
+    raw = ("## Justificacion\n\nEn Nava quedan 11 unidades y el minimo es 12. "
+           "Se recomienda comprar 25 a Alpha_Inc por ser la mas economica.")
+    clean = strip_heading(raw)
+    assert not clean.startswith("#")
+    assert "Justificacion" not in clean
+    assert is_usable_answer(clean)
+
+
+def test_a_full_paragraph_is_accepted():
+    from app.services.llm_agent import is_usable_answer, strip_heading
+
+    text = ("En Obregon quedan 3 unidades del rodamiento y el minimo operativo "
+            "es 6. Se recomienda comprar 13 unidades a Alpha_Inc.")
+    assert is_usable_answer(strip_heading(text))
+
+
+def test_a_degenerate_answer_falls_back_to_the_template(queue, monkeypatch):
+    from app.services import llm_agent
+
+    class HeadingOnlyAgent:
+        def execute(self, prompt, **kwargs):
+            return {"answer": "Justificacion de la recomendacion de COMPRAR",
+                    "finish_reason": "STOP"}
+
+    monkeypatch.setattr(llm_agent, "api_key_available", lambda: True)
+    monkeypatch.setattr(llm_agent, "_get_agent", lambda: HeadingOnlyAgent())
+    monkeypatch.setattr(llm_agent, "_cache", {})
+
+    record = queue[0]
+    result = llm_agent.explain_with_model(record)
+    assert result["source"] == "plantilla"
+    assert result["model_discarded"] is True
+    assert result["body"] == record["explanation"]["body"]
+
+
+def test_the_model_can_be_skipped_on_request(queue, monkeypatch):
+    """El interruptor de la interfaz debe poder evitar la llamada por completo."""
+    from app.services import llm_agent
+
+    called = {"n": 0}
+
+    class CountingAgent:
+        def execute(self, prompt, **kwargs):
+            called["n"] += 1
+            return {"answer": "x" * 200 + ". Segunda frase completa aqui."}
+
+    monkeypatch.setattr(llm_agent, "api_key_available", lambda: True)
+    monkeypatch.setattr(llm_agent, "_get_agent", lambda: CountingAgent())
+    monkeypatch.setattr(llm_agent, "_cache", {})
+
+    result = llm_agent.explain_with_model(queue[0], use_model=False)
+    assert result["source"] == "plantilla"
+    assert called["n"] == 0

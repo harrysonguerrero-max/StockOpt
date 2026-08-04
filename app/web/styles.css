@@ -500,3 +500,77 @@ main { padding: 20px 24px 60px; max-width: 1480px; margin: 0 auto; }
 }
 
 .hypo--warn { color: var(--warning); }
+
+/* ---------- Proveedores evaluados ---------- */
+
+.alts { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+.alts td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.alts td.num { text-align: right; }
+
+.alts__head td {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.alts__chosen { background: var(--primary-light); font-weight: 600; }
+
+.alts__tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--success);
+}
+
+/* ---------- Interruptor de IA ---------- */
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 13px 6px 9px;
+  border: 1px solid rgba(255,255,255,0.45);
+  border-radius: 3px;
+  background: transparent;
+  color: #B9D4E8;
+  cursor: pointer;
+}
+
+.toggle:hover { background: rgba(255,255,255,0.12); }
+.toggle[aria-checked="true"] { color: #fff; }
+
+.toggle__track {
+  position: relative;
+  width: 30px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.28);
+  flex: none;
+  transition: background 0.15s ease;
+}
+
+.toggle[aria-checked="true"] .toggle__track { background: var(--success); }
+
+.toggle__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+
+.toggle[aria-checked="true"] .toggle__knob { transform: translateX(14px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle__track, .toggle__knob { transition: none; }
+}

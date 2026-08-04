@@ -38,19 +38,42 @@ REQUEST_TIMEOUT_SECONDS = 12
 
 CACHE_LIMIT = 200
 
-SYSTEM_PROMPT = """Eres analista de abastecimiento industrial. Redactas para un
-comprador de planta que decide si aprueba una orden de compra de refacciones.
+MAX_OUTPUT_TOKENS = 600
 
-Reglas que no puedes romper:
-- No cambies ninguna cifra. Las cantidades, precios, plazos y niveles de
-  inventario que recibes son el resultado de un optimizador auditado.
+THINKING_BUDGET = 0
+
+MIN_ANSWER_CHARS = 90
+MIN_ANSWER_SENTENCES = 2
+
+SYSTEM_PROMPT = """Eres analista de abastecimiento industrial. Escribes para un
+comprador de planta que va a aprobar o rechazar una orden de refacciones.
+
+FORMATO OBLIGATORIO
+Responde con UN SOLO PARRAFO corrido de dos a cuatro frases completas.
+Empieza directamente con el contenido, nunca con un titulo, encabezado, rotulo
+ni las palabras "Justificacion", "Recomendacion" o similares. Nada de vinetas,
+listas, negritas ni saltos de linea.
+
+QUE DEBE DECIR EL PARRAFO
+1. Cuanto stock hay hoy y cuanto exige el minimo operativo.
+2. Que se hace y por que: comprar tantas unidades a tal proveedor, o no comprar
+   por tal motivo.
+3. Si la confianza de la proyeccion es baja, advertirlo de forma explicita.
+
+REGLAS QUE NO PUEDES ROMPER
+- No cambies ninguna cifra. Cantidades, precios, plazos y niveles de inventario
+  vienen de un optimizador auditado.
 - No propongas una decision distinta a la que recibes.
-- Si la confianza de la proyeccion es baja, dilo de forma explicita.
-- Escribe en espanol neutro, en dos o tres frases, sin vinetas ni encabezados.
-- Habla de piezas, bodegas y proveedores, no de modelos ni de algoritmos.
+- Habla de piezas, bodegas y proveedores, nunca de modelos ni de algoritmos.
+
+EJEMPLO DEL TONO ESPERADO
+En Nava quedan 11 unidades del rodamiento y el minimo operativo es 12, asi que
+el stock no cubre los 11 dias que tarda la reposicion. Se recomienda comprar 25
+unidades a Alpha_Inc, que resulta la opcion mas economica de las tres que surten
+la planta considerando precio y flete.
 """
 
-USER_TEMPLATE = """Redacta la justificacion de esta recomendacion.
+USER_TEMPLATE = """Escribe el parrafo de justificacion para este caso.
 
 Pieza: {sku_id} - {description}
 Criticidad: {criticality}
@@ -79,6 +102,106 @@ PAYLOAD_FIELDS = (
 _agent = None
 _cache = {}
 _executor = ThreadPoolExecutor(max_workers=2)
+
+
+def extract_text(response) -> str:
+    """Recupera el texto de la respuesta del modelo.
+
+    Entrada:
+        response: objeto de respuesta del proveedor.
+
+    Salida:
+        Texto concatenado y limpio, o cadena vacia si no hay contenido.
+
+    Funcionalidad:
+        El atajo `.text` devuelve vacio cuando la respuesta llega partida en
+        varios fragmentos o cuando el proveedor la corta, asi que se recorre
+        tambien la estructura de candidatos. Ademas descarta una primera linea
+        que sea solo un titulo, que es lo que el modelo tiende a anteponer
+        pese a la instruccion de no hacerlo.
+    """
+    text = (getattr(response, "text", None) or "").strip()
+
+    if not text:
+        fragments = []
+        for candidate in getattr(response, "candidates", None) or []:
+            content = getattr(candidate, "content", None)
+            for part in getattr(content, "parts", None) or []:
+                piece = getattr(part, "text", None)
+                if piece:
+                    fragments.append(piece)
+        text = "\n".join(fragments).strip()
+
+    return strip_heading(text)
+
+
+def strip_heading(text: str) -> str:
+    """Elimina un titulo antepuesto por el modelo.
+
+    Entrada:
+        text: texto devuelto por el modelo.
+
+    Salida:
+        El texto sin la linea de encabezado inicial, si la habia.
+
+    Funcionalidad:
+        Reconoce como titulo una primera linea corta, sin punto final o marcada
+        con almohadillas o asteriscos, siempre que quede contenido detras. Si
+        el titulo es lo unico que devolvio el modelo no se toca, para que la
+        validacion posterior lo detecte y se recurra a la plantilla.
+    """
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    if len(lines) < 2:
+        return text.strip()
+
+    first = lines[0].strip("#* ").strip()
+    is_heading = len(first) < 90 and (not first.endswith(".") or first.endswith(":"))
+    if is_heading:
+        return " ".join(lines[1:]).strip()
+    return " ".join(lines).strip()
+
+
+def is_usable_answer(text: str) -> bool:
+    """Decide si la respuesta del modelo sirve para mostrarse.
+
+    Entrada:
+        text: texto ya extraido y limpio.
+
+    Salida:
+        True si el texto parece una justificacion completa.
+
+    Funcionalidad:
+        Existe porque el modelo a veces devuelve solo un rotulo del tipo
+        "Justificacion de la recomendacion de NO COMPRAR" y sin este control se
+        mostraba tal cual, dejando la fila peor explicada que con la plantilla.
+        Se exige longitud minima y al menos dos frases terminadas.
+    """
+    clean = (text or "").strip()
+    if len(clean) < MIN_ANSWER_CHARS:
+        return False
+    sentences = [part for part in clean.split(".") if len(part.strip()) > 15]
+    return len(sentences) >= MIN_ANSWER_SENTENCES
+
+
+def finish_reason(response) -> str:
+    """Devuelve el motivo por el que el modelo dejo de generar.
+
+    Entrada:
+        response: objeto de respuesta del proveedor.
+
+    Salida:
+        Cadena con el motivo, o vacia si no viene informado.
+
+    Funcionalidad:
+        Permite distinguir una respuesta corta por diseno de una cortada por
+        limite de tokens o por filtro de contenido, que se diagnostican de forma
+        muy distinta.
+    """
+    for candidate in getattr(response, "candidates", None) or []:
+        reason = getattr(candidate, "finish_reason", None)
+        if reason:
+            return str(reason)
+    return ""
 
 
 def api_key_available() -> bool:
@@ -133,14 +256,20 @@ class ExplanationAgent(BaseAgent):
         client = genai.Client(api_key=os.environ[API_KEY_VARIABLE])
         instruction = getattr(self, "_current_prompt", None) or SYSTEM_PROMPT
 
+        settings = {
+            "system_instruction": str(instruction),
+            "temperature": 0.2,
+            "max_output_tokens": MAX_OUTPUT_TOKENS,
+        }
+        if hasattr(types, "ThinkingConfig"):
+            settings["thinking_config"] = types.ThinkingConfig(
+                thinking_budget=THINKING_BUDGET
+            )
+
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=user_input,
-            config=types.GenerateContentConfig(
-                system_instruction=str(instruction),
-                temperature=0.2,
-                max_output_tokens=320,
-            ),
+            config=types.GenerateContentConfig(**settings),
         )
 
         usage = getattr(response, "usage_metadata", None)
@@ -148,7 +277,8 @@ class ExplanationAgent(BaseAgent):
         tokens_output = getattr(usage, "candidates_token_count", 0) or 0
 
         return {
-            "answer": (response.text or "").strip(),
+            "answer": extract_text(response),
+            "finish_reason": finish_reason(response),
             "tokens_input": tokens_input,
             "tokens_output": tokens_output,
             "tokens_total": tokens_input + tokens_output,
@@ -239,8 +369,13 @@ def explain_with_model(record: dict, use_model: bool = True) -> dict:
     except Exception:
         return {**deterministic, "source": "plantilla"}
 
-    if not text:
-        return {**deterministic, "source": "plantilla"}
+    if not is_usable_answer(text):
+        return {
+            **deterministic,
+            "source": "plantilla",
+            "model_discarded": bool(text),
+            "finish_reason": (result or {}).get("finish_reason", ""),
+        }
 
     explanation = {
         "headline": deterministic["headline"],

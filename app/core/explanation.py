@@ -77,10 +77,29 @@ def build_assumptions(record: dict) -> list:
         f"{record['max_allowed_qty']} unidades sin riesgo de obsolescencia"
     )
 
-    if record["alternatives_evaluated"]:
+    alternatives = record.get("alternatives") or []
+    if len(alternatives) > 1:
+        rejected = [item for item in alternatives if not item["chosen"]]
+        chosen = next((item for item in alternatives if item["chosen"]), None)
+        if chosen and rejected:
+            nearest = rejected[0]
+            gap = nearest["total_cost_usd"] - chosen["total_cost_usd"]
+            assumptions.append(
+                f"Se evaluaron {len(alternatives)} proveedores que surten esta "
+                f"ciudad. El siguiente en costo es {nearest['supplier_name']}, "
+                f"{gap:.2f} USD mas caro"
+            )
+        else:
+            cheapest = alternatives[0]
+            assumptions.append(
+                f"Se evaluaron {len(alternatives)} proveedores que surten esta "
+                f"ciudad. Si hubiera que reponer, el mas conveniente seria "
+                f"{cheapest['supplier_name']} a {cheapest['unit_price_usd']:.2f} "
+                f"USD por unidad"
+            )
+    elif record["alternatives_evaluated"]:
         assumptions.append(
-            f"Se evaluaron {record['alternatives_evaluated']} proveedores que "
-            f"surten esta ciudad"
+            f"Unico proveedor disponible para esta pieza en esta ciudad"
         )
     return assumptions
 

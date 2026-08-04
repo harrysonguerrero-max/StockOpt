@@ -25,13 +25,20 @@ from app.services.approvals import (
 )
 from app.core.dataset import OUT_DIR
 from app.core.explanation import build_explanation
-from app.core.optimization import DECISION_BUY, DECISION_HOLD, DECISION_REVIEW
+from app.core.optimization import (
+    DECISION_BUY,
+    DECISION_HOLD,
+    DECISION_REVIEW,
+    candidate_offers,
+)
 
 SOURCES = [
     "purchase_recommendations.csv",
     "demand_patterns.csv",
     "suppliers.csv",
     "cities.csv",
+    "supplier_offers.csv",
+    "supplier_coverage.csv",
 ]
 
 _cache = {}
@@ -107,6 +114,54 @@ def _stock_gauge(record: dict) -> dict:
     }
 
 
+def build_alternatives(record: dict, offers, coverage, suppliers) -> list:
+    """Reune las ofertas que compitieron por una recomendacion.
+
+    Entrada:
+        record: recomendacion de una pieza en una ciudad.
+        offers: catalogo de ofertas proveedor-pieza.
+        coverage: cobertura geografica de los proveedores.
+        suppliers: catalogo de proveedores.
+
+    Salida:
+        Lista de diccionarios ordenada de menor a mayor costo, cada uno con el
+        proveedor, su precio, su lote minimo, su flete, su plazo, lo que
+        costaria la compra con el y si fue el elegido.
+
+    Funcionalidad:
+        Hace visible por que se descarto cada alternativa. Sin esto la
+        recomendacion pide un acto de fe: dice que un proveedor es el mas
+        conveniente sin mostrar contra que se comparo.
+
+        El costo se calcula sobre la misma cantidad recomendada, salvo que el
+        lote minimo del proveedor obligue a mas, que es la comparacion honesta.
+    """
+    applicable = candidate_offers(
+        record["sku_id"], record["city_id"], offers, coverage, suppliers
+    )
+    if applicable.empty:
+        return []
+
+    quantity = record.get("recommended_qty") or 0
+    rows = []
+    for _, offer in applicable.iterrows():
+        units = max(int(quantity), int(offer["moq"])) if quantity else int(offer["moq"])
+        rows.append({
+            "supplier_id": offer["supplier_id"],
+            "supplier_name": offer["name"],
+            "unit_price_usd": round(float(offer["unit_price_usd"]), 2),
+            "moq": int(offer["moq"]),
+            "freight_cost_usd": round(float(offer["freight_cost_usd"]), 2),
+            "lead_time_days": round(float(offer["lead_time_days"]), 1),
+            "units": units,
+            "total_cost_usd": round(units * float(offer["unit_price_usd"])
+                                    + float(offer["freight_cost_usd"]), 2),
+            "chosen": offer["supplier_id"] == record.get("supplier_id"),
+        })
+
+    return sorted(rows, key=lambda item: item["total_cost_usd"])
+
+
 def build_queue(refresh: bool = False) -> list:
     """Arma la cola de decisiones que muestra la interfaz.
 
@@ -167,6 +222,10 @@ def build_queue(refresh: bool = False) -> list:
         clean["updated_at"] = stored["updated_at"] if stored else None
         clean["updated_by"] = stored["updated_by"] if stored else None
         clean["gauge"] = _stock_gauge(clean)
+        clean["alternatives"] = build_alternatives(
+            clean, sources["supplier_offers.csv"],
+            sources["supplier_coverage.csv"], suppliers,
+        )
         clean["explanation"] = {**build_explanation(clean), "source": "plantilla"}
         clean["next_states"] = ALLOWED_TRANSITIONS.get(clean["state"], [])
         clean["sort_key"] = priority.get(clean["decision"], 3)

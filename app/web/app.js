@@ -1,9 +1,12 @@
 const API = "/api/v1";
 
+const AI_PREFERENCE_KEY = "stockopt.usarIA";
+
 const state = {
   items: [],
   filters: null,
   openKey: null,
+  useAI: localStorage.getItem(AI_PREFERENCE_KEY) !== "0",
 };
 
 const el = (id) => document.getElementById(id);
@@ -225,6 +228,7 @@ function detailRow(item) {
   });
 
   row.querySelector(".actions").append(...actionControls(item, row));
+  paintAlternatives(item, row);
 
   if (item.rejection_reason) {
     const note = document.createElement("p");
@@ -397,6 +401,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
 });
 
 async function requestExplanation(item, target) {
+  if (!state.useAI) return;
   if (item.explanation.source === "gemini" || item.explanationPending) return;
   if (item.explanationTried) return;
 
@@ -430,3 +435,53 @@ async function requestExplanation(item, target) {
     item.explanationPending = false;
   }
 }
+
+function paintAlternatives(item, row) {
+  const alternatives = item.alternatives || [];
+  if (alternatives.length < 2) return;
+
+  const wrap = row.querySelector(".alts-wrap");
+  const body = row.querySelector(".alts tbody");
+  wrap.hidden = false;
+
+  alternatives.forEach((offer) => {
+    const tr = document.createElement("tr");
+    if (offer.chosen) tr.className = "alts__chosen";
+    tr.innerHTML = `
+      <td>${offer.supplier_name}${offer.chosen ? ' <span class="alts__tag">elegido</span>' : ""}</td>
+      <td class="num mono">${money(offer.unit_price_usd)}</td>
+      <td class="num mono">${offer.moq}</td>
+      <td class="num mono">${offer.lead_time_days}d</td>
+      <td class="num mono">${money(offer.total_cost_usd)}</td>`;
+    body.appendChild(tr);
+  });
+
+  const head = document.createElement("tr");
+  head.className = "alts__head";
+  head.innerHTML = `<td>Proveedor</td><td class="num">Precio</td>
+    <td class="num">MOQ</td><td class="num">Entrega</td><td class="num">Total</td>`;
+  body.prepend(head);
+}
+
+function paintToggle() {
+  const button = el("ai-toggle");
+  button.setAttribute("aria-checked", String(state.useAI));
+  button.querySelector(".toggle__text").textContent =
+    state.useAI ? "Redacción con IA" : "Redacción sin IA";
+  button.title = state.useAI
+    ? "El modelo de lenguaje reescribe la justificación al abrir una fila"
+    : "Se usa la justificación generada por plantilla, sin llamar al modelo";
+}
+
+el("ai-toggle").addEventListener("click", () => {
+  state.useAI = !state.useAI;
+  localStorage.setItem(AI_PREFERENCE_KEY, state.useAI ? "1" : "0");
+  paintToggle();
+  state.items.forEach((item) => {
+    item.explanationTried = false;
+  });
+  toast(state.useAI ? "Redacción con IA activada" : "Redacción con IA desactivada");
+  render();
+});
+
+paintToggle();
