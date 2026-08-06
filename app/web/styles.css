@@ -440,3 +440,44 @@ main { padding: 20px 24px 60px; max-width: 1480px; margin: 0 auto; }
   .tabs { order: 3; width: 100%; }
   .charts--two { grid-template-columns: 1fr; }
 }
+
+/* ---------- Indicador de redacción ---------- */
+
+.writing {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--secondary);
+}
+
+.writing::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--primary-light);
+  border-top-color: var(--secondary);
+  animation: writing-spin 0.7s linear infinite;
+}
+
+.writing--done { color: var(--text-secondary); }
+
+.writing--done::before {
+  border: 0;
+  width: 9px;
+  height: 9px;
+  background: var(--success);
+  animation: none;
+}
+
+@keyframes writing-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .writing::before { animation: none; border-top-color: var(--primary-light); }
+}

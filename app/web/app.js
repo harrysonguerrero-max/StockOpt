@@ -184,7 +184,9 @@ function detailRow(item) {
   const row = node.querySelector("tr");
 
   row.querySelector(".detail__headline").textContent = item.explanation.headline;
-  row.querySelector(".detail__body").textContent = item.explanation.body;
+  const body = row.querySelector(".detail__body");
+  body.textContent = item.explanation.body;
+  requestExplanation(item, body);
 
   const list = row.querySelector(".assumptions");
   item.explanation.assumptions.forEach((text) => {
@@ -384,3 +386,38 @@ document.querySelectorAll(".tab").forEach((tab) => {
     if (showModel && !el("charts").children.length) loadModel();
   });
 });
+
+async function requestExplanation(item, target) {
+  if (item.explanation.source === "gemini" || item.explanationPending) return;
+  if (item.explanationTried) return;
+
+  item.explanationPending = true;
+  const original = target.textContent;
+
+  const status = document.createElement("span");
+  status.className = "writing";
+  status.textContent = "Redactando con el modelo";
+  target.after(status);
+
+  try {
+    const fresh = await api(
+      `/recommendations/${encodeURIComponent(item.sku_id)}/${encodeURIComponent(item.city_id)}/explanation`
+    );
+    item.explanation = fresh;
+    item.explanationTried = true;
+    if (target.isConnected) {
+      target.textContent = fresh.body || original;
+      if (fresh.source === "gemini") {
+        status.className = "writing writing--done";
+        status.textContent = "Redactado por el modelo";
+      } else {
+        status.remove();
+      }
+    }
+  } catch (error) {
+    item.explanationTried = true;
+    if (status.isConnected) status.remove();
+  } finally {
+    item.explanationPending = false;
+  }
+}

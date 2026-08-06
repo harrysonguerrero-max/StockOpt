@@ -24,7 +24,7 @@ from app.services.approvals import (
     load_states,
 )
 from app.core.dataset import OUT_DIR
-from app.services.llm_agent import explain_with_model
+from app.core.explanation import build_explanation
 from app.core.optimization import DECISION_BUY, DECISION_HOLD, DECISION_REVIEW
 
 SOURCES = [
@@ -119,8 +119,15 @@ def build_queue(refresh: bool = False) -> list:
     Funcionalidad:
         Cruza la recomendacion con el patron de demanda, el contacto del
         proveedor y el estado de aprobacion guardado, y adjunta la explicacion
-        redactada. Ordena poniendo primero lo que exige atencion: las compras y
-        las revisiones pendientes por delante de lo que ya no requiere accion.
+        deterministica. Ordena poniendo primero lo que exige atencion: las
+        compras y las revisiones pendientes por delante de lo que ya no requiere
+        accion.
+
+        La redaccion con modelo de lenguaje no ocurre aqui a proposito. Generar
+        las cuarenta explicaciones al construir la pantalla suponia cuarenta
+        llamadas HTTP en serie por cada carga y por cada aprobacion. La tabla se
+        arma con la version deterministica, que es inmediata, y la interfaz pide
+        la redaccion del modelo solo para la fila que el comprador abre.
     """
     sources = load_sources(refresh)
     recommendations = sources["purchase_recommendations.csv"]
@@ -160,7 +167,7 @@ def build_queue(refresh: bool = False) -> list:
         clean["updated_at"] = stored["updated_at"] if stored else None
         clean["updated_by"] = stored["updated_by"] if stored else None
         clean["gauge"] = _stock_gauge(clean)
-        clean["explanation"] = explain_with_model(clean)
+        clean["explanation"] = {**build_explanation(clean), "source": "plantilla"}
         clean["next_states"] = ALLOWED_TRANSITIONS.get(clean["state"], [])
         clean["sort_key"] = priority.get(clean["decision"], 3)
         queue.append(clean)
@@ -226,3 +233,24 @@ def filter_options(queue: list) -> dict:
         "criticalities": sorted({item["criticality"] for item in queue}),
         "rejection_reasons": REJECTION_REASONS,
     }
+
+
+def find_recommendation(sku_id: str, city_id: str, refresh: bool = False) -> dict:
+    """Recupera una recomendacion concreta de la cola.
+
+    Entrada:
+        sku_id: identificador de la pieza.
+        city_id: identificador de la ciudad.
+        refresh: fuerza recargar los archivos del pipeline.
+
+    Salida:
+        Diccionario de la recomendacion, o None si no existe.
+
+    Funcionalidad:
+        Da soporte a la redaccion bajo demanda, que necesita los datos de una
+        sola fila y no de la cola completa.
+    """
+    for item in build_queue(refresh=refresh):
+        if item["sku_id"] == sku_id and item["city_id"] == city_id:
+            return item
+    return None

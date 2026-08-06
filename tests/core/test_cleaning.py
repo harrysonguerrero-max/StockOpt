@@ -58,14 +58,35 @@ def test_iqr_flags_an_extreme_value():
     assert not detect_outliers_iqr(series).iloc[0]
 
 
-def test_mad_resists_contamination():
-    """Con varios extremos, la desviacion tipica se infla y el criterio clasico ciega.
+def test_mad_detects_an_extreme_among_repeated_values():
+    """El caso tipico del consumo de refacciones.
 
-    La desviacion absoluta mediana usa la mediana, asi que los extremos no
-    desplazan el umbral y siguen detectandose.
+    Muchos meses repiten el mismo valor, asi que la desviacion mediana vale cero
+    y el criterio se ciega. La reserva por desviacion media respecto de la
+    mediana lo resuelve.
+    """
+    series = pd.Series([2] * 11 + [40])
+    flagged = detect_outliers_mad(series)
+    assert flagged.sum() == 1
+    assert flagged.iloc[-1]
+
+
+def test_mad_does_not_flag_a_second_mode_as_outlier():
+    """Limitacion asumida, y es la correcta.
+
+    Cuando un tercio de las observaciones esta en el extremo ya no se trata de
+    valores atipicos sino de una distribucion con dos grupos. Ningun criterio
+    robusto univariante deberia marcarlos, porque el problema es de segmentacion
+    y no de limpieza.
     """
     series = pd.Series([10, 10, 10, 10, 10, 10, 900, 950, 1000])
-    assert detect_outliers_mad(series).sum() >= 3
+    assert detect_outliers_mad(series).sum() == 0
+
+
+def test_mad_resists_a_single_contaminating_value():
+    """Con contaminacion baja, que es lo realista, el criterio si responde."""
+    series = pd.Series([10, 11, 10, 12, 11, 10, 11, 12, 10, 11, 900])
+    assert detect_outliers_mad(series).iloc[-1]
 
 
 def test_outlier_detection_survives_constant_and_short_series():

@@ -3,20 +3,28 @@
 Funcionalidad:
     Convierte una recomendacion estructurada en una explicacion escrita para el
     comprador, usando Gemini a traves de BaseAgent del SDK de MLOps. El SDK se
-    encarga del trazado en MLflow, del conteo de tokens y de la latencia sin que
-    haya que instrumentar la llamada a mano.
+    encarga del trazado en MLflow, del conteo de tokens y de la latencia.
 
     El agente no decide nada. Recibe la decision ya tomada por el optimizador y
     solo la redacta, con la instruccion explicita de no alterar ninguna cifra.
     Esa separacion es deliberada: si el modelo pudiera cambiar la cantidad o el
     proveedor, la recomendacion dejaria de ser auditable.
 
-    Si no hay clave de API configurada, la funcion publica cae a la redaccion
-    determinista de core.explanation, de modo que la interfaz siempre tiene
-    un texto que mostrar.
+    La redaccion se pide una fila a la vez, cuando el comprador abre esa fila.
+    Antes se generaban las cuarenta al construir la pantalla, lo que suponia
+    cuarenta llamadas HTTP en serie por cada carga y por cada aprobacion, y la
+    pantalla tardaba minutos en responder. Ahora la tabla se pinta al instante
+    con la version deterministica y el modelo solo interviene en la fila que
+    alguien esta mirando.
+
+    Tres salvaguardas evitan que una falla del proveedor bloquee la interfaz: el
+    agente se instancia una sola vez y se reutiliza, cada llamada tiene tiempo
+    limite, y ante cualquier error se devuelve la redaccion deterministica.
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 
 from mlops_sdk import BaseAgent
 
@@ -25,6 +33,10 @@ from app.core.optimization import DECISION_HOLD
 
 MODEL_NAME = "gemini-2.0-flash"
 API_KEY_VARIABLE = "GEMINI_API_KEY"
+
+REQUEST_TIMEOUT_SECONDS = 12
+
+CACHE_LIMIT = 200
 
 SYSTEM_PROMPT = """Eres analista de abastecimiento industrial. Redactas para un
 comprador de planta que decide si aprueba una orden de compra de refacciones.
@@ -57,6 +69,17 @@ Proveedores evaluados: {alternatives_evaluated}
 Motivo tecnico: {reason}
 """
 
+PAYLOAD_FIELDS = (
+    "sku_id", "description", "criticality", "city_name", "on_hand_qty",
+    "inventory_min", "inventory_max", "demand_monthly", "confidence",
+    "decision", "recommended_qty", "supplier_name", "total_cost_usd",
+    "lead_time_days", "alternatives_evaluated", "reason",
+)
+
+_agent = None
+_cache = {}
+_executor = ThreadPoolExecutor(max_workers=2)
+
 
 def api_key_available() -> bool:
     """Indica si hay credencial configurada para el modelo.
@@ -68,7 +91,7 @@ def api_key_available() -> bool:
         True si la variable de entorno con la clave esta definida.
 
     Funcionalidad:
-        Permite decidir entre la redaccion con modelo y la determinista sin
+        Permite decidir entre la redaccion con modelo y la deterministica sin
         provocar un error de autenticacion.
     """
     return bool(os.environ.get(API_KEY_VARIABLE))
@@ -132,45 +155,102 @@ class ExplanationAgent(BaseAgent):
         }
 
 
-def explain_with_model(record: dict) -> dict:
-    """Redacta la justificacion de una recomendacion con el modelo de lenguaje.
+def _get_agent():
+    """Devuelve el agente, creandolo la primera vez.
+
+    Entrada:
+        Ninguna.
+
+    Salida:
+        Instancia unica de ExplanationAgent, o None si no se pudo construir.
+
+    Funcionalidad:
+        Instanciar el agente carga el prompt desde el registro del SDK, lo que
+        implica una llamada de red. Crear uno por fila multiplicaba esa espera
+        por cuarenta y era la causa principal de que la pantalla se quedara
+        cargando. Se construye una sola vez por proceso.
+    """
+    global _agent
+    if _agent is None:
+        try:
+            _agent = ExplanationAgent()
+        except Exception:
+            return None
+    return _agent
+
+
+def _cache_key(record: dict) -> tuple:
+    """Construye la llave de cache de una recomendacion.
 
     Entrada:
         record: diccionario con los campos de una recomendacion.
 
     Salida:
-        Diccionario con headline, body, assumptions y la clave source, que
-        indica si el texto lo escribio el modelo o la plantilla determinista.
+        Tupla que identifica la recomendacion y su contenido decisorio.
 
     Funcionalidad:
-        Intenta la redaccion con Gemini y cae a la version determinista si no
-        hay credencial o si la llamada falla. Los supuestos y el titular se
-        conservan tal cual los calcula el sistema: el modelo solo reescribe el
-        cuerpo, de modo que ninguna cifra dependa de el.
+        Incluye la decision, la cantidad y el proveedor ademas de la pieza y la
+        ciudad, de modo que el texto guardado se descarte cuando la recomendacion
+        cambie de verdad y no en cada regeneracion del dataset.
+    """
+    return (
+        record.get("sku_id"), record.get("city_id"), record.get("decision"),
+        record.get("recommended_qty"), record.get("supplier_id"),
+    )
+
+
+def explain_with_model(record: dict, use_model: bool = True) -> dict:
+    """Redacta la justificacion de una recomendacion.
+
+    Entrada:
+        record: diccionario con los campos de una recomendacion.
+        use_model: si es falso devuelve directamente la version deterministica.
+
+    Salida:
+        Diccionario con headline, body, assumptions y source, que indica si el
+        texto lo escribio el modelo o la plantilla.
+
+    Funcionalidad:
+        Devuelve la redaccion deterministica cuando no hay clave, cuando se pide
+        expresamente o cuando el modelo falla o excede el tiempo limite. El
+        titular y los supuestos siempre los calcula el sistema: el modelo solo
+        reescribe el cuerpo, de modo que ninguna cifra dependa de el.
     """
     deterministic = build_explanation(record)
-    if not api_key_available():
+    if not use_model or not api_key_available():
+        return {**deterministic, "source": "plantilla"}
+
+    key = _cache_key(record)
+    if key in _cache:
+        return _cache[key]
+
+    agent = _get_agent()
+    if agent is None:
         return {**deterministic, "source": "plantilla"}
 
     try:
-        agent = ExplanationAgent()
-        payload = {key: record.get(key, "") for key in (
-            "sku_id", "description", "criticality", "city_name", "on_hand_qty",
-            "inventory_min", "inventory_max", "demand_monthly", "confidence",
-            "decision", "recommended_qty", "supplier_name", "total_cost_usd",
-            "lead_time_days", "alternatives_evaluated", "reason",
-        )}
+        payload = {field: record.get(field, "") for field in PAYLOAD_FIELDS}
         payload["decision"] = payload["decision"] or DECISION_HOLD
-        result = agent.execute(USER_TEMPLATE.format(**payload))
+        future = _executor.submit(agent.execute, USER_TEMPLATE.format(**payload))
+        result = future.result(timeout=REQUEST_TIMEOUT_SECONDS)
         text = (result or {}).get("answer", "").strip()
-        if not text:
-            return {**deterministic, "source": "plantilla"}
-        return {
-            "headline": deterministic["headline"],
-            "body": text,
-            "assumptions": build_assumptions(record),
-            "source": "gemini",
-            "trace_id": (result or {}).get("_trace_id"),
-        }
+    except FutureTimeout:
+        return {**deterministic, "source": "plantilla"}
     except Exception:
         return {**deterministic, "source": "plantilla"}
+
+    if not text:
+        return {**deterministic, "source": "plantilla"}
+
+    explanation = {
+        "headline": deterministic["headline"],
+        "body": text,
+        "assumptions": build_assumptions(record),
+        "source": "gemini",
+        "trace_id": (result or {}).get("_trace_id"),
+    }
+
+    if len(_cache) >= CACHE_LIMIT:
+        _cache.clear()
+    _cache[key] = explanation
+    return explanation
