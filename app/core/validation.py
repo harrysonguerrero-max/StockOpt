@@ -24,7 +24,7 @@ def validate(tables: dict) -> list:
         catalogos, que precios y cantidades esten en rango, que ninguna tabla
         traiga nulos ni llaves repetidas, y que cada pieza tenga al menos dos
         ofertas, ya que sin alternativas el optimizador no tiene nada que
-        decidir. Como advertencias reporta el stock agotado, las piezas bajo el
+        decidir. Como advertencias reporta las existencias agotadas, las piezas bajo el
         punto de reorden y los proveedores con entregas especialmente lentas.
     """
     errors = []
@@ -42,6 +42,21 @@ def validate(tables: dict) -> list:
     supplier_set = set(suppliers["supplier_id"])
 
     def check_subset(values, reference, label):
+        """Comprueba que una columna de llaves exista en su catalogo.
+
+        Entrada:
+            values: valores de la llave foranea a verificar.
+            reference: conjunto de llaves validas del catalogo.
+            label: nombre de la columna, para el mensaje de error.
+
+        Salida:
+            Ninguna. Añade un error a la lista si encuentra huerfanos.
+
+        Funcionalidad:
+            Solo reporta los cinco primeros huerfanos. Si la integridad esta
+            rota, el patron se ve con cinco ejemplos y listarlos todos taparia el
+            resto de los errores.
+        """
         orphans = set(values) - reference
         if orphans:
             errors.append(f"Integridad {label}: huerfanos {sorted(orphans)[:5]}")
@@ -84,9 +99,9 @@ def validate(tables: dict) -> list:
     if demand.duplicated(["sku_id", "city_id", "period_month"]).any():
         errors.append("demand: llave (sku_id, city_id, period_month) duplicada")
 
-    stockouts = int((inventory["on_hand_qty"] == 0).sum())
-    if stockouts:
-        warnings.append(f"{stockouts} combinaciones sku/ciudad con stock en cero")
+    depleted = int((inventory["on_hand_qty"] == 0).sum())
+    if depleted:
+        warnings.append(f"{depleted} combinaciones sku/ciudad con existencias en cero")
 
     below = int(inventory["below_reorder"].sum())
     if below:

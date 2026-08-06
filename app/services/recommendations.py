@@ -29,7 +29,7 @@ from app.core.optimization import (
     DECISION_BUY,
     DECISION_HOLD,
     DECISION_REVIEW,
-    candidate_offers,
+    offer_costs,
 )
 
 SOURCES = [
@@ -80,7 +80,7 @@ def load_sources(refresh: bool = False) -> dict:
     return _cache
 
 
-def _stock_gauge(record: dict) -> dict:
+def _supply_gauge(record: dict) -> dict:
     """Calcula la lectura del medidor de existencias de una fila.
 
     Entrada:
@@ -88,12 +88,12 @@ def _stock_gauge(record: dict) -> dict:
 
     Salida:
         Diccionario con el porcentaje de llenado, la posicion del minimo y la
-        zona en que cae el stock.
+        zona en que caen las existencias.
 
     Funcionalidad:
         Traduce tres numeros a una sola lectura visual. La escala llega hasta el
         maximo permitido, de modo que la posicion del minimo dentro de la barra
-        indica de un vistazo si la pieza esta en zona critica, ajustada o
+        indique de un vistazo si la pieza esta en zona critica, ajustada o
         holgada, que es la tension que decide cada fila.
     """
     ceiling = max(record["inventory_max"], record["on_hand_qty"], 1)
@@ -133,33 +133,13 @@ def build_alternatives(record: dict, offers, coverage, suppliers) -> list:
         recomendacion pide un acto de fe: dice que un proveedor es el mas
         conveniente sin mostrar contra que se comparo.
 
-        El costo se calcula sobre la misma cantidad recomendada, salvo que el
-        lote minimo del proveedor obligue a mas, que es la comparacion honesta.
+        La cotizacion la resuelve el dominio, de modo que esta pantalla y el
+        resumen del pipeline no puedan discrepar en el costo de una misma oferta.
     """
-    applicable = candidate_offers(
-        record["sku_id"], record["city_id"], offers, coverage, suppliers
+    return offer_costs(
+        record["sku_id"], record["city_id"], record.get("recommended_qty") or 0,
+        offers, coverage, suppliers, chosen_supplier=record.get("supplier_id"),
     )
-    if applicable.empty:
-        return []
-
-    quantity = record.get("recommended_qty") or 0
-    rows = []
-    for _, offer in applicable.iterrows():
-        units = max(int(quantity), int(offer["moq"])) if quantity else int(offer["moq"])
-        rows.append({
-            "supplier_id": offer["supplier_id"],
-            "supplier_name": offer["name"],
-            "unit_price_usd": round(float(offer["unit_price_usd"]), 2),
-            "moq": int(offer["moq"]),
-            "freight_cost_usd": round(float(offer["freight_cost_usd"]), 2),
-            "lead_time_days": round(float(offer["lead_time_days"]), 1),
-            "units": units,
-            "total_cost_usd": round(units * float(offer["unit_price_usd"])
-                                    + float(offer["freight_cost_usd"]), 2),
-            "chosen": offer["supplier_id"] == record.get("supplier_id"),
-        })
-
-    return sorted(rows, key=lambda item: item["total_cost_usd"])
 
 
 def build_queue(refresh: bool = False) -> list:
@@ -221,7 +201,7 @@ def build_queue(refresh: bool = False) -> list:
         clean["purchase_order"] = stored["purchase_order"] if stored else None
         clean["updated_at"] = stored["updated_at"] if stored else None
         clean["updated_by"] = stored["updated_by"] if stored else None
-        clean["gauge"] = _stock_gauge(clean)
+        clean["gauge"] = _supply_gauge(clean)
         clean["alternatives"] = build_alternatives(
             clean, sources["supplier_offers.csv"],
             sources["supplier_coverage.csv"], suppliers,

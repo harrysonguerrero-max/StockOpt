@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StockOpt · Cola de abastecimiento</title>
+<title>SupplyOpt · Cola de abastecimiento</title>
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -12,13 +12,14 @@
   <div class="topbar__brand">
     <span class="topbar__mark" aria-hidden="true"></span>
     <div>
-      <h1>StockOpt</h1>
+      <h1>SupplyOpt</h1>
       <p class="topbar__context" id="context">Abastecimiento de refacciones</p>
     </div>
   </div>
   <nav class="tabs" aria-label="Secciones">
     <button class="tab tab--on" data-view="queue" type="button">Cola de compras</button>
-    <button class="tab" data-view="model" type="button">Modelo de demanda</button>
+    <button class="tab" data-view="data" type="button">Datos</button>
+    <button class="tab" data-view="model" type="button">Modelo y pipeline</button>
   </nav>
   <div class="topbar__actions">
     <button class="toggle" id="ai-toggle" type="button" role="switch" aria-checked="true">
@@ -105,38 +106,88 @@
   </div>
 </main>
 
-<main id="view-model" hidden>
-  <section class="strip" aria-label="Resumen del entrenamiento">
-    <div class="strip__item">
-      <span class="label">Error del modelo</span>
-      <strong class="figure figure--go" id="m-wmape">—</strong>
-      <span class="sub">WMAPE en validación</span>
-    </div>
-    <div class="strip__item">
-      <span class="label">Mejora vs. último mes</span>
-      <strong class="figure" id="m-naive">—</strong>
-      <span class="sub">referencia trivial</span>
-    </div>
-    <div class="strip__item">
-      <span class="label">Mejora vs. promedio móvil</span>
-      <strong class="figure figure--hold" id="m-ma">—</strong>
-      <span class="sub">método en producción</span>
-    </div>
-    <div class="strip__item">
-      <span class="label">Sesgo</span>
-      <strong class="figure" id="m-bias">—</strong>
-      <span class="sub">unidades por mes</span>
-    </div>
-    <div class="strip__item strip__item--money">
-      <span class="label">Series entrenadas</span>
-      <strong class="figure" id="m-series">—</strong>
-      <span class="sub" id="m-split"></span>
+<main id="view-data" hidden>
+  <section class="explorer">
+    <aside class="explorer__index" aria-label="Tablas del dataset">
+      <p class="label">Tablas del dataset</p>
+      <ul class="tablelist" id="table-list"></ul>
+    </aside>
+
+    <div class="explorer__panel">
+      <header class="explorer__head">
+        <div>
+          <h2 id="t-title">—</h2>
+          <p class="sub" id="t-summary"></p>
+        </div>
+        <div class="explorer__actions">
+          <label class="field">
+            <span class="label">Filtrar filas</span>
+            <input type="search" id="t-search" placeholder="Cualquier valor" autocomplete="off">
+          </label>
+          <a class="btn btn--ghost" id="t-download" href="#">Descargar CSV</a>
+        </div>
+      </header>
+
+      <div class="notes" id="t-notes"></div>
+
+      <div class="tablewrap tablewrap--grid">
+        <table class="grid">
+          <thead id="t-head"></thead>
+          <tbody id="t-body"></tbody>
+        </table>
+      </div>
+
+      <footer class="explorer__foot">
+        <span class="sub" id="t-count"></span>
+        <div class="pager">
+          <button class="btn btn--quiet" id="t-prev" type="button">Anterior</button>
+          <span class="sub mono" id="t-page"></span>
+          <button class="btn btn--quiet" id="t-next" type="button">Siguiente</button>
+        </div>
+      </footer>
     </div>
   </section>
+</main>
 
-  <div class="note note--wide" id="m-verdict"></div>
+<main id="view-model" hidden>
+  <section class="flow" aria-label="Etapas del pipeline">
+    <ol class="flow__track" id="flow"></ol>
+  </section>
 
-  <div class="charts" id="charts"></div>
+  <section class="stage" id="stage" aria-live="polite">
+    <header class="stage__head">
+      <h2 id="stage-title">—</h2>
+      <div class="stage__io">
+        <p><span class="label">Entra</span><span id="stage-in"></span></p>
+        <p><span class="label">Sale</span><span id="stage-out"></span></p>
+      </div>
+    </header>
+
+    <div class="strip" id="stage-figures"></div>
+    <div class="note note--wide" id="stage-note"></div>
+    <div class="stage__detail" id="stage-detail"></div>
+    <div class="charts" id="stage-charts"></div>
+  </section>
+
+  <section class="tracer">
+    <header class="tracer__head">
+      <div>
+        <h2>Seguir una pieza por el pipeline</h2>
+        <p class="sub">De su historia de consumo a la decisión de compra, paso a paso.</p>
+      </div>
+      <div class="tracer__pick">
+        <label class="field">
+          <span class="label">Pieza</span>
+          <select id="tr-sku"></select>
+        </label>
+        <label class="field">
+          <span class="label">Planta</span>
+          <select id="tr-city"></select>
+        </label>
+      </div>
+    </header>
+    <div class="trace" id="trace"></div>
+  </section>
 </main>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

@@ -188,7 +188,7 @@ def test_workflow_endpoint_describes_the_flow(client):
 def test_interface_is_served_at_the_root(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert "StockOpt" in response.text
+    assert "SupplyOpt" in response.text
 
 
 # --------------------------------------------------------------------------- #

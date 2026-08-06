@@ -86,7 +86,7 @@ def consumable_within_shelf_life(monthly_demand: float, shelf_life_days: int,
 
     Funcionalidad:
         Traduce la vida util a unidades consumibles y descuenta lo que ya hay en
-        bodega, porque el stock existente se consume primero. Se aplica un
+        bodega, porque las existencias actuales se consumen primero. Se aplica un
         margen de seguridad para no apurar la fecha limite.
     """
     daily_demand = monthly_demand / DAYS_PER_MONTH
@@ -165,6 +165,58 @@ def candidate_offers(sku: str, city: str, offers: pd.DataFrame,
         return result
     result["lead_time_days"] = result["lead_time_avg_days"] + result["lead_time_extra_days"]
     return result
+
+
+def offer_costs(sku: str, city: str, quantity: int, offers: pd.DataFrame,
+                coverage: pd.DataFrame, suppliers: pd.DataFrame,
+                chosen_supplier=None) -> list:
+    """Cotiza cada oferta aplicable a una pieza en una ciudad.
+
+    Entrada:
+        sku: identificador de la pieza.
+        city: identificador de la ciudad.
+        quantity: unidades a cotizar. Si es cero se cotiza el lote minimo de
+            cada proveedor.
+        offers: catalogo de ofertas proveedor-pieza.
+        coverage: cobertura geografica de los proveedores.
+        suppliers: catalogo de proveedores.
+        chosen_supplier: proveedor que finalmente se selecciono, si lo hubo.
+
+    Salida:
+        Lista de diccionarios ordenada de menor a mayor costo total, cada uno con
+        el proveedor, su precio, su lote minimo, su flete, su plazo, las unidades
+        cotizadas, el costo resultante y si fue el elegido.
+
+    Funcionalidad:
+        Hace comparable lo que ofrecio cada proveedor. Todos se cotizan sobre la
+        misma cantidad, salvo que su lote minimo obligue a mas, que es la unica
+        comparacion honesta: un proveedor mas barato por unidad puede salir mas
+        caro si obliga a llevarse el triple.
+
+        La usan tanto el detalle de una fila en la cola como el resumen de lo que
+        aporta el optimizador, de modo que ambos den la misma cifra.
+    """
+    applicable = candidate_offers(sku, city, offers, coverage, suppliers)
+    if applicable.empty:
+        return []
+
+    rows = []
+    for _, offer in applicable.iterrows():
+        units = max(int(quantity), int(offer["moq"])) if quantity else int(offer["moq"])
+        rows.append({
+            "supplier_id": offer["supplier_id"],
+            "supplier_name": offer["name"],
+            "unit_price_usd": round(float(offer["unit_price_usd"]), 2),
+            "moq": int(offer["moq"]),
+            "freight_cost_usd": round(float(offer["freight_cost_usd"]), 2),
+            "lead_time_days": round(float(offer["lead_time_days"]), 1),
+            "units": units,
+            "total_cost_usd": round(units * float(offer["unit_price_usd"])
+                                    + float(offer["freight_cost_usd"]), 2),
+            "chosen": offer["supplier_id"] == chosen_supplier,
+        })
+
+    return sorted(rows, key=lambda item: item["total_cost_usd"])
 
 
 def solve_single_purchase(need: int, ceiling: int, offers: pd.DataFrame) -> dict:

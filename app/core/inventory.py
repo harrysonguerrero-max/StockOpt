@@ -35,7 +35,7 @@ def safety_stock(daily_demand: float, daily_std: float, lead_time: float,
         z: factor de nivel de servicio segun criticidad de la pieza.
 
     Salida:
-        Unidades de stock de seguridad.
+        Unidades del colchon de seguridad.
 
     Funcionalidad:
         Compone la varianza de la demanda durante el tiempo de entrega sumando
@@ -78,7 +78,7 @@ def inventory_minimum(monthly_mean: float, monthly_std: float, lead_time: float,
         z: factor de nivel de servicio segun criticidad de la pieza.
 
     Salida:
-        Tupla (demanda_durante_entrega, stock_seguridad, minimo_redondeado).
+        Tupla (demanda_durante_entrega, colchon_seguridad, minimo_redondeado).
 
     Funcionalidad:
         Traduce la demanda mensual al horizonte real de reposicion y le suma el

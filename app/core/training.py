@@ -27,7 +27,7 @@ import pandas as pd
 from mlops_sdk import BaseModel
 from sklearn.ensemble import HistGradientBoostingRegressor
 
-PROJECT = "stockopt-demanda"
+PROJECT = "supplyopt-demanda"
 
 ARTIFACT_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "training"
 
@@ -220,19 +220,38 @@ def moving_average_baseline(validation: pd.DataFrame) -> dict:
     return regression_metrics(validation["qty_issued"], validation["roll_mean_6"])
 
 
-# Load environment from .env and prefer configured tracking URI when available
-try:
-    dotenv.load_dotenv()
-except Exception:
-    pass
+def _configure_tracking() -> None:
+    """Deja lista la variable de entorno que usa el registro de experimentos.
 
-try:
-    from app.core.config import settings
-    if getattr(settings, "MLFLOW_TRACKING_URI", None):
-        os.environ.setdefault("MLFLOW_TRACKING_URI", str(settings.MLFLOW_TRACKING_URI))
-except Exception:
-    # If importing settings fails or value missing, continue — environment may be set externally
-    pass
+    Entrada:
+        Ninguna.
+
+    Salida:
+        Ninguna. Escribe MLFLOW_TRACKING_URI en el entorno si no venia puesta.
+
+    Funcionalidad:
+        Lee el archivo .env y toma de la configuracion la direccion del servidor
+        de seguimiento. No pisa un valor que ya venga del entorno, de modo que un
+        despliegue pueda apuntar a otro servidor sin tocar el codigo. Si algo
+        falla no interrumpe el arranque: sin direccion, el SDK guarda los runs en
+        disco y el entrenamiento sigue funcionando.
+    """
+    try:
+        dotenv.load_dotenv()
+    except Exception:
+        pass
+
+    try:
+        from app.core.config import settings
+        if getattr(settings, "MLFLOW_TRACKING_URI", None):
+            os.environ.setdefault(
+                "MLFLOW_TRACKING_URI", str(settings.MLFLOW_TRACKING_URI)
+            )
+    except Exception:
+        pass
+
+
+_configure_tracking()
 
 
 class DemandModel(BaseModel):

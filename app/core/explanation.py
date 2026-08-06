@@ -133,7 +133,7 @@ def build_explanation(record: dict) -> dict:
         body = (
             f"En {city} quedan {record['on_hand_qty']} unidades de {sku} y el "
             f"minimo operativo es {record['inventory_min']}. Con la demanda "
-            f"proyectada, ese stock no cubre los {record['lead_time_days']:.1f} "
+            f"proyectada, esas existencias no cubren los {record['lead_time_days']:.1f} "
             f"dias que tarda la reposicion, asi que se recomienda reponer ahora. "
             f"Entre las {record['alternatives_evaluated']} opciones que surten "
             f"{city}, {record['supplier_name']} resulta la mas economica "
@@ -155,7 +155,7 @@ def build_explanation(record: dict) -> dict:
             f"{record['total_cost_usd']:.2f} USD y deja "
             f"{record['coverage_months']} meses de inventario. La cifra que ves no "
             f"es una recomendacion del sistema sino la condicion del proveedor: "
-            f"decide si prefieres el sobrestock o quedarte sin la pieza."
+            f"decide si prefieres el exceso de existencias o quedarte sin la pieza."
         )
     else:
         headline = "Sin accion requerida"

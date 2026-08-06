@@ -225,10 +225,11 @@ def build_inventory_current(parts: pd.DataFrame, demand: pd.DataFrame,
 
     Salida:
         DataFrame con una fila por pieza y ciudad: existencias, punto de
-        reorden, cantidad de reorden, valor del stock y bandera de reposicion.
+        reorden, cantidad de reorden, valor de las existencias y bandera de
+        reposicion.
 
     Funcionalidad:
-        El dato crudo registra consumo, no existencias, de modo que el stock y
+        El dato crudo registra consumo, no existencias, de modo que el nivel y
         los puntos de reorden se derivan de la estadistica mensual de demanda.
 
         El punto de reorden usa la misma politica que la proyeccion de demanda,

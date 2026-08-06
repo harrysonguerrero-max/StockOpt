@@ -27,6 +27,18 @@ TABLES = [
 
 
 def _rule(title: str) -> None:
+    """Imprime un encabezado de seccion en el reporte de consola.
+
+    Entrada:
+        title: rotulo de la seccion.
+
+    Salida:
+        Ninguna. Escribe por consola.
+
+    Funcionalidad:
+        Separa visualmente cada tabla del volcado, que de otro modo se lee como
+        un bloque continuo de cifras.
+    """
     print(f"\n{'=' * 78}\n{title}\n{'=' * 78}")
 
 

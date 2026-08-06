@@ -1,4 +1,4 @@
-"""Arranque de la aplicacion web de StockOpt.
+"""Arranque de la aplicacion web de SupplyOpt.
 
 Funcionalidad:
     Monta la API de recomendaciones y sirve la interfaz de compras como sitio

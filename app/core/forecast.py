@@ -268,7 +268,7 @@ def build_demand_forecast(demand: pd.DataFrame, patterns: pd.DataFrame,
         Para cada serie proyecta la demanda mensual con su metodo, valida el
         metodo contra los ultimos meses conocidos, ajusta la confianza segun ese
         error y traduce el resultado a la demanda esperada durante el tiempo de
-        entrega mas su stock de seguridad. Marca para revision humana las series
+        entrega mas su colchon de seguridad. Marca para revision humana las series
         de baja confianza y las que no admiten proyeccion automatica.
     """
     lead_time, lead_time_std = planning_lead_time(suppliers)

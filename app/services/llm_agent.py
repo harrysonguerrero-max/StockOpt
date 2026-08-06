@@ -55,7 +55,7 @@ ni las palabras "Justificacion", "Recomendacion" o similares. Nada de vinetas,
 listas, negritas ni saltos de linea.
 
 QUE DEBE DECIR EL PARRAFO
-1. Cuanto stock hay hoy y cuanto exige el minimo operativo.
+1. Cuantas existencias hay hoy y cuanto exige el minimo operativo.
 2. Que se hace y por que: comprar tantas unidades a tal proveedor, o no comprar
    por tal motivo.
 3. Si la confianza de la proyeccion es baja, advertirlo de forma explicita.
@@ -68,7 +68,7 @@ REGLAS QUE NO PUEDES ROMPER
 
 EJEMPLO DEL TONO ESPERADO
 En Nava quedan 11 unidades del rodamiento y el minimo operativo es 12, asi que
-el stock no cubre los 11 dias que tarda la reposicion. Se recomienda comprar 25
+las existencias no cubren los 11 dias que tarda la reposicion. Se recomienda comprar 25
 unidades a Alpha_Inc, que resulta la opcion mas economica de las tres que surten
 la planta considerando precio y flete.
 """
@@ -229,9 +229,9 @@ class ExplanationAgent(BaseAgent):
         trazada en MLflow con su latencia y su costo.
     """
 
-    project = "stockopt-explicacion"
+    project = "supplyopt-explicacion"
     llm_provider = "gemini"
-    prompt_name = "stockopt_justificacion_compra"
+    prompt_name = "supplyopt_justificacion_compra"
     prompt_alias = "latest"
 
     def run(self, user_input: str, **kwargs) -> dict:
