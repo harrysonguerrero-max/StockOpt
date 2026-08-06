@@ -137,8 +137,11 @@ def test_queue_puts_the_actionable_rows_first(queue):
 def test_summary_adds_up(queue):
     summary = build_summary(queue)
     assert summary["total"] == len(queue)
-    assert summary["to_buy"] + summary["to_review"] + summary["no_action"] == summary["total"]
+    assert (summary["to_buy"] + summary["to_review"] + summary["deferred"]
+            + summary["no_action"]) == summary["total"]
     assert summary["investment_usd"] > 0
+    if summary["budget_usd"] is not None:
+        assert summary["investment_usd"] <= summary["budget_usd"]
 
 
 def test_filters_are_derived_from_the_data(queue):

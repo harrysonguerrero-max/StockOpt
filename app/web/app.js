@@ -54,8 +54,15 @@ function paintSummary(summary) {
   el("s-buy").textContent = summary.to_buy;
   el("s-units").textContent = `${summary.units} unidades`;
   el("s-review").textContent = summary.to_review;
+  el("s-deferred").textContent = summary.deferred;
+  el("s-deferred-usd").textContent = summary.deferred
+    ? `expone ${money(summary.stockout_exposed_usd)} USD de quiebre`
+    : "todo lo necesario cabe";
   el("s-none").textContent = summary.no_action;
   el("s-money").textContent = `${money(summary.investment_usd)} USD`;
+  el("s-budget").textContent = summary.budget_usd
+    ? `de ${money(summary.budget_usd)} USD de presupuesto`
+    : "solo filas por comprar";
   el("context").textContent =
     `Refacciones industriales · ${summary.needs_review} filas marcadas para revisión humana`;
 }
@@ -125,15 +132,20 @@ function rowMarkup(item) {
     ? `${item.supplier_name}<br><span class="sub mono">${item.lead_time_days} días</span>`
     : '<span class="sub">—</span>';
   const revisar = item.decision === "REVISAR";
+  const aplazado = item.decision === "APLAZADO";
+  const hipotetica = revisar || aplazado;
   const qty = item.recommended_qty
     ? (revisar
         ? `<span class="hypo">lote mín. ${item.recommended_qty}</span>
            <span class="hypo hypo--warn">≈${item.coverage_months} meses</span>`
-        : item.recommended_qty)
+        : aplazado
+          ? `<span class="hypo">requiere ${item.recommended_qty}</span>
+             <span class="hypo hypo--stop">sin financiar</span>`
+          : item.recommended_qty)
     : "—";
   const cost = item.total_cost_usd
-    ? (revisar ? `<span class="hypo">(${money(item.total_cost_usd)})</span>`
-               : money(item.total_cost_usd))
+    ? (hipotetica ? `<span class="hypo">(${money(item.total_cost_usd)})</span>`
+                  : money(item.total_cost_usd))
     : "—";
 
   return `
@@ -516,13 +528,18 @@ const STAGE_INFO = {
     carries: "decisión y motivo",
     headline: (s) => `${s.counts.COMPRAR} compras`,
     note: (s) =>
-      `El modelo se resuelve por pieza y planta: minimiza precio por cantidad más flete, sujeto a cubrir el faltante, no pasar del máximo de bodega, respetar el lote mínimo del proveedor y su capacidad, y un solo proveedor por orden. Las ${s.counts.REVISAR} filas en revisión no son un fallo del solver: son casos donde el lote mínimo supera lo que cabe en bodega, y esa tensión la decide una persona.`,
+      `El modelo se resuelve por pieza y planta: minimiza precio por cantidad más flete, sujeto a cubrir el faltante, no pasar del máximo de bodega, respetar el lote mínimo del proveedor y su capacidad, y un solo proveedor por orden. Las ${s.counts.REVISAR} filas en revisión no son un fallo del solver: son casos donde el lote mínimo supera lo que cabe en bodega, y esa tensión la decide una persona.` +
+      (s.budget_usd
+        ? ` Al final una mochila reparte los ${money(s.budget_usd)} USD de presupuesto maximizando el beneficio neto: lo que cuesta el quiebre que se evita menos lo que cuesta evitarlo. Es el único paso que mira todas las piezas a la vez. Ese dinero evita ${money(s.stockout_avoided_usd)} USD de quiebre, un retorno de ${s.stockout_return}×, y deja ${money(s.stockout_exposed_usd)} USD de riesgo sin cubrir en ${s.counts.APLAZADO} reposiciones que sí procedían. Ampliar el presupuesto en ${money(s.deferred_usd)} USD lo cerraría.`
+        : " No hay presupuesto configurado, así que cada pieza se decide sin mirar lo que gastan las demás."),
     figures: (s) => [
       figureCard("Comprar", s.counts.COMPRAR, `${count(s.units)} unidades`, "go"),
       figureCard("Revisar", s.counts.REVISAR, "lote mínimo excede el máximo", "hold"),
-      figureCard("Sin acción", s.counts.NO_COMPRAR, "inventario suficiente"),
-      figureCard("Inversión", `${money(s.investment_usd)} USD`, "solo filas por comprar"),
-      figureCard("Sobrecosto evitado", `${money(s.saving_usd)} USD`, "frente a la peor oferta", "go"),
+      figureCard("Aplazado", s.counts.APLAZADO, `${money(s.deferred_usd)} USD sin financiar`, "stop"),
+      figureCard("Inversión", `${money(s.investment_usd)} USD`,
+        s.budget_usd ? `de ${money(s.budget_usd)} USD de presupuesto` : "sin límite"),
+      figureCard("Quiebre evitado", `${money(s.stockout_avoided_usd)} USD`,
+        `retorno ${s.stockout_return}×`, "go"),
     ],
     detail: (s) => panel("Por qué cada decisión", dataTable(
       ["Causa", "Decisión", "Casos", "Ejemplo"],

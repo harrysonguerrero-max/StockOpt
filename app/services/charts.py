@@ -459,7 +459,8 @@ def chart_decision_breakdown(optimization: dict):
         dice nada, saber que todas lo son por estar por encima del minimo si.
         Cada barra es un motivo, coloreado segun la decision a la que lleva.
     """
-    colors = {"COMPRAR": SUCCESS, "REVISAR": WARNING, "NO_COMPRAR": MUTED}
+    colors = {"COMPRAR": SUCCESS, "REVISAR": WARNING, "APLAZADO": DANGER,
+              "NO_COMPRAR": MUTED}
     reasons = list(reversed(optimization["reasons"]))
 
     labels = [f"{_wrap(item['reason'], 46)}\n{item['decision']}" for item in reasons]

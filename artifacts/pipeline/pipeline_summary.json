@@ -983,7 +983,7 @@
         "mejora_vs_ultimo_mes": 0.2818,
         "wmape_promedio_movil": 0.21798769453492578,
         "mejora_vs_promedio_movil": 0.032,
-        "seconds": 4.696,
+        "seconds": 3.627,
         "n_train": 2160,
         "n_val": 240
       },
@@ -1110,13 +1110,19 @@
     {
       "id": "optimizacion",
       "title": "Optimizacion de compra",
-      "input": "Proyeccion, existencias, ofertas y reglas de negocio",
+      "input": "Proyeccion, existencias, ofertas, reglas y presupuesto",
       "output": "Una decision por pieza y ciudad, con su motivo",
       "counts": {
-        "COMPRAR": 11,
+        "COMPRAR": 7,
         "REVISAR": 7,
-        "NO_COMPRAR": 22
+        "APLAZADO": 3,
+        "NO_COMPRAR": 23
       },
+      "budget_usd": 2500.0,
+      "deferred_usd": 1116.94,
+      "stockout_avoided_usd": 12485.8,
+      "stockout_exposed_usd": 3152.08,
+      "stockout_return": 5.1,
       "reasons": [
         {
           "decision": "NO_COMPRAR",
@@ -1137,28 +1143,6 @@
               "sku_id": "MRO-10047",
               "city_id": "OBRE",
               "reason": "Inventario por encima del minimo: no requiere reposicion"
-            }
-          ]
-        },
-        {
-          "decision": "COMPRAR",
-          "reason": "Las existencias no alcanzan el minimo operativo",
-          "count": 11,
-          "examples": [
-            {
-              "sku_id": "MRO-10046",
-              "city_id": "OBRE",
-              "reason": "Quedan 3 unidades y el minimo es 6. Con una demanda proyectada de 6.3 al mes se repone hasta 16 unidades, equivalente a 2.1 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 2 opciones que surten OBRE"
-            },
-            {
-              "sku_id": "MRO-10047",
-              "city_id": "NAVA",
-              "reason": "Quedan 10 unidades y el minimo es 12. Con una demanda proyectada de 15.1 al mes se repone hasta 35 unidades, equivalente a 1.7 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 3 opciones que surten NAVA"
-            },
-            {
-              "sku_id": "MRO-30012",
-              "city_id": "NAVA",
-              "reason": "Quedan 19 unidades y el minimo es 21. Con una demanda proyectada de 31.3 al mes se repone hasta 68 unidades, equivalente a 1.6 meses de consumo. Se eligio Beta_Supplies por menor costo total entre 2 opciones que surten NAVA"
             }
           ]
         },
@@ -1185,6 +1169,50 @@
           ]
         },
         {
+          "decision": "COMPRAR",
+          "reason": "Las existencias no alcanzan el minimo operativo",
+          "count": 7,
+          "examples": [
+            {
+              "sku_id": "MRO-10046",
+              "city_id": "OBRE",
+              "reason": "Quedan 3 unidades y el minimo es 6. Con una demanda proyectada de 6.3 al mes se repone hasta 16 unidades, equivalente a 2.1 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 2 opciones que surten OBRE"
+            },
+            {
+              "sku_id": "MRO-10047",
+              "city_id": "NAVA",
+              "reason": "Quedan 10 unidades y el minimo es 12. Con una demanda proyectada de 15.1 al mes se repone hasta 35 unidades, equivalente a 1.7 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 3 opciones que surten NAVA"
+            },
+            {
+              "sku_id": "MRO-40021",
+              "city_id": "NAVA",
+              "reason": "Quedan 14 unidades y el minimo es 17. Con una demanda proyectada de 24.8 al mes se repone hasta 55 unidades, equivalente a 1.7 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 2 opciones que surten NAVA"
+            }
+          ]
+        },
+        {
+          "decision": "APLAZADO",
+          "reason": "No cabe en el presupuesto de la corrida",
+          "count": 3,
+          "examples": [
+            {
+              "sku_id": "MRO-30012",
+              "city_id": "NAVA",
+              "reason": "No cabe en el presupuesto de la corrida. Se necesitan 604.92 USD y el presupuesto de la corrida es 2500.00 USD, que rinde mas en otras piezas. Aplazarla expone a un quiebre valorado en 1791.20 USD"
+            },
+            {
+              "sku_id": "MRO-30012",
+              "city_id": "OBRE",
+              "reason": "No cabe en el presupuesto de la corrida. Se necesitan 350.82 USD y el presupuesto de la corrida es 2500.00 USD, que rinde mas en otras piezas. Aplazarla expone a un quiebre valorado en 1091.78 USD"
+            },
+            {
+              "sku_id": "MRO-90011",
+              "city_id": "NAVA",
+              "reason": "No cabe en el presupuesto de la corrida. Se necesitan 161.20 USD y el presupuesto de la corrida es 2500.00 USD, que rinde mas en otras piezas. Aplazarla expone a un quiebre valorado en 269.10 USD"
+            }
+          ]
+        },
+        {
           "decision": "NO_COMPRAR",
           "reason": "Vida util no permite consumir ni la cantidad minima de orden",
           "count": 1,
@@ -1193,6 +1221,18 @@
               "sku_id": "MRO-70004",
               "city_id": "OBRE",
               "reason": "Vida util no permite consumir ni la cantidad minima de orden. Con vida util de 180 dias solo se consumirian 47 unidades, y el minimo de orden es 100"
+            }
+          ]
+        },
+        {
+          "decision": "NO_COMPRAR",
+          "reason": "Reponer cuesta mas que el quiebre que evita. Reponer cuesta 455.55 USD y el quiebre que evita se valora en 289.50 USD para una pieza de criticidad C",
+          "count": 1,
+          "examples": [
+            {
+              "sku_id": "MRO-70005",
+              "city_id": "NAVA",
+              "reason": "Reponer cuesta mas que el quiebre que evita. Reponer cuesta 455.55 USD y el quiebre que evita se valora en 289.50 USD para una pieza de criticidad C"
             }
           ]
         }
@@ -1231,22 +1271,6 @@
           "offers": 3
         },
         {
-          "sku_id": "MRO-30012",
-          "city_id": "NAVA",
-          "chosen_cost_usd": 604.92,
-          "worst_cost_usd": 661.28,
-          "saving_usd": 56.36,
-          "offers": 2
-        },
-        {
-          "sku_id": "MRO-70005",
-          "city_id": "NAVA",
-          "chosen_cost_usd": 455.55,
-          "worst_cost_usd": 508.9,
-          "saving_usd": 53.35,
-          "offers": 3
-        },
-        {
           "sku_id": "MRO-10046",
           "city_id": "OBRE",
           "chosen_cost_usd": 370.41,
@@ -1263,22 +1287,6 @@
           "offers": 3
         },
         {
-          "sku_id": "MRO-90011",
-          "city_id": "NAVA",
-          "chosen_cost_usd": 161.2,
-          "worst_cost_usd": 197.58,
-          "saving_usd": 36.38,
-          "offers": 3
-        },
-        {
-          "sku_id": "MRO-30012",
-          "city_id": "OBRE",
-          "chosen_cost_usd": 350.82,
-          "worst_cost_usd": 379.38,
-          "saving_usd": 28.56,
-          "offers": 2
-        },
-        {
           "sku_id": "MRO-40021",
           "city_id": "NAVA",
           "chosen_cost_usd": 290.44,
@@ -1287,11 +1295,11 @@
           "offers": 2
         }
       ],
-      "investment_usd": 4003.38,
-      "units": 676,
-      "saving_usd": 617.74,
+      "investment_usd": 2430.89,
+      "units": 317,
+      "saving_usd": 443.09,
       "max_coverage_months": 3,
-      "needs_review": 11,
+      "needs_review": 14,
       "low_confidence": 0,
       "charts": [
         {

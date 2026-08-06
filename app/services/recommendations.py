@@ -27,8 +27,10 @@ from app.core.dataset import OUT_DIR
 from app.core.explanation import build_explanation
 from app.core.optimization import (
     DECISION_BUY,
+    DECISION_DEFERRED,
     DECISION_HOLD,
     DECISION_REVIEW,
+    SCENARIO_BUDGET_USD,
     offer_costs,
 )
 
@@ -184,7 +186,8 @@ def build_queue(refresh: bool = False) -> list:
     priority = {
         DECISION_REVIEW: 0,
         DECISION_BUY: 1,
-        DECISION_HOLD: 2,
+        DECISION_DEFERRED: 2,
+        DECISION_HOLD: 3,
     }
 
     queue = []
@@ -228,10 +231,16 @@ def build_summary(queue: list) -> dict:
         Cuenta las decisiones por tipo, la inversion pendiente de aprobar y
         cuantas filas siguen esperando accion del comprador, que es lo que
         indica cuanto trabajo queda por delante.
+
+        Lo aplazado se reporta aparte de la inversion aprobada. Sumarlo seria
+        engañoso, porque no es gasto de esta corrida; restarlo del todo tambien,
+        porque es la cifra con la que el comprador defiende una ampliacion del
+        presupuesto.
     """
     pending = [item for item in queue if item["state"] == STATE_PENDING]
     to_buy = [item for item in queue if item["decision"] == DECISION_BUY]
     to_review = [item for item in queue if item["decision"] == DECISION_REVIEW]
+    deferred = [item for item in queue if item["decision"] == DECISION_DEFERRED]
     approved = [item for item in queue
                 if item["state"] in (STATE_APPROVED, STATE_CONTACTED,
                                      STATE_CONFIRMED)]
@@ -240,10 +249,17 @@ def build_summary(queue: list) -> dict:
         "total": len(queue),
         "to_buy": len(to_buy),
         "to_review": len(to_review),
+        "deferred": len(deferred),
         "no_action": len([i for i in queue if i["decision"] == DECISION_HOLD]),
         "pending_decision": len(pending),
         "approved": len(approved),
         "investment_usd": round(sum(item["total_cost_usd"] for item in to_buy), 2),
+        "deferred_usd": round(sum(item["total_cost_usd"] for item in deferred), 2),
+        "budget_usd": SCENARIO_BUDGET_USD,
+        "stockout_avoided_usd": round(
+            sum(item["stockout_cost_usd"] or 0 for item in to_buy), 2),
+        "stockout_exposed_usd": round(
+            sum(item["stockout_cost_usd"] or 0 for item in deferred), 2),
         "units": int(sum(item["recommended_qty"] for item in to_buy)),
         "needs_review": len([i for i in queue if i["needs_review"] == 1]),
     }
@@ -266,7 +282,7 @@ def filter_options(queue: list) -> dict:
     cities = sorted({(item["city_id"], item["city_name"]) for item in queue})
     return {
         "cities": [{"id": city_id, "name": name} for city_id, name in cities],
-        "decisions": [DECISION_BUY, DECISION_REVIEW,
+        "decisions": [DECISION_BUY, DECISION_REVIEW, DECISION_DEFERRED,
                       DECISION_HOLD],
         "states": WORKFLOW_STATES + [STATE_REJECTED],
         "criticalities": sorted({item["criticality"] for item in queue}),

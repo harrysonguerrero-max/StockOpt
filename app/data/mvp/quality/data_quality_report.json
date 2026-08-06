@@ -351,14 +351,14 @@
         "qty_issued": {
           "iqr_outliers": 0,
           "iqr_extreme": 0,
-          "mad_outliers": 0,
+          "mad_outliers": 20953,
           "lower_bound": 0.0,
           "upper_bound": 0.0
         },
         "issue_value_inr": {
           "iqr_outliers": 0,
           "iqr_extreme": 0,
-          "mad_outliers": 0,
+          "mad_outliers": 12883,
           "lower_bound": 0.0,
           "upper_bound": 0.0
         },
@@ -421,7 +421,7 @@
         "breakdown_flag": {
           "iqr_outliers": 0,
           "iqr_extreme": 0,
-          "mad_outliers": 0,
+          "mad_outliers": 21636,
           "lower_bound": 0.0,
           "upper_bound": 0.0
         }
@@ -997,14 +997,14 @@
         "qty_issued": {
           "iqr_outliers": 0,
           "iqr_extreme": 0,
-          "mad_outliers": 0,
+          "mad_outliers": 20932,
           "lower_bound": 0.0,
           "upper_bound": 0.0
         },
         "issue_value_inr": {
           "iqr_outliers": 0,
           "iqr_extreme": 0,
-          "mad_outliers": 0,
+          "mad_outliers": 12872,
           "lower_bound": 0.0,
           "upper_bound": 0.0
         },
@@ -1067,14 +1067,14 @@
         "breakdown_flag": {
           "iqr_outliers": 0,
           "iqr_extreme": 0,
-          "mad_outliers": 0,
+          "mad_outliers": 21601,
           "lower_bound": 0.0,
           "upper_bound": 0.0
         },
         "sensor_outlier": {
           "iqr_outliers": 0,
           "iqr_extreme": 0,
-          "mad_outliers": 0,
+          "mad_outliers": 44860,
           "lower_bound": 0.0,
           "upper_bound": 0.0
         }

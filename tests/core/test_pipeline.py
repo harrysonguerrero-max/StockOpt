@@ -93,18 +93,19 @@ def recommendations():
         {"sku_id": "MRO-1", "city_id": "NAVA", "decision": DECISION_BUY,
          "reason": "Quedan 3 unidades y el minimo es 10. Se eligio Alpha",
          "recommended_qty": 10, "supplier_id": "SUP-01", "total_cost_usd": 110.0,
-         "needs_review": 0},
+         "stockout_cost_usd": 4500.0, "net_benefit_usd": 4390.0, "needs_review": 0},
         {"sku_id": "MRO-2", "city_id": "NAVA", "decision": DECISION_BUY,
          "reason": f"Quedan 1 unidades y el minimo es 4. {REASON_LOW_CONFIDENCE}",
          "recommended_qty": 5, "supplier_id": "SUP-01", "total_cost_usd": 60.0,
-         "needs_review": 1},
+         "stockout_cost_usd": 900.0, "net_benefit_usd": 840.0, "needs_review": 1},
         {"sku_id": "MRO-3", "city_id": "NAVA", "decision": DECISION_HOLD,
          "reason": REASON_ABOVE_MINIMUM, "recommended_qty": 0, "supplier_id": None,
-         "total_cost_usd": 0.0, "needs_review": 0},
+         "total_cost_usd": 0.0, "stockout_cost_usd": 0.0, "net_benefit_usd": 0.0,
+         "needs_review": 0},
         {"sku_id": "MRO-4", "city_id": "NAVA", "decision": DECISION_REVIEW,
          "reason": "El minimo de orden de Alpha es 100 unidades y el maximo es 12",
          "recommended_qty": 100, "supplier_id": "SUP-01", "total_cost_usd": 1010.0,
-         "needs_review": 1},
+         "stockout_cost_usd": 1200.0, "net_benefit_usd": 190.0, "needs_review": 1},
     ])
 
 
@@ -202,7 +203,9 @@ def test_optimization_summary_groups_by_cause(recommendations, catalog):
     offers, coverage, suppliers = catalog
     summary = pipeline.optimization_summary(recommendations, offers, coverage, suppliers)
 
-    assert summary["counts"] == {DECISION_BUY: 2, DECISION_REVIEW: 1, DECISION_HOLD: 1}
+    assert summary["counts"][DECISION_BUY] == 2
+    assert summary["counts"][DECISION_REVIEW] == 1
+    assert summary["counts"][DECISION_HOLD] == 1
     assert len(summary["reasons"]) == 3
     assert summary["reasons"][0]["count"] == 2
     assert summary["low_confidence"] == 1

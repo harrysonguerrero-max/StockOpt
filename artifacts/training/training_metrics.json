@@ -1,6 +1,6 @@
 {
-  "run_id": "a0f1a6e0-6e65-48a9-ab5e-472ce5442dff",
-  "project": "stockopt-demanda",
+  "run_id": "72703389-d00f-413a-997c-de5d26117a9f",
+  "project": "supplyopt-demanda",
   "metrics": {
     "mae": 4.0488577629935225,
     "rmse": 6.9280974406703075,
@@ -12,7 +12,7 @@
     "mejora_vs_ultimo_mes": 0.2818,
     "wmape_promedio_movil": 0.21798769453492578,
     "mejora_vs_promedio_movil": 0.032,
-    "seconds": 4.696,
+    "seconds": 3.627,
     "n_train": 2160,
     "n_val": 240
   },

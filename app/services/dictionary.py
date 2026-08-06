@@ -227,6 +227,7 @@ TABLES = {
             ("demand_lead_time", "float", "uds", "inventory_policy", "Demanda esperada mientras llega la reposicion."),
             ("safety_stock", "float", "uds", "inventory_policy", "Colchon que absorbe la variabilidad de demanda y de plazo."),
             ("inventory_min", "int", "uds", "demand_lead_time + safety_stock", "Nivel minimo operativo de la pieza."),
+            ("issue_rate", "float 0-1", "-", "issue_events / 30", "Con que frecuencia se pide la pieza. Escala el costo de quiebre."),
             ("forecast_model", "float", "uds", "modelo ML", "Proyeccion del modelo global entrenado."),
             ("forecast_source", "str", "-", "calculado", "Si la cifra final viene del modelo, del metodo estadistico o de ambos."),
             ("needs_review", "int 0/1", "-", "calculado", "Marca las series cuya proyeccion no es confiable."),
@@ -235,6 +236,9 @@ TABLES = {
             "El minimo se unifico aqui: antes el dataset cubria un mes completo y "
             "la proyeccion solo el plazo real, y ambas etapas daban respuestas "
             "opuestas sobre que reponer.",
+            "issue_rate recoge la intermitencia del consumo: la mediana de estas "
+            "series tiene movimiento once dias de cada treinta. Un dia sin "
+            "existencias solo cuesta dinero si ese dia alguien pide la pieza.",
         ],
     },
     "purchase_recommendations.csv": {
@@ -255,7 +259,7 @@ TABLES = {
             ("target_qty", "int", "uds", "calculado", "Cantidad que llevaria al nivel objetivo."),
             ("max_allowed_qty", "int", "uds", "calculado", "Tope por bodega y por vida util."),
             ("coverage_months", "float", "meses", "calculado", "Meses de inventario que dejaria la compra."),
-            ("decision", "str", "-", "optimizador", "COMPRAR, NO_COMPRAR o REVISAR."),
+            ("decision", "str", "-", "optimizador", "COMPRAR, NO_COMPRAR, REVISAR o APLAZADO."),
             ("recommended_qty", "int", "uds", "optimizador", "Unidades a pedir."),
             ("supplier_id", "str", "-", "optimizador", "Proveedor elegido."),
             ("supplier_name", "str", "-", "suppliers", "Nombre del proveedor elegido."),
@@ -265,6 +269,8 @@ TABLES = {
             ("total_cost_usd", "float", "USD", "precio * cantidad + flete", "Costo total de la orden."),
             ("alternatives_evaluated", "int", "ofertas", "optimizador", "Cuantas ofertas compitieron."),
             ("confidence", "float 0-1", "-", "demand_forecast", "Confianza de la proyeccion que sustenta la decision."),
+            ("stockout_cost_usd", "float", "USD", "calculado", "Costo del quiebre que evita reponer ahora en lugar de esperar."),
+            ("net_benefit_usd", "float", "USD", "quiebre evitado - costo", "Lo que rinde la compra. Si es negativo, no se hace."),
             ("needs_review", "int 0/1", "-", "calculado", "Marca las filas que exigen criterio humano."),
             ("reason", "str", "-", "optimizador", "Motivo explicito de la decision."),
         ],
@@ -272,6 +278,15 @@ TABLES = {
             "REVISAR no es un fallo del solver: aparece cuando el lote minimo del "
             "proveedor supera el maximo que la pieza admite en bodega, que es una "
             "tension real de compras y la decide una persona.",
+            "APLAZADO marca una reposicion tecnicamente correcta que no cabe en el "
+            "presupuesto de la corrida. Conserva cantidad, proveedor y costo, "
+            "porque es la cifra con la que se pide una ampliacion.",
+            "El costo de quiebre se estima como los dias que la pieza estaria sin "
+            "existencias por el costo diario de su criticidad, y ese costo diario "
+            "es un parametro de negocio que hay que validar con mantenimiento: su "
+            "magnitud decide por si sola cuanto pesa la criticidad frente al precio.",
+            "La estimacion es deterministica y supone que la demanda ocurre al "
+            "ritmo proyectado, asi que subestima el riesgo en las series volatiles.",
         ],
     },
     "quality/demand_outliers.csv": {

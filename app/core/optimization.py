@@ -25,19 +25,57 @@ TARGET_COVERAGE_MONTHS = 1.5
 
 SHELF_LIFE_SAFETY_RATIO = 0.80
 
-SCENARIO_BUDGET_USD = None
+SCENARIO_BUDGET_USD = 2500.0
+
+STOCKOUT_COST_PER_DAY_USD = {"A": 400.0, "B": 80.0, "C": 10.0}
+
+PLANNING_PERIOD_DAYS = 30
 
 SOLVER_TIME_LIMIT_SECONDS = 60
 
 DECISION_BUY = "COMPRAR"
 DECISION_HOLD = "NO_COMPRAR"
 DECISION_REVIEW = "REVISAR"
+DECISION_DEFERRED = "APLAZADO"
 
 REASON_ABOVE_MINIMUM = "Inventario por encima del minimo: no requiere reposicion"
 REASON_SHELF_LIFE_BLOCK = "Vida util no permite consumir ni la cantidad minima de orden"
 REASON_NO_SUPPLIER = "Ninguna oferta cumple las restricciones para esta ciudad"
 REASON_INFEASIBLE = "El modelo no encontro solucion factible"
 REASON_LOW_CONFIDENCE = "Confianza baja en la proyeccion: requiere validacion humana"
+REASON_OVER_BUDGET = "No cabe en el presupuesto de la corrida"
+REASON_NOT_WORTH_IT = "Reponer cuesta mas que el quiebre que evita"
+
+
+_cached_solver = None
+
+
+def _solver_answers(candidate) -> bool:
+    """Comprueba que un solver resuelve de verdad un modelo trivial.
+
+    Entrada:
+        candidate: instancia de solver de PuLP a probar.
+
+    Salida:
+        True si resuelve la sonda y devuelve el optimo.
+
+    Funcionalidad:
+        Existe porque declararse disponible no basta. PuLP considera disponible
+        a COIN_CMD con que exista un ejecutable llamado cbc en la ruta, sin
+        comprobar que arranque. En un entorno donde ese ejecutable es un
+        lanzador roto, el solver pasa el filtro y luego falla al resolver la
+        primera pieza, que es un error mucho mas dificil de diagnosticar que
+        este.
+    """
+    probe = pulp.LpProblem("sonda", pulp.LpMinimize)
+    variable = probe.add_variable("x", 0, 1, cat="Integer")
+    probe += variable
+    probe += variable >= 1
+    try:
+        probe.solve(candidate)
+    except Exception:
+        return False
+    return pulp.LpStatus[probe.status] == "Optimal"
 
 
 def _solver():
@@ -51,13 +89,27 @@ def _solver():
 
     Funcionalidad:
         Prefiere COIN_CMD, que es la interfaz vigente hacia CBC, y recurre al
-        comando historico cuando la instalacion no lo expone. CBC es suficiente
-        para este problema: son 40 modelos de a lo sumo tres ofertas cada uno y
+        CBC que trae PuLP cuando el primero no responde. CBC es suficiente para
+        este problema: son cuarenta modelos de a lo sumo tres ofertas cada uno y
         se resuelven en milisegundos, sin necesidad de un solver comercial.
+
+        La eleccion se prueba una sola vez por proceso y se conserva, para no
+        pagar una sonda por cada una de las cuarenta piezas.
     """
-    if "COIN_CMD" in pulp.listSolvers(onlyAvailable=True):
-        return pulp.COIN_CMD(msg=0, timeLimit=SOLVER_TIME_LIMIT_SECONDS)
-    return pulp.PULP_CBC_CMD(msg=0, timeLimit=SOLVER_TIME_LIMIT_SECONDS)
+    global _cached_solver
+    if _cached_solver is not None:
+        return _cached_solver
+
+    for build in (pulp.COIN_CMD, pulp.PULP_CBC_CMD):
+        candidate = build(msg=0, timeLimit=SOLVER_TIME_LIMIT_SECONDS)
+        if _solver_answers(candidate):
+            _cached_solver = candidate
+            return _cached_solver
+
+    raise RuntimeError(
+        "Ningun solver entero responde. Instala CBC o revisa que el ejecutable "
+        "cbc de la ruta arranque."
+    )
 
 
 COLUMNS = [
@@ -67,9 +119,213 @@ COLUMNS = [
     "target_qty", "max_allowed_qty", "coverage_months",
     "decision", "recommended_qty", "supplier_id", "supplier_name",
     "unit_price_usd", "freight_cost_usd", "lead_time_days",
-    "total_cost_usd", "alternatives_evaluated", "confidence", "needs_review",
-    "reason",
+    "total_cost_usd", "alternatives_evaluated", "confidence",
+    "stockout_cost_usd", "net_benefit_usd", "needs_review", "reason",
 ]
+
+
+def days_of_cover(on_hand: int, monthly_demand: float) -> float:
+    """Calcula cuantos dias aguantan las existencias actuales.
+
+    Entrada:
+        on_hand: unidades disponibles hoy.
+        monthly_demand: demanda mensual proyectada.
+
+    Salida:
+        Dias que tardaria en agotarse la pieza al ritmo de consumo previsto.
+
+    Funcionalidad:
+        Es la traduccion de un nivel de inventario al unico termino en el que se
+        puede comparar con un plazo de entrega: tiempo. Sin demanda prevista la
+        pieza no se agota, y se devuelve un horizonte suficientemente largo como
+        para que ninguna regla posterior la considere en riesgo.
+    """
+    if monthly_demand <= 0:
+        return float(PLANNING_PERIOD_DAYS * 12)
+    return on_hand / (monthly_demand / DAYS_PER_MONTH)
+
+
+def stockout_days_avoided(on_hand: int, monthly_demand: float,
+                          lead_time_days: float) -> float:
+    """Estima cuantos dias de quiebre evita reponer ahora.
+
+    Entrada:
+        on_hand: unidades disponibles hoy.
+        monthly_demand: demanda mensual proyectada.
+        lead_time_days: plazo de reposicion en dias.
+
+    Salida:
+        Dias de quiebre que se ahorran comprando en esta corrida en lugar de
+        esperar a la siguiente.
+
+    Funcionalidad:
+        Compara dos futuros. Si se pide hoy, la pieza queda expuesta solo el
+        tramo en que la cobertura actual no alcanza a cubrir el plazo de
+        entrega. Si se aplaza a la siguiente corrida, esa exposicion crece en un
+        periodo de planificacion completo. La diferencia es lo que compra la
+        decision de hoy.
+
+        Es un calculo deterministico: supone que la demanda ocurre al ritmo
+        proyectado. Ignora por tanto que una serie volatil puede agotarse antes,
+        de modo que subestima el riesgo justo en las piezas menos predecibles.
+        Corregirlo exige trabajar con la distribucion de la demanda y no con su
+        valor esperado.
+    """
+    cover = days_of_cover(on_hand, monthly_demand)
+    exposed_now = max(0.0, lead_time_days - cover)
+    exposed_later = max(0.0, PLANNING_PERIOD_DAYS + lead_time_days - cover)
+    return round(exposed_later - exposed_now, 2)
+
+
+def stockout_cost(on_hand: int, monthly_demand: float, lead_time_days: float,
+                  criticality: str, issue_rate: float = 1.0) -> float:
+    """Valora en dolares el quiebre que evita reponer ahora.
+
+    Entrada:
+        on_hand: unidades disponibles hoy.
+        monthly_demand: demanda mensual proyectada.
+        lead_time_days: plazo de reposicion en dias.
+        criticality: criticidad A, B o C de la pieza.
+        issue_rate: proporcion de dias en que la pieza se pide realmente.
+
+    Salida:
+        Costo esperado del quiebre en USD, o cero si no hay exposicion.
+
+    Funcionalidad:
+        Pone en la misma unidad las dos mitades de la decision. Hasta aqui el
+        sistema minimizaba el costo de comprar sin saber nunca lo que cuesta no
+        tener la pieza, asi que una pieza critica competia contra el flete en
+        igualdad de condiciones. Con esto, la criticidad deja de mover solo el
+        inventario minimo y entra en la funcion objetivo.
+
+        No todos los dias sin existencias cuestan lo mismo. Un dia sin la pieza
+        solo interrumpe algo si ese dia alguien la pide, y en refacciones eso
+        ocurre en una minoria de los dias. Multiplicar por esa frecuencia es lo
+        que separa el costo esperado del peor caso: sin ella la valoracion
+        triplica el riesgo y produce cifras que nadie puede defender.
+
+        El costo por dia es un parametro de negocio, no una estimacion del
+        sistema: hay que validarlo con mantenimiento antes de darle poder sobre
+        las compras, porque su magnitud decide por si sola cuanto pesa la
+        criticidad frente al precio.
+
+        Sigue siendo una cota superior. Supone que cada dia en que la pieza se
+        pide y no esta, se pierde el dia entero, sin contar que en la practica se
+        canibaliza de otra maquina o se expedita la orden.
+    """
+    per_day = STOCKOUT_COST_PER_DAY_USD.get(criticality, 0.0)
+    frequency = min(1.0, max(0.0, issue_rate))
+    return round(stockout_days_avoided(on_hand, monthly_demand, lead_time_days)
+                 * frequency * per_day, 2)
+
+
+def allocate_budget(candidates: list, budget) -> set:
+    """Elige que compras entran en el presupuesto de la corrida.
+
+    Entrada:
+        candidates: lista de diccionarios con key, cost y benefit de cada compra
+            que el optimizador recomienda.
+        budget: tope de gasto en USD, o None para no aplicar limite.
+
+    Salida:
+        Conjunto de claves de las compras que se aprueban.
+
+    Funcionalidad:
+        Resuelve una mochila: maximiza el beneficio neto total, es decir el
+        quiebre que se evita menos lo que cuesta evitarlo, sin pasar del
+        presupuesto. No es lo mismo que ir aprobando de mayor beneficio a menor
+        hasta agotar el dinero, porque una compra muy rentable y cara puede
+        desplazar a varias algo menos rentables y baratas que juntas rinden mas.
+
+        Es la primera restriccion del sistema que acopla las piezas entre si.
+        Mientras cada pieza se resolvia por separado, el modelo entero no decidia
+        nada que no resolviera ordenar las ofertas por precio; aqui si, porque la
+        eleccion de que comprar depende de todo lo demas que compite por el mismo
+        dinero.
+    """
+    if budget is None:
+        return {candidate["key"] for candidate in candidates}
+
+    affordable = [c for c in candidates if c["cost"] <= budget]
+    if sum(c["cost"] for c in candidates) <= budget:
+        return {candidate["key"] for candidate in candidates}
+
+    problem = pulp.LpProblem("presupuesto", pulp.LpMaximize)
+    switches = {
+        candidate["key"]: problem.add_variable(f"buy_{index}", cat="Binary")
+        for index, candidate in enumerate(affordable)
+    }
+
+    problem += pulp.lpSum([
+        candidate["benefit"] * switches[candidate["key"]] for candidate in affordable
+    ])
+    problem += pulp.lpSum([
+        candidate["cost"] * switches[candidate["key"]] for candidate in affordable
+    ]) <= budget
+
+    problem.solve(_solver())
+    if pulp.LpStatus[problem.status] != "Optimal":
+        return set()
+
+    return {key for key, switch in switches.items() if round(switch.value() or 0) == 1}
+
+
+def apply_budget(recommendations: pd.DataFrame, budget) -> pd.DataFrame:
+    """Aplaza las compras que no caben en el presupuesto.
+
+    Entrada:
+        recommendations: tabla de decisiones ya resueltas por pieza.
+        budget: tope de gasto en USD, o None para no aplicar limite.
+
+    Salida:
+        La misma tabla con las compras no financiadas marcadas como aplazadas.
+
+    Funcionalidad:
+        Solo compiten por el dinero las filas en COMPRAR. Las que quedan en
+        revision no son gasto aprobado sino una decision pendiente de una
+        persona, y descontarlas del presupuesto reservaria dinero para compras
+        que quiza nunca se hagan.
+
+        Las filas aplazadas conservan la cantidad, el proveedor y el costo. La
+        recomendacion tecnica sigue siendo valida; lo que falta es el dinero, y
+        el comprador necesita ver cuanto pediria para poder defender una
+        ampliacion del presupuesto, junto con el quiebre que ese dinero evitaria.
+    """
+    if budget is None or recommendations.empty:
+        return recommendations
+
+    buying = recommendations[recommendations["decision"] == DECISION_BUY]
+    if buying.empty:
+        return recommendations
+
+    candidates = [
+        {
+            "key": (record["sku_id"], record["city_id"]),
+            "cost": float(record["total_cost_usd"]),
+            "benefit": float(record["net_benefit_usd"]),
+        }
+        for record in buying.to_dict(orient="records")
+    ]
+    approved = allocate_budget(candidates, budget)
+
+    result = recommendations.copy()
+    deferred = result.apply(
+        lambda row: row["decision"] == DECISION_BUY
+        and (row["sku_id"], row["city_id"]) not in approved,
+        axis=1,
+    )
+    result.loc[deferred, "reason"] = result.loc[deferred].apply(
+        lambda row: (
+            f"{REASON_OVER_BUDGET}. Se necesitan {row['total_cost_usd']:.2f} USD y el "
+            f"presupuesto de la corrida es {budget:.2f} USD, que rinde mas en otras "
+            f"piezas. Aplazarla expone a un quiebre valorado en "
+            f"{row['stockout_cost_usd']:.2f} USD"
+        ),
+        axis=1,
+    )
+    result.loc[deferred, "decision"] = DECISION_DEFERRED
+    result.loc[deferred, "needs_review"] = 1
+    return result
 
 
 def consumable_within_shelf_life(monthly_demand: float, shelf_life_days: int,
@@ -289,7 +545,8 @@ def solve_single_purchase(need: int, ceiling: int, offers: pd.DataFrame) -> dict
 
 def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
                           parts: pd.DataFrame, offers: pd.DataFrame,
-                          coverage: pd.DataFrame, suppliers: pd.DataFrame) -> pd.DataFrame:
+                          coverage: pd.DataFrame, suppliers: pd.DataFrame,
+                          budget=SCENARIO_BUDGET_USD) -> pd.DataFrame:
     """Genera la recomendacion de compra para todo el catalogo.
 
     Entrada:
@@ -299,6 +556,7 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
         offers: catalogo de ofertas proveedor-pieza.
         coverage: cobertura geografica de los proveedores.
         suppliers: catalogo de proveedores.
+        budget: tope de gasto de la corrida en USD. None desactiva el limite.
 
     Salida:
         DataFrame con una fila por pieza y ciudad y las columnas declaradas en
@@ -320,6 +578,10 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
         Cada fila lleva el motivo de la decision y la marca de revision humana,
         de modo que un comprador pueda auditarla sin conocer el modelo por
         dentro.
+
+        Al final se reparte el presupuesto de la corrida entre las compras que
+        procedian. Es el unico paso que mira todas las piezas a la vez: hasta
+        aqui cada decision era independiente de las demas.
     """
     parts_by_sku = parts.set_index("sku_id")
     merged = inventory.merge(forecast, on=["sku_id", "city_id"], suffixes=("", "_fc"))
@@ -397,6 +659,25 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
             else:
                 reason = REASON_INFEASIBLE
 
+        exposure = stockout_cost(on_hand, monthly_demand,
+                                 float(record["lead_time_days"]),
+                                 part["criticality"],
+                                 float(record.get("issue_rate", 1.0) or 1.0))
+        net_benefit = round(exposure - total_cost, 2)
+
+        if decision == DECISION_BUY and net_benefit <= 0:
+            decision = DECISION_HOLD
+            reason = (
+                f"{REASON_NOT_WORTH_IT}. Reponer cuesta {total_cost:.2f} USD y el "
+                f"quiebre que evita se valora en {exposure:.2f} USD para una pieza "
+                f"de criticidad {part['criticality']}"
+            )
+            quantity = 0
+            chosen = None
+            total_cost = 0.0
+            coverage_months = 0.0
+            net_benefit = round(exposure, 2)
+
         needs_review = int(record["needs_review"])
         if decision == DECISION_REVIEW:
             needs_review = 1
@@ -428,8 +709,10 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
             "total_cost_usd": total_cost,
             "alternatives_evaluated": len(applicable),
             "confidence": confidence,
+            "stockout_cost_usd": exposure,
+            "net_benefit_usd": net_benefit,
             "needs_review": needs_review,
             "reason": reason,
         })
 
-    return pd.DataFrame(rows, columns=COLUMNS)
+    return apply_budget(pd.DataFrame(rows, columns=COLUMNS), budget)

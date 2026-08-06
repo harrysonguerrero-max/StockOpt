@@ -21,6 +21,7 @@ import pandas as pd
 
 from app.core.optimization import (
     DECISION_BUY,
+    DECISION_DEFERRED,
     DECISION_HOLD,
     DECISION_REVIEW,
     MAX_COVERAGE_MONTHS,
@@ -28,7 +29,9 @@ from app.core.optimization import (
     REASON_INFEASIBLE,
     REASON_LOW_CONFIDENCE,
     REASON_NO_SUPPLIER,
+    REASON_OVER_BUDGET,
     REASON_SHELF_LIFE_BLOCK,
+    SCENARIO_BUDGET_USD,
     offer_costs,
 )
 from app.core.patterns import (
@@ -91,6 +94,7 @@ KIND_RESULT = "resultado"
 CAUSE_BY_DECISION = {
     DECISION_BUY: "Las existencias no alcanzan el minimo operativo",
     DECISION_REVIEW: "El lote minimo del proveedor supera el maximo de bodega",
+    DECISION_DEFERRED: REASON_OVER_BUDGET,
 }
 
 HOLD_CAUSES = (REASON_ABOVE_MINIMUM, REASON_NO_SUPPLIER, REASON_SHELF_LIFE_BLOCK,
@@ -455,17 +459,27 @@ def optimization_summary(recommendations: pd.DataFrame, offers: pd.DataFrame,
 
     savings.sort(key=lambda item: -item["saving_usd"])
     buying = recommendations[recommendations["decision"] == DECISION_BUY]
+    deferring = recommendations[recommendations["decision"] == DECISION_DEFERRED]
 
     return {
         "id": STAGE_OPTIMIZATION,
         "title": STAGE_TITLES[STAGE_OPTIMIZATION],
-        "input": "Proyeccion, existencias, ofertas y reglas de negocio",
+        "input": "Proyeccion, existencias, ofertas, reglas y presupuesto",
         "output": "Una decision por pieza y ciudad, con su motivo",
         "counts": {
             DECISION_BUY: int(counts.get(DECISION_BUY, 0)),
             DECISION_REVIEW: int(counts.get(DECISION_REVIEW, 0)),
+            DECISION_DEFERRED: int(counts.get(DECISION_DEFERRED, 0)),
             DECISION_HOLD: int(counts.get(DECISION_HOLD, 0)),
         },
+        "budget_usd": SCENARIO_BUDGET_USD,
+        "deferred_usd": round(float(deferring["total_cost_usd"].sum()), 2),
+        "stockout_avoided_usd": round(float(buying["stockout_cost_usd"].sum()), 2),
+        "stockout_exposed_usd": round(float(deferring["stockout_cost_usd"].sum()), 2),
+        "stockout_return": round(
+            float(buying["stockout_cost_usd"].sum()
+                  / buying["total_cost_usd"].sum()), 1
+        ) if float(buying["total_cost_usd"].sum()) > 0 else 0.0,
         "reasons": reasons,
         "savings": savings,
         "investment_usd": round(float(buying["total_cost_usd"].sum()), 2),

@@ -17,7 +17,12 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
-from app.core.inventory import Z_BY_CRITICALITY, inventory_minimum, planning_lead_time
+from app.core.inventory import (
+    DAYS_PER_MONTH,
+    Z_BY_CRITICALITY,
+    inventory_minimum,
+    planning_lead_time,
+)
 from app.core.patterns import (
     INSUFFICIENT,
     MIN_PERIODS_SEASONAL,
@@ -45,8 +50,33 @@ COLUMNS = [
     "forecast_q25", "forecast_q50", "forecast_q75",
     "wmape_backtest", "confidence_pattern", "confidence_final",
     "lead_time_days", "demand_lead_time", "safety_stock", "inventory_min",
-    "forecast_model", "forecast_source", "needs_review",
+    "issue_rate", "forecast_model", "forecast_source", "needs_review",
 ]
+
+
+def issue_rate(group) -> float:
+    """Mide con que frecuencia se pide realmente una pieza.
+
+    Entrada:
+        group: historico mensual de una serie, con la columna issue_events.
+
+    Salida:
+        Proporcion de dias del mes en que la pieza registra algun consumo,
+        entre 0 y 1.
+
+    Funcionalidad:
+        El consumo de refacciones es intermitente: la mediana de estas series
+        tiene movimiento solo once dias de cada treinta. Esa frecuencia es la
+        que convierte un dia sin existencias en un dia que cuesta dinero, porque
+        quedarse sin una pieza que nadie pide ese dia no interrumpe nada.
+
+        Sin este dato, cualquier valoracion del quiebre supone que la pieza hace
+        falta todos los dias y sobreestima el riesgo por un factor de tres.
+    """
+    if "issue_events" not in group or group.empty:
+        return 1.0
+    days = float(group["issue_events"].mean())
+    return round(min(1.0, max(0.0, days / DAYS_PER_MONTH)), 4)
 
 
 def _spread_from_std(center: float, std: float) -> tuple:
@@ -328,6 +358,7 @@ def build_demand_forecast(demand: pd.DataFrame, patterns: pd.DataFrame,
             "demand_lead_time": round(demand_lead_time, 2),
             "safety_stock": round(buffer, 2),
             "inventory_min": minimum,
+            "issue_rate": issue_rate(group),
             "forecast_model": None if model_value is None else round(float(model_value), 2),
             "forecast_source": source,
             "needs_review": int(confidence < 0.5 or pattern == INSUFFICIENT),

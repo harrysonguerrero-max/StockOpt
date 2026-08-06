@@ -133,7 +133,8 @@ def test_recommendations_cover_every_series(recommendations):
 
 
 def test_every_decision_is_a_known_state(recommendations):
-    valid = {config.DECISION_BUY, config.DECISION_HOLD, config.DECISION_REVIEW}
+    valid = {config.DECISION_BUY, config.DECISION_HOLD, config.DECISION_REVIEW,
+             config.DECISION_DEFERRED}
     assert set(recommendations["decision"]).issubset(valid)
 
 

@@ -64,12 +64,33 @@ def main() -> None:
     buy = recommendations[recommendations["decision"] == config.DECISION_BUY]
     hold = recommendations[recommendations["decision"] == config.DECISION_HOLD]
     review = recommendations[recommendations["decision"] == config.DECISION_REVIEW]
+    deferred = recommendations[recommendations["decision"] == config.DECISION_DEFERRED]
 
     print(f"Recomendaciones generadas en {OUT_DIR / OUTPUT_NAME}")
     print(f"  {len(recommendations)} combinaciones evaluadas\n")
     print(f"  {config.DECISION_BUY:<12} {len(buy):>3}")
     print(f"  {config.DECISION_HOLD:<12} {len(hold):>3}")
-    print(f"  {config.DECISION_REVIEW:<12} {len(review):>3}\n")
+    print(f"  {config.DECISION_REVIEW:<12} {len(review):>3}")
+    print(f"  {config.DECISION_DEFERRED:<12} {len(deferred):>3}\n")
+
+    if config.SCENARIO_BUDGET_USD is not None:
+        print(f"Presupuesto de la corrida: {config.SCENARIO_BUDGET_USD:,.2f} USD")
+        print(f"  comprometido {buy['total_cost_usd'].sum():,.2f} USD "
+              f"({buy['total_cost_usd'].sum() / config.SCENARIO_BUDGET_USD:.0%})")
+        if len(buy):
+            avoided = buy["stockout_cost_usd"].sum()
+            print(f"  evita {avoided:,.2f} USD de quiebre "
+                  f"({avoided / buy['total_cost_usd'].sum():.0f}x lo invertido)")
+        if len(deferred):
+            print(f"  aplazado {deferred['total_cost_usd'].sum():,.2f} USD en "
+                  f"{len(deferred)} reposiciones que exponen "
+                  f"{deferred['stockout_cost_usd'].sum():,.2f} USD de quiebre")
+        print()
+
+    print("Costo de quiebre asumido por dia sin la pieza:")
+    for level, cost in config.STOCKOUT_COST_PER_DAY_USD.items():
+        print(f"  criticidad {level}: {cost:,.2f} USD")
+    print("  parametro de negocio: validar con mantenimiento antes de usarlo\n")
 
     if len(buy):
         print(f"Inversion total recomendada: {buy['total_cost_usd'].sum():,.2f} USD")
