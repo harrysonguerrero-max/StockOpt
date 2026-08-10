@@ -31,6 +31,7 @@ def _months(n=MONTHS):
 # Series de control: patron conocido -> etiqueta esperada
 # --------------------------------------------------------------------------- #
 
+
 def test_sine_wave_is_classified_seasonal():
     values = 50 + 20 * np.sin(2 * np.pi * _months() / 12)
     assert classify_series(values)["pattern"] == config.SEASONAL
@@ -85,6 +86,7 @@ def test_constant_series_does_not_crash():
 # Precedencia: el punto de diseño que el spec no define
 # --------------------------------------------------------------------------- #
 
+
 def test_seasonal_wins_over_volatile():
     """Una serie estacional tiene CV alto por definicion.
 
@@ -107,6 +109,7 @@ def test_trend_wins_over_volatile():
 # Señales individuales
 # --------------------------------------------------------------------------- #
 
+
 def test_seasonal_strength_high_for_cycle_low_for_noise():
     rng = np.random.default_rng(3)
     cycle = 50 + 20 * np.sin(2 * np.pi * _months() / 12)
@@ -126,8 +129,7 @@ def test_noise_is_rarely_labelled_seasonal():
     por debajo del 10%. Si este test empieza a fallar, alguien relajo un umbral.
     """
     rng = np.random.default_rng(42)
-    labels = [classify_series(rng.poisson(6, 37).astype(float))["pattern"]
-              for _ in range(200)]
+    labels = [classify_series(rng.poisson(6, 37).astype(float))["pattern"] for _ in range(200)]
     false_positives = labels.count(config.SEASONAL) / len(labels)
     assert false_positives < 0.10, f"falsos positivos estacionales: {false_positives:.0%}"
 
@@ -183,13 +185,14 @@ def test_confidence_is_bounded():
 def test_recent_shift_lowers_confidence():
     stable = np.full(MONTHS, 20.0)
     shifted = stable.copy()
-    shifted[-config.RECENT_WINDOW:] = 60.0  # el patron cambia al final
+    shifted[-config.RECENT_WINDOW :] = 60.0  # el patron cambia al final
     assert confidence_score(MONTHS, 0.1, shifted) < confidence_score(MONTHS, 0.1, stable)
 
 
 # --------------------------------------------------------------------------- #
 # Integracion con el dataset real
 # --------------------------------------------------------------------------- #
+
 
 @pytest.fixture(scope="module")
 def real_patterns():

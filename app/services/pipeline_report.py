@@ -141,8 +141,9 @@ def load_dataset_tables(refresh: bool = False) -> dict:
         explorador y abrir el recorrido del pipeline no lean dos veces los
         mismos archivos.
     """
-    return {name: load_table(filename, refresh=refresh)
-            for name, filename in DATASET_TABLES.items()}
+    return {
+        name: load_table(filename, refresh=refresh) for name, filename in DATASET_TABLES.items()
+    }
 
 
 def build_stages(refresh: bool = False) -> list:
@@ -187,9 +188,7 @@ def publish_report() -> dict:
 
     pipeline.ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     document = {"stages": stages, "charts": charts}
-    summary_path().write_text(
-        json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    summary_path().write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
     return document
 
 

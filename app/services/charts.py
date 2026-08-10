@@ -21,7 +21,11 @@ import numpy as np
 
 from app.core.pipeline import (
     ARTIFACT_DIR as PIPELINE_DIR,
+)
+from app.core.pipeline import (
     CHART_FILES as PIPELINE_CHART_FILES,
+)
+from app.core.pipeline import (
     KIND_DISCARD,
 )
 from app.core.training import ARTIFACT_DIR, CHART_FILES
@@ -114,12 +118,21 @@ def chart_model_vs_baselines(metrics: dict, baselines: dict):
     bars = axes.barh(labels, values, color=colors, height=0.55)
     axes.invert_yaxis()
     axes.set_xlabel("WMAPE en validación (menor es mejor)")
-    axes.set_title("Error del modelo frente a las referencias", fontsize=12, fontweight="bold", loc="left")
+    axes.set_title(
+        "Error del modelo frente a las referencias", fontsize=12, fontweight="bold", loc="left"
+    )
     axes.xaxis.set_major_formatter(lambda x, _: f"{x:.0%}")
 
-    for bar, value in zip(bars, values):
-        axes.text(value + max(values) * 0.015, bar.get_y() + bar.get_height() / 2,
-                  f"{value:.1%}", va="center", fontsize=10, color=TEXT, fontweight="600")
+    for bar, value in zip(bars, values, strict=False):
+        axes.text(
+            value + max(values) * 0.015,
+            bar.get_y() + bar.get_height() / 2,
+            f"{value:.1%}",
+            va="center",
+            fontsize=10,
+            color=TEXT,
+            fontweight="600",
+        )
 
     axes.set_xlim(0, max(values) * 1.18)
     _style(axes)
@@ -148,8 +161,16 @@ def chart_predicted_vs_actual(actual, predicted):
 
     figure, axes = plt.subplots(figsize=(5.6, 5.2))
     axes.plot([0, top], [0, top], color=MUTED, linewidth=1, linestyle="--", zorder=1)
-    axes.scatter(actual, predicted, s=26, color=SECONDARY, alpha=0.55,
-                 edgecolor=PRIMARY, linewidth=0.4, zorder=2)
+    axes.scatter(
+        actual,
+        predicted,
+        s=26,
+        color=SECONDARY,
+        alpha=0.55,
+        edgecolor=PRIMARY,
+        linewidth=0.4,
+        zorder=2,
+    )
     axes.set_xlabel("Consumo real (unidades/mes)")
     axes.set_ylabel("Proyección del modelo")
     axes.set_title("Proyección frente a consumo real", fontsize=12, fontweight="bold", loc="left")
@@ -179,8 +200,13 @@ def chart_error_distribution(actual, predicted):
     figure, axes = plt.subplots(figsize=(7.0, 3.4))
     axes.hist(error, bins=28, color=LIGHT, edgecolor=SECONDARY, linewidth=0.8)
     axes.axvline(0, color=PRIMARY, linewidth=1.4)
-    axes.axvline(error.mean(), color=DANGER, linewidth=1.4, linestyle="--",
-                 label=f"Sesgo medio {error.mean():+.2f}")
+    axes.axvline(
+        error.mean(),
+        color=DANGER,
+        linewidth=1.4,
+        linestyle="--",
+        label=f"Sesgo medio {error.mean():+.2f}",
+    )
     axes.set_xlabel("Error de proyección (unidades)")
     axes.set_ylabel("Casos")
     axes.set_title("Distribución del error", fontsize=12, fontweight="bold", loc="left")
@@ -242,10 +268,25 @@ def chart_validation_series(validation, predicted, series_count: int = 4):
         axes = grid[position // 2][position % 2]
         subset = frame[(frame.sku_id == sku) & (frame.city_id == city)].sort_values("period_month")
         months = [m[-2:] + "/" + m[2:4] for m in subset["period_month"]]
-        axes.plot(months, subset["qty_issued"], marker="o", markersize=4,
-                  color=PRIMARY, linewidth=1.6, label="Real")
-        axes.plot(months, subset["prediccion"], marker="s", markersize=4,
-                  color=WARNING, linewidth=1.6, linestyle="--", label="Modelo")
+        axes.plot(
+            months,
+            subset["qty_issued"],
+            marker="o",
+            markersize=4,
+            color=PRIMARY,
+            linewidth=1.6,
+            label="Real",
+        )
+        axes.plot(
+            months,
+            subset["prediccion"],
+            marker="s",
+            markersize=4,
+            color=WARNING,
+            linewidth=1.6,
+            linestyle="--",
+            label="Modelo",
+        )
         axes.set_title(f"{sku} · {city}", fontsize=10, fontweight="600", loc="left")
         axes.legend(frameon=False, fontsize=8, labelcolor=TEXT)
         _style(axes)
@@ -253,8 +294,14 @@ def chart_validation_series(validation, predicted, series_count: int = 4):
     for empty in range(len(chosen), rows * 2):
         grid[empty // 2][empty % 2].axis("off")
 
-    figure.suptitle("Proyección mes a mes en validación", fontsize=12,
-                    fontweight="bold", color=TEXT, x=0.01, ha="left")
+    figure.suptitle(
+        "Proyección mes a mes en validación",
+        fontsize=12,
+        fontweight="bold",
+        color=TEXT,
+        x=0.01,
+        ha="left",
+    )
     return _save(figure, CHART_FILES["series"])
 
 
@@ -292,8 +339,7 @@ def _headline(figure, text: str) -> None:
         al eje termina descolgado en mitad de la imagen. Anclarlo a la figura lo
         deja siempre donde empieza a leerse.
     """
-    figure.suptitle(text, fontsize=12, fontweight="bold", color=TEXT, x=0.01,
-                    ha="left")
+    figure.suptitle(text, fontsize=12, fontweight="bold", color=TEXT, x=0.01, ha="left")
 
 
 def chart_cleaning_funnel(cleaning: dict):
@@ -317,7 +363,8 @@ def chart_cleaning_funnel(cleaning: dict):
     rows = [
         (f"{_wrap(rule['rule'], 44)}\n{source['name']}", rule["rows"])
         for source in cleaning["sources"]
-        for rule in source["rules"] if rule["kind"] == KIND_DISCARD
+        for rule in source["rules"]
+        if rule["kind"] == KIND_DISCARD
     ]
     rows.sort(key=lambda item: item[1])
 
@@ -327,23 +374,36 @@ def chart_cleaning_funnel(cleaning: dict):
         labels = [label for label, _ in rows]
         values = [value for _, value in rows]
         bars = axes.barh(labels, values, color=WARNING, height=0.55)
-        for bar, value in zip(bars, values):
-            axes.text(value + max(values) * 0.02,
-                      bar.get_y() + bar.get_height() / 2,
-                      f"{value:,}".replace(",", "."), va="center", fontsize=9,
-                      color=TEXT, fontweight="600")
+        for bar, value in zip(bars, values, strict=False):
+            axes.text(
+                value + max(values) * 0.02,
+                bar.get_y() + bar.get_height() / 2,
+                f"{value:,}".replace(",", "."),
+                va="center",
+                fontsize=9,
+                color=TEXT,
+                fontweight="600",
+            )
         axes.set_xlim(0, max(values) * 1.2)
     else:
-        axes.text(0.5, 0.5, "Ninguna regla descarto filas", ha="center",
-                  va="center", color=MUTED, transform=axes.transAxes)
+        axes.text(
+            0.5,
+            0.5,
+            "Ninguna regla descarto filas",
+            ha="center",
+            va="center",
+            color=MUTED,
+            transform=axes.transAxes,
+        )
 
     axes.set_xlabel("Filas descartadas")
     axes.tick_params(axis="y", labelsize=8)
     _style(axes)
     _headline(
         figure,
-        f"De {cleaning['rows_before']:,} filas crudas quedan "
-        f"{cleaning['rows_after']:,}".replace(",", "."),
+        f"De {cleaning['rows_before']:,} filas crudas quedan {cleaning['rows_after']:,}".replace(
+            ",", "."
+        ),
     )
     return _save(figure, PIPELINE_CHART_FILES["limpieza"], PIPELINE_DIR)
 
@@ -375,12 +435,25 @@ def chart_demand_history(dataset: dict):
     boundary = next((index for index, flag in enumerate(synthetic) if not flag), None)
     if boundary:
         axes.axvspan(months[0], months[boundary - 1], color=WARNING, alpha=0.10)
-        axes.axvline(months[boundary - 1], color=WARNING, linewidth=1.2,
-                     linestyle="--")
-        axes.text(months[0], max(values) * 0.95, " Meses simulados",
-                  color=WARNING, fontsize=9, fontweight="600", va="top")
-        axes.text(months[boundary], max(values) * 0.95, " Meses observados",
-                  color=PRIMARY, fontsize=9, fontweight="600", va="top")
+        axes.axvline(months[boundary - 1], color=WARNING, linewidth=1.2, linestyle="--")
+        axes.text(
+            months[0],
+            max(values) * 0.95,
+            " Meses simulados",
+            color=WARNING,
+            fontsize=9,
+            fontweight="600",
+            va="top",
+        )
+        axes.text(
+            months[boundary],
+            max(values) * 0.95,
+            " Meses observados",
+            color=PRIMARY,
+            fontsize=9,
+            fontweight="600",
+            va="top",
+        )
 
     step = max(1, len(months) // 12)
     axes.set_xticks(months[::step])
@@ -388,7 +461,9 @@ def chart_demand_history(dataset: dict):
     axes.set_ylabel("Unidades consumidas")
     axes.set_title(
         f"{dataset['months']} meses de demanda · {dataset['series']} series",
-        fontsize=12, fontweight="bold", loc="left",
+        fontsize=12,
+        fontweight="bold",
+        loc="left",
     )
     _style(axes)
     return _save(figure, PIPELINE_CHART_FILES["dataset"], PIPELINE_DIR)
@@ -409,36 +484,55 @@ def chart_pattern_map(patterns: dict):
         serie quedo al filo y por cual de las dos condiciones no paso, que es
         justo lo que hay que revisar antes de tocar un umbral.
     """
-    colors = {"Estable": SECONDARY, "Volatil": WARNING, "Estacional": SUCCESS,
-              "Tendencia": PRIMARY, "Insuficiente": DANGER}
+    colors = {
+        "Estable": SECONDARY,
+        "Volatil": WARNING,
+        "Estacional": SUCCESS,
+        "Tendencia": PRIMARY,
+        "Insuficiente": DANGER,
+    }
 
     figure, axes = plt.subplots(figsize=(7.6, 4.8))
 
     for label in sorted({point["pattern"] for point in patterns["points"]}):
         subset = [point for point in patterns["points"] if point["pattern"] == label]
-        axes.scatter([point["cv"] for point in subset],
-                     [point["seasonal_strength"] for point in subset],
-                     s=44, alpha=0.75, label=f"{label} ({len(subset)})",
-                     color=colors.get(label, MUTED), edgecolor=SURFACE,
-                     linewidth=0.6)
+        axes.scatter(
+            [point["cv"] for point in subset],
+            [point["seasonal_strength"] for point in subset],
+            s=44,
+            alpha=0.75,
+            label=f"{label} ({len(subset)})",
+            color=colors.get(label, MUTED),
+            edgecolor=SURFACE,
+            linewidth=0.6,
+        )
 
     thresholds = patterns["thresholds"]
-    axes.axvline(thresholds["cv_volatile"], color=MUTED, linewidth=1,
-                 linestyle="--")
-    axes.axhline(thresholds["seasonal_strength"], color=MUTED, linewidth=1,
-                 linestyle="--")
-    axes.text(thresholds["cv_volatile"], axes.get_ylim()[1],
-              f" volatil si CV > {thresholds['cv_volatile']}", color=MUTED,
-              fontsize=8, va="top")
-    axes.text(axes.get_xlim()[0], thresholds["seasonal_strength"],
-              f" estacional si fuerza ≥ {thresholds['seasonal_strength']} y p < "
-              f"{thresholds['seasonal_pvalue']}", color=MUTED, fontsize=8,
-              va="bottom")
+    axes.axvline(thresholds["cv_volatile"], color=MUTED, linewidth=1, linestyle="--")
+    axes.axhline(thresholds["seasonal_strength"], color=MUTED, linewidth=1, linestyle="--")
+    axes.text(
+        thresholds["cv_volatile"],
+        axes.get_ylim()[1],
+        f" volatil si CV > {thresholds['cv_volatile']}",
+        color=MUTED,
+        fontsize=8,
+        va="top",
+    )
+    axes.text(
+        axes.get_xlim()[0],
+        thresholds["seasonal_strength"],
+        f" estacional si fuerza ≥ {thresholds['seasonal_strength']} y p < "
+        f"{thresholds['seasonal_pvalue']}",
+        color=MUTED,
+        fontsize=8,
+        va="bottom",
+    )
 
     axes.set_xlabel("Coeficiente de variacion (σ/μ)")
     axes.set_ylabel("Fuerza estacional")
-    axes.set_title("Por que cada serie cayo en su patron", fontsize=12,
-                   fontweight="bold", loc="left")
+    axes.set_title(
+        "Por que cada serie cayo en su patron", fontsize=12, fontweight="bold", loc="left"
+    )
     axes.legend(frameon=False, fontsize=8, labelcolor=TEXT, loc="upper right")
     _style(axes)
     return _save(figure, PIPELINE_CHART_FILES["patrones"], PIPELINE_DIR)
@@ -459,8 +553,7 @@ def chart_decision_breakdown(optimization: dict):
         dice nada, saber que todas lo son por estar por encima del minimo si.
         Cada barra es un motivo, coloreado segun la decision a la que lleva.
     """
-    colors = {"COMPRAR": SUCCESS, "REVISAR": WARNING, "APLAZADO": DANGER,
-              "NO_COMPRAR": MUTED}
+    colors = {"COMPRAR": SUCCESS, "REVISAR": WARNING, "APLAZADO": DANGER, "NO_COMPRAR": MUTED}
     reasons = list(reversed(optimization["reasons"]))
 
     labels = [f"{_wrap(item['reason'], 46)}\n{item['decision']}" for item in reasons]
@@ -470,10 +563,16 @@ def chart_decision_breakdown(optimization: dict):
     figure, axes = plt.subplots(figsize=(9.0, 1.4 + 0.92 * max(len(reasons), 1)))
     bars = axes.barh(labels, values, color=bar_colors, height=0.6)
 
-    for bar, value in zip(bars, values):
-        axes.text(value + max(values) * 0.02, bar.get_y() + bar.get_height() / 2,
-                  str(value), va="center", fontsize=10, color=TEXT,
-                  fontweight="600")
+    for bar, value in zip(bars, values, strict=False):
+        axes.text(
+            value + max(values) * 0.02,
+            bar.get_y() + bar.get_height() / 2,
+            str(value),
+            va="center",
+            fontsize=10,
+            color=TEXT,
+            fontweight="600",
+        )
 
     total = sum(optimization["counts"].values())
     axes.set_xlim(0, max(values) * 1.15)
@@ -509,32 +608,45 @@ def chart_optimizer_saving(optimization: dict):
         worst = [item["worst_cost_usd"] for item in savings]
         positions = range(len(savings))
 
-        axes.barh(list(positions), worst, color=LIGHT, height=0.62,
-                  label="Peor oferta aplicable")
-        axes.barh(list(positions), chosen, color=SECONDARY, height=0.62,
-                  label="Oferta elegida")
+        axes.barh(list(positions), worst, color=LIGHT, height=0.62, label="Peor oferta aplicable")
+        axes.barh(list(positions), chosen, color=SECONDARY, height=0.62, label="Oferta elegida")
         axes.set_yticks(list(positions))
         axes.set_yticklabels(labels, fontsize=8)
         axes.invert_yaxis()
 
-        for position, item in zip(positions, savings):
+        for position, item in zip(positions, savings, strict=False):
             if item["saving_usd"] > 0:
-                axes.text(item["worst_cost_usd"] * 1.01, position,
-                          f"−{item['saving_usd']:,.0f} USD".replace(",", "."),
-                          va="center", fontsize=8, color=SUCCESS,
-                          fontweight="600")
+                axes.text(
+                    item["worst_cost_usd"] * 1.01,
+                    position,
+                    f"−{item['saving_usd']:,.0f} USD".replace(",", "."),
+                    va="center",
+                    fontsize=8,
+                    color=SUCCESS,
+                    fontweight="600",
+                )
 
         axes.set_xlim(0, max(worst) * 1.22)
         axes.legend(frameon=False, fontsize=9, labelcolor=TEXT, loc="lower right")
     else:
-        axes.text(0.5, 0.5, "Ninguna compra tuvo mas de una oferta aplicable",
-                  ha="center", va="center", color=MUTED, transform=axes.transAxes)
+        axes.text(
+            0.5,
+            0.5,
+            "Ninguna compra tuvo mas de una oferta aplicable",
+            ha="center",
+            va="center",
+            color=MUTED,
+            transform=axes.transAxes,
+        )
 
     axes.set_xlabel("Costo total de la orden (USD)")
     axes.set_title(
-        f"El optimizador evita {optimization['saving_usd']:,.0f} USD de sobrecosto"
-        .replace(",", "."),
-        fontsize=12, fontweight="bold", loc="left",
+        f"El optimizador evita {optimization['saving_usd']:,.0f} USD de sobrecosto".replace(
+            ",", "."
+        ),
+        fontsize=12,
+        fontweight="bold",
+        loc="left",
     )
     _style(axes)
     return _save(figure, PIPELINE_CHART_FILES["ahorro"], PIPELINE_DIR)
@@ -564,8 +676,7 @@ def build_pipeline_charts(stages: list) -> dict:
     }
 
 
-def build_all_charts(metrics: dict, baselines: dict, validation, predicted,
-                     importance) -> dict:
+def build_all_charts(metrics: dict, baselines: dict, validation, predicted, importance) -> dict:
     """Genera el juego completo de graficas del entrenamiento.
 
     Entrada:

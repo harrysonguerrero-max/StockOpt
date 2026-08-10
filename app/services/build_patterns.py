@@ -11,7 +11,7 @@ Funcionalidad:
 import pandas as pd
 
 from app.core import patterns as config
-from app.core.dataset import CITY_IDS, OUT_DIR
+from app.core.dataset import OUT_DIR
 from app.core.patterns import build_demand_patterns
 
 OUTPUT_NAME = "demand_patterns.csv"
@@ -61,8 +61,10 @@ def main() -> None:
     if len(low):
         print(f"\n{len(low)} series con confianza menor a 0.5 (revision humana sugerida):")
         for _, record in low.head(10).iterrows():
-            print(f"  {record['sku_id']} / {record['city_id']}  "
-                  f"{record['pattern']}  conf={record['confidence']}")
+            print(
+                f"  {record['sku_id']} / {record['city_id']}  "
+                f"{record['pattern']}  conf={record['confidence']}"
+            )
 
 
 if __name__ == "__main__":

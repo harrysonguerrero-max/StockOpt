@@ -61,16 +61,18 @@ def build_assumptions(record: dict) -> list:
         lenguaje.
     """
     assumptions = [
-        f"Demanda proyectada de {record['demand_monthly']:.1f} unidades al mes, "
-        f"con patron {record['pattern'].lower()}",
-        f"Confianza {confidence_label(record['confidence'])} "
-        f"({record['confidence']:.2f}) en la proyeccion",
+        (
+            f"Demanda proyectada de {record['demand_monthly']:.1f} unidades al mes, "
+            f"con patron {record['pattern'].lower()}"
+        ),
+        (
+            f"Confianza {confidence_label(record['confidence'])} "
+            f"({record['confidence']:.2f}) en la proyeccion"
+        ),
     ]
 
     if record.get("lead_time_days"):
-        assumptions.append(
-            f"Plazo de entrega asumido de {record['lead_time_days']:.1f} dias"
-        )
+        assumptions.append(f"Plazo de entrega asumido de {record['lead_time_days']:.1f} dias")
 
     assumptions.append(
         f"Vida util de {record['shelf_life_days']} dias: admite hasta "
@@ -98,9 +100,7 @@ def build_assumptions(record: dict) -> list:
                 f"USD por unidad"
             )
     elif record["alternatives_evaluated"]:
-        assumptions.append(
-            f"Unico proveedor disponible para esta pieza en esta ciudad"
-        )
+        assumptions.append("Unico proveedor disponible para esta pieza en esta ciudad")
     return assumptions
 
 
@@ -166,14 +166,20 @@ def build_explanation(record: dict) -> dict:
         )
     elif decision == DECISION_REVIEW:
         missing = max(0, record["inventory_min"] - record["on_hand_qty"])
+        shortfall = (
+            f"faltan {missing} unidades"
+            if missing > 1
+            else f"falta {missing} unidad"
+            if missing == 1
+            else "no falta nada"
+        )
         headline = (
             f"No se recomienda comprar {record['recommended_qty']} unidades: "
             f"es el lote minimo de {record['supplier_name']}"
         )
         body = (
             f"En {city} quedan {record['on_hand_qty']} unidades de {sku} y el "
-            f"minimo operativo es {record['inventory_min']}, asi que "
-            f"{'falta ' + str(missing) + ' unidad' + ('es' if missing != 1 else '') if missing else 'no falta nada'} "
+            f"minimo operativo es {record['inventory_min']}, asi que {shortfall} "
             f"para cubrirlo. El problema es que {record['supplier_name']} no vende "
             f"menos de {record['recommended_qty']} unidades, y en bodega solo caben "
             f"{record['inventory_max']}. Aceptar ese lote cuesta "

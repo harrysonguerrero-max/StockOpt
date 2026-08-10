@@ -93,10 +93,22 @@ Motivo tecnico: {reason}
 """
 
 PAYLOAD_FIELDS = (
-    "sku_id", "description", "criticality", "city_name", "on_hand_qty",
-    "inventory_min", "inventory_max", "demand_monthly", "confidence",
-    "decision", "recommended_qty", "supplier_name", "total_cost_usd",
-    "lead_time_days", "alternatives_evaluated", "reason",
+    "sku_id",
+    "description",
+    "criticality",
+    "city_name",
+    "on_hand_qty",
+    "inventory_min",
+    "inventory_max",
+    "demand_monthly",
+    "confidence",
+    "decision",
+    "recommended_qty",
+    "supplier_name",
+    "total_cost_usd",
+    "lead_time_days",
+    "alternatives_evaluated",
+    "reason",
 )
 
 _agent = None
@@ -262,9 +274,7 @@ class ExplanationAgent(BaseAgent):
             "max_output_tokens": MAX_OUTPUT_TOKENS,
         }
         if hasattr(types, "ThinkingConfig"):
-            settings["thinking_config"] = types.ThinkingConfig(
-                thinking_budget=THINKING_BUDGET
-            )
+            settings["thinking_config"] = types.ThinkingConfig(thinking_budget=THINKING_BUDGET)
 
         response = client.models.generate_content(
             model=MODEL_NAME,
@@ -324,8 +334,11 @@ def _cache_key(record: dict) -> tuple:
         cambie de verdad y no en cada regeneracion del dataset.
     """
     return (
-        record.get("sku_id"), record.get("city_id"), record.get("decision"),
-        record.get("recommended_qty"), record.get("supplier_id"),
+        record.get("sku_id"),
+        record.get("city_id"),
+        record.get("decision"),
+        record.get("recommended_qty"),
+        record.get("supplier_id"),
     )
 
 

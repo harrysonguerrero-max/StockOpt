@@ -19,7 +19,6 @@ import pandas as pd
 
 from app.core.cleaning import clean_procurement, clean_spine
 from app.core.inventory import Z_BY_CRITICALITY, inventory_minimum, planning_lead_time
-from app.core.synthesis import extend_history
 
 SEED = 20260803
 INR_TO_USD = 1 / 83
@@ -28,19 +27,37 @@ RAW_DIR = Path(__file__).resolve().parents[1] / "data"
 OUT_DIR = RAW_DIR / "mvp"
 
 CITY_MAP = {
-    "PUN-01": {"city_id": "NAVA", "city_name": "Nava, Coahuila",
-               "country": "Mexico", "warehouse_id": "NAVA-01"},
-    "DHR-03": {"city_id": "NAVA", "city_name": "Nava, Coahuila",
-               "country": "Mexico", "warehouse_id": "NAVA-01"},
-    "CHN-02": {"city_id": "OBRE", "city_name": "Ciudad Obregon, Sonora",
-               "country": "Mexico", "warehouse_id": "OBRE-01"},
+    "PUN-01": {
+        "city_id": "NAVA",
+        "city_name": "Nava, Coahuila",
+        "country": "Mexico",
+        "warehouse_id": "NAVA-01",
+    },
+    "DHR-03": {
+        "city_id": "NAVA",
+        "city_name": "Nava, Coahuila",
+        "country": "Mexico",
+        "warehouse_id": "NAVA-01",
+    },
+    "CHN-02": {
+        "city_id": "OBRE",
+        "city_name": "Ciudad Obregon, Sonora",
+        "country": "Mexico",
+        "warehouse_id": "OBRE-01",
+    },
 }
 
 CITY_IDS = ["NAVA", "OBRE"]
 
 SHELF_LIFE_BY_FAMILY = {
-    "Lubrication": 180, "Filter": 365, "Seal & Gasket": 730, "Drive Belt": 1095,
-    "Bearing": 1825, "Coupling": 2555, "Electrical": 1825, "Sensor": 1825,
+    "Lubrication": 180,
+    "Filter": 365,
+    "Seal & Gasket": 730,
+    "Drive Belt": 1095,
+    "Bearing": 1825,
+    "Coupling": 2555,
+    "Electrical": 1825,
+    "Sensor": 1825,
     "Fastener": 3650,
 }
 
@@ -133,16 +150,18 @@ def build_parts_master(spine: pd.DataFrame) -> pd.DataFrame:
     """
     columns = ["part_no", "part_description", "part_family", "criticality", "uom", "unit_cost_inr"]
     parts = spine[columns].drop_duplicates("part_no").sort_values("part_no").reset_index(drop=True)
-    return pd.DataFrame({
-        "sku_id": parts["part_no"],
-        "description": parts["part_description"],
-        "category": parts["part_family"],
-        "criticality": parts["criticality"],
-        "uom": parts["uom"],
-        "unit_cost_usd": (parts["unit_cost_inr"] * INR_TO_USD).round(2),
-        "currency": "USD",
-        "shelf_life_days": parts["part_family"].map(SHELF_LIFE_BY_FAMILY).astype(int),
-    })
+    return pd.DataFrame(
+        {
+            "sku_id": parts["part_no"],
+            "description": parts["part_description"],
+            "category": parts["part_family"],
+            "criticality": parts["criticality"],
+            "uom": parts["uom"],
+            "unit_cost_usd": (parts["unit_cost_inr"] * INR_TO_USD).round(2),
+            "currency": "USD",
+            "shelf_life_days": parts["part_family"].map(SHELF_LIFE_BY_FAMILY).astype(int),
+        }
+    )
 
 
 def build_demand_history(spine: pd.DataFrame) -> pd.DataFrame:
@@ -213,8 +232,9 @@ def shift_demand_to_horizon(demand: pd.DataFrame, horizon: str) -> pd.DataFrame:
     return shifted.sort_values(["sku_id", "city_id", "period_month"]).reset_index(drop=True)
 
 
-def build_inventory_current(parts: pd.DataFrame, demand: pd.DataFrame,
-                            suppliers: pd.DataFrame, rng) -> pd.DataFrame:
+def build_inventory_current(
+    parts: pd.DataFrame, demand: pd.DataFrame, suppliers: pd.DataFrame, rng
+) -> pd.DataFrame:
     """Construye la foto de inventario por pieza y ciudad.
 
     Entrada:
@@ -243,8 +263,8 @@ def build_inventory_current(parts: pd.DataFrame, demand: pd.DataFrame,
         el motor de reglas ejercite ambos caminos.
     """
     snapshot = demand["period_month"].max() + "-28"
-    criticality = dict(zip(parts["sku_id"], parts["criticality"]))
-    unit_costs = dict(zip(parts["sku_id"], parts["unit_cost_usd"]))
+    criticality = dict(zip(parts["sku_id"], parts["criticality"], strict=False))
+    unit_costs = dict(zip(parts["sku_id"], parts["unit_cost_usd"], strict=False))
     lead_time, lead_time_std = planning_lead_time(suppliers)
 
     stats = (
@@ -264,20 +284,22 @@ def build_inventory_current(parts: pd.DataFrame, demand: pd.DataFrame,
         reorder_point = max(1, reorder_point)
         reorder_qty = max(1, math.ceil(mu))
         coverage = float(rng.uniform(*COVERAGE_RANGE))
-        on_hand = int(round(reorder_point * coverage))
+        on_hand = round(reorder_point * coverage)
         unit_cost = unit_costs[sku]
-        rows.append({
-            "sku_id": sku,
-            "city_id": city,
-            "warehouse_id": CITY_TO_WAREHOUSE[city],
-            "snapshot_date": snapshot,
-            "on_hand_qty": on_hand,
-            "reorder_point": reorder_point,
-            "reorder_qty": reorder_qty,
-            "unit_cost_usd": unit_cost,
-            "stock_value_usd": round(on_hand * unit_cost, 2),
-            "below_reorder": int(on_hand < reorder_point),
-        })
+        rows.append(
+            {
+                "sku_id": sku,
+                "city_id": city,
+                "warehouse_id": CITY_TO_WAREHOUSE[city],
+                "snapshot_date": snapshot,
+                "on_hand_qty": on_hand,
+                "reorder_point": reorder_point,
+                "reorder_qty": reorder_qty,
+                "unit_cost_usd": unit_cost,
+                "stock_value_usd": round(on_hand * unit_cost, 2),
+                "below_reorder": int(on_hand < reorder_point),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -301,18 +323,20 @@ def build_suppliers(procurement: pd.DataFrame) -> pd.DataFrame:
     for index, name in enumerate(sorted(procurement["Supplier"].unique())):
         lead = df.loc[df["Supplier"] == name, "lead_days"]
         slug = name.lower().replace("_", "-")
-        rows.append({
-            "supplier_id": f"SUP-{index + 1:02d}",
-            "name": name,
-            "city_id": CITY_IDS[index % len(CITY_IDS)],
-            "active": True,
-            "contact_email": f"ordenes@{slug}.com",
-            "base_freight_usd": round(10 + 5 * index, 2),
-            "lead_time_avg_days": round(float(lead.mean()), 1),
-            "lead_time_min_days": int(lead.min()),
-            "lead_time_max_days": int(lead.max()),
-            "lead_time_std_days": round(float(lead.std(ddof=0)), 2),
-        })
+        rows.append(
+            {
+                "supplier_id": f"SUP-{index + 1:02d}",
+                "name": name,
+                "city_id": CITY_IDS[index % len(CITY_IDS)],
+                "active": True,
+                "contact_email": f"ordenes@{slug}.com",
+                "base_freight_usd": round(10 + 5 * index, 2),
+                "lead_time_avg_days": round(float(lead.mean()), 1),
+                "lead_time_min_days": int(lead.min()),
+                "lead_time_max_days": int(lead.max()),
+                "lead_time_std_days": round(float(lead.std(ddof=0)), 2),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -342,21 +366,26 @@ def build_supplier_coverage(suppliers: pd.DataFrame) -> pd.DataFrame:
     for _, supplier in suppliers.iterrows():
         for city_id in CITY_IDS:
             is_home = city_id == supplier["city_id"]
-            rows.append({
-                "supplier_id": supplier["supplier_id"],
-                "city_id": city_id,
-                "is_home": int(is_home),
-                "freight_cost_usd": round(
-                    supplier["base_freight_usd"] if is_home
-                    else supplier["base_freight_usd"] * REMOTE_FREIGHT_MULTIPLIER, 2
-                ),
-                "lead_time_extra_days": 0 if is_home else REMOTE_LEAD_TIME_EXTRA_DAYS,
-            })
+            rows.append(
+                {
+                    "supplier_id": supplier["supplier_id"],
+                    "city_id": city_id,
+                    "is_home": int(is_home),
+                    "freight_cost_usd": round(
+                        supplier["base_freight_usd"]
+                        if is_home
+                        else supplier["base_freight_usd"] * REMOTE_FREIGHT_MULTIPLIER,
+                        2,
+                    ),
+                    "lead_time_extra_days": 0 if is_home else REMOTE_LEAD_TIME_EXTRA_DAYS,
+                }
+            )
     return pd.DataFrame(rows)
 
 
-def build_supplier_offers(parts: pd.DataFrame, demand: pd.DataFrame,
-                          suppliers: pd.DataFrame, rng) -> pd.DataFrame:
+def build_supplier_offers(
+    parts: pd.DataFrame, demand: pd.DataFrame, suppliers: pd.DataFrame, rng
+) -> pd.DataFrame:
     """Construye el catalogo de ofertas de proveedor por pieza.
 
     Entrada:
@@ -379,7 +408,7 @@ def build_supplier_offers(parts: pd.DataFrame, demand: pd.DataFrame,
     """
     supplier_ids = list(suppliers["supplier_id"])
     markup = {sid: round(1.05 + 0.03 * i, 4) for i, sid in enumerate(supplier_ids)}
-    unit_costs = dict(zip(parts["sku_id"], parts["unit_cost_usd"]))
+    unit_costs = dict(zip(parts["sku_id"], parts["unit_cost_usd"], strict=False))
     max_demand = demand.groupby("sku_id")["qty_issued"].max().to_dict()
 
     rows = []
@@ -387,10 +416,10 @@ def build_supplier_offers(parts: pd.DataFrame, demand: pd.DataFrame,
         n_offers = int(rng.integers(2, 4))
         chosen = rng.choice(supplier_ids, size=n_offers, replace=False)
         unit_cost = unit_costs[sku]
-        moq = min(100, max(1, int(round(200 / max(unit_cost, 1)))))
+        moq = min(100, max(1, round(200 / max(unit_cost, 1))))
         capacity = max(int(max_demand.get(sku, 0)), moq) * 3
-        for supplier_id in chosen:
-            rows.append({
+        rows.extend(
+            {
                 "offer_id": f"{supplier_id}_{sku}",
                 "supplier_id": supplier_id,
                 "sku_id": sku,
@@ -398,5 +427,7 @@ def build_supplier_offers(parts: pd.DataFrame, demand: pd.DataFrame,
                 "moq": moq,
                 "capacity_per_month": capacity,
                 "currency": "USD",
-            })
+            }
+            for supplier_id in chosen
+        )
     return pd.DataFrame(rows).sort_values(["sku_id", "supplier_id"]).reset_index(drop=True)

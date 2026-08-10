@@ -131,10 +131,17 @@ def get_state(sku_id: str, city_id: str, db_path=None) -> str:
     return record["state"] if record else STATE_PENDING
 
 
-def update_state(sku_id: str, city_id: str, new_state: str, updated_by: str,
-                 rejection_reason: str = None, comment: str = None,
-                 purchase_order: str = None, expected_delivery: str = None,
-                 db_path=None) -> dict:
+def update_state(
+    sku_id: str,
+    city_id: str,
+    new_state: str,
+    updated_by: str,
+    rejection_reason: str | None = None,
+    comment: str | None = None,
+    purchase_order: str | None = None,
+    expected_delivery: str | None = None,
+    db_path=None,
+) -> dict:
     """Registra un cambio de estado y lo deja auditado.
 
     Entrada:
@@ -168,10 +175,9 @@ def update_state(sku_id: str, city_id: str, new_state: str, updated_by: str,
         raise ValueError("Rechazar una recomendacion exige indicar el motivo")
 
     timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    with closing(_connect(db_path)) as connection:
-        with connection:
-            connection.execute(
-                """
+    with closing(_connect(db_path)) as connection, connection:
+        connection.execute(
+            """
                 INSERT INTO approvals (sku_id, city_id, state, rejection_reason,
                     comment, purchase_order, expected_delivery, updated_by, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -179,27 +185,46 @@ def update_state(sku_id: str, city_id: str, new_state: str, updated_by: str,
                     state = excluded.state,
                     rejection_reason = excluded.rejection_reason,
                     comment = excluded.comment,
-                    purchase_order = COALESCE(excluded.purchase_order, approvals.purchase_order),
-                    expected_delivery = COALESCE(excluded.expected_delivery, approvals.expected_delivery),
+                    purchase_order = COALESCE(
+                        excluded.purchase_order, approvals.purchase_order),
+                    expected_delivery = COALESCE(
+                        excluded.expected_delivery, approvals.expected_delivery),
                     updated_by = excluded.updated_by,
                     updated_at = excluded.updated_at
                 """,
-                (sku_id, city_id, new_state, rejection_reason, comment,
-                 purchase_order, expected_delivery, updated_by, timestamp),
-            )
-            connection.execute(
-                """
+            (
+                sku_id,
+                city_id,
+                new_state,
+                rejection_reason,
+                comment,
+                purchase_order,
+                expected_delivery,
+                updated_by,
+                timestamp,
+            ),
+        )
+        connection.execute(
+            """
                 INSERT INTO audit_log (sku_id, city_id, previous_state, new_state,
                     rejection_reason, comment, updated_by, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (sku_id, city_id, current, new_state, rejection_reason, comment,
-                 updated_by, timestamp),
-            )
+            (
+                sku_id,
+                city_id,
+                current,
+                new_state,
+                rejection_reason,
+                comment,
+                updated_by,
+                timestamp,
+            ),
+        )
     return {"previous_state": current, "new_state": new_state, "updated_at": timestamp}
 
 
-def audit_trail(sku_id: str = None, city_id: str = None, db_path=None) -> list:
+def audit_trail(sku_id: str | None = None, city_id: str | None = None, db_path=None) -> list:
     """Recupera el historial de cambios.
 
     Entrada:

@@ -10,7 +10,6 @@ Funcionalidad:
 """
 
 from pydantic_settings import BaseSettings
-from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -26,13 +25,13 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "SupplyOpt"
     API_V1_STR: str = "/api/v1"
 
-    BACKEND_CORS_ORIGINS: List[str] = [
+    BACKEND_CORS_ORIGINS: list[str] = [
         "http://localhost",
         "http://localhost:8000",
         "http://localhost:3000",
     ]
-    MLFLOW_TRACKING_URI: Optional[str] = "http://localhost:5000"
-    GEMINI_API_KEY: Optional[str] = None
+    MLFLOW_TRACKING_URI: str | None = "http://localhost:5000"
+    GEMINI_API_KEY: str | None = None
 
     class Config:
         """Ajustes de lectura del entorno.

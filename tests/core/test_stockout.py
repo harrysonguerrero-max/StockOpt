@@ -95,8 +95,7 @@ def test_the_recommendation_carries_both_sides_of_the_decision():
 def test_critical_parts_are_never_left_out_while_cheaper_ones_are_bought():
     rec = pd.read_csv("app/data/mvp/purchase_recommendations.csv")
     buying = rec[rec.decision == DECISION_BUY]
-    hold = rec[(rec.decision == DECISION_HOLD)
-               & (rec.on_hand_qty < rec.inventory_min)]
+    hold = rec[(rec.decision == DECISION_HOLD) & (rec.on_hand_qty < rec.inventory_min)]
 
     if len(buying) and len(hold):
         assert buying.stockout_cost_usd.min() >= hold.stockout_cost_usd.max()

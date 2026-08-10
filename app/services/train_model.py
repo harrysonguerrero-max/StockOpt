@@ -15,7 +15,6 @@ from mlops_sdk import MLObserver
 
 from app.core import training
 from app.core.dataset import OUT_DIR
-from app.services.charts import build_all_charts
 from app.core.training import (
     DemandModel,
     build_features,
@@ -25,6 +24,7 @@ from app.core.training import (
     permutation_importance,
     temporal_split,
 )
+from app.services.charts import build_all_charts
 
 REQUIRED = ["demand_history.csv", "parts_master.csv"]
 
@@ -47,7 +47,8 @@ def main() -> None:
     missing = [name for name in REQUIRED if not (OUT_DIR / name).exists()]
     if missing:
         raise SystemExit(
-            "Faltan archivos: " + ", ".join(missing)
+            "Faltan archivos: "
+            + ", ".join(missing)
             + "\nCorre antes: python -m app.services.build_dataset"
         )
 
@@ -76,8 +77,7 @@ def main() -> None:
     predicted = model.validation_predictions
     metrics = model.metrics
 
-    importance = permutation_importance(model.model, validation[columns],
-                                        validation["qty_issued"])
+    importance = permutation_importance(model.model, validation[columns], validation["qty_issued"])
     charts = build_all_charts(metrics, baselines, validation, predicted, importance)
 
     training.ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
@@ -90,10 +90,12 @@ def main() -> None:
         "features": columns,
         "importance": importance.to_dict(orient="records"),
         "n_series": int(frame.groupby(["sku_id", "city_id"]).ngroups),
-        "train_months": sorted(train["period_month"].unique())[0]
-        + " a " + sorted(train["period_month"].unique())[-1],
-        "validation_months": sorted(validation["period_month"].unique())[0]
-        + " a " + sorted(validation["period_month"].unique())[-1],
+        "train_months": min(train["period_month"].unique())
+        + " a "
+        + max(train["period_month"].unique()),
+        "validation_months": min(validation["period_month"].unique())
+        + " a "
+        + max(validation["period_month"].unique()),
     }
     (training.ARTIFACT_DIR / training.METRICS_FILE).write_text(
         json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -109,15 +111,16 @@ def main() -> None:
     print(f"  validacion:    {payload['validation_months']} ({metrics['n_val']} filas)\n")
 
     print("Error en validacion:")
-    print(f"  WMAPE {metrics['wmape']:.1%} | MAE {metrics['mae']:.2f} | "
-          f"RMSE {metrics['rmse']:.2f} | sesgo {metrics['bias']:+.2f}")
+    print(
+        f"  WMAPE {metrics['wmape']:.1%} | MAE {metrics['mae']:.2f} | "
+        f"RMSE {metrics['rmse']:.2f} | sesgo {metrics['bias']:+.2f}"
+    )
 
     print("\nComparacion contra referencias:")
     print(f"  {'modelo global':<22} WMAPE {metrics['wmape']:.1%}")
     for name, reference in baselines.items():
         gap = metrics.get(f"mejora_vs_{name}", 0)
-        print(f"  {name:<22} WMAPE {reference['wmape']:.1%}   "
-              f"(el modelo mejora {gap:+.1%})")
+        print(f"  {name:<22} WMAPE {reference['wmape']:.1%}   (el modelo mejora {gap:+.1%})")
 
     print("\nVariables mas influyentes:")
     for _, record in importance.head(5).iterrows():

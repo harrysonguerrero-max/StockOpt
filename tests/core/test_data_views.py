@@ -68,7 +68,9 @@ def test_a_record_with_empty_fields_can_be_serialised():
     record = {"supplier_id": np.nan, "qty": np.int64(3), "name": "Alpha"}
 
     assert data_views.json_safe_record(record) == {
-        "supplier_id": None, "qty": 3, "name": "Alpha",
+        "supplier_id": None,
+        "qty": 3,
+        "name": "Alpha",
     }
     assert data_views.json_safe_record(None) is None
 
@@ -86,7 +88,10 @@ def test_rows_travel_as_lists_aligned_with_the_columns(client):
     payload = client.get("/api/v1/data/tables/cities.csv").json()
 
     assert [column["name"] for column in payload["columns"]] == [
-        "city_id", "city_name", "country", "warehouse_id",
+        "city_id",
+        "city_name",
+        "country",
+        "warehouse_id",
     ]
     assert payload["row_count"] == len(payload["rows"]) == 2
     for row in payload["rows"]:

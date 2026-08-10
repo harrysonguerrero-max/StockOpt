@@ -65,11 +65,21 @@ def main() -> None:
         )
         forecast = blend_forecasts(forecast, projected)
         forecast = build_demand_forecast(
-            tables["demand_history.csv"], tables["demand_patterns.csv"],
-            tables["parts_master.csv"], tables["suppliers.csv"],
-            override_demand=forecast[["sku_id", "city_id", "forecast_q50",
-                                      "forecast_q25", "forecast_q75",
-                                      "forecast_model", "forecast_source"]],
+            tables["demand_history.csv"],
+            tables["demand_patterns.csv"],
+            tables["parts_master.csv"],
+            tables["suppliers.csv"],
+            override_demand=forecast[
+                [
+                    "sku_id",
+                    "city_id",
+                    "forecast_q50",
+                    "forecast_q25",
+                    "forecast_q75",
+                    "forecast_model",
+                    "forecast_source",
+                ]
+            ],
         )
         print(f"Modelo aplicado: run {run_id}\n")
     else:
@@ -100,10 +110,19 @@ def main() -> None:
     inventory = pd.read_csv(OUT_DIR / "inventory_current.csv")
     merged = inventory.merge(forecast, on=["sku_id", "city_id"])
     shortage = merged[merged["on_hand_qty"] < merged["inventory_min"]]
-    print(f"\n{len(shortage)} de {len(merged)} combinaciones estan por debajo "
-          f"del inventario minimo calculado:")
-    columns = ["sku_id", "city_id", "on_hand_qty", "inventory_min",
-               "demand_lead_time", "safety_stock", "confidence_final"]
+    print(
+        f"\n{len(shortage)} de {len(merged)} combinaciones estan por debajo "
+        f"del inventario minimo calculado:"
+    )
+    columns = [
+        "sku_id",
+        "city_id",
+        "on_hand_qty",
+        "inventory_min",
+        "demand_lead_time",
+        "safety_stock",
+        "confidence_final",
+    ]
     print(shortage.nsmallest(8, "on_hand_qty")[columns].to_string(index=False))
 
 

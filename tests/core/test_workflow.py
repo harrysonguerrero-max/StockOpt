@@ -4,10 +4,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core import optimization as opt_config
-from app.services import approvals as workflow
+from app.core.explanation import confidence_label
 from app.main import app
+from app.services import approvals as workflow
 from app.services.approvals import audit_trail, get_state, load_states, update_state
-from app.core.explanation import build_explanation, confidence_label
 from app.services.recommendations import (
     build_queue,
     build_summary,
@@ -63,22 +63,30 @@ def test_a_confirmed_order_cannot_move(db):
     for target in (workflow.STATE_APPROVED, workflow.STATE_CONTACTED, workflow.STATE_CONFIRMED):
         update_state("MRO-4", "NAVA", target, "ana", db_path=db)
     with pytest.raises(ValueError):
-        update_state("MRO-4", "NAVA", workflow.STATE_REJECTED, "ana",
-                     rejection_reason="tarde", db_path=db)
+        update_state(
+            "MRO-4", "NAVA", workflow.STATE_REJECTED, "ana", rejection_reason="tarde", db_path=db
+        )
 
 
 def test_rejection_requires_a_reason(db):
     with pytest.raises(ValueError, match="motivo"):
         update_state("MRO-5", "NAVA", workflow.STATE_REJECTED, "ana", db_path=db)
 
-    update_state("MRO-5", "NAVA", workflow.STATE_REJECTED, "ana",
-                 rejection_reason="Precio fuera de mercado", db_path=db)
+    update_state(
+        "MRO-5",
+        "NAVA",
+        workflow.STATE_REJECTED,
+        "ana",
+        rejection_reason="Precio fuera de mercado",
+        db_path=db,
+    )
     assert get_state("MRO-5", "NAVA", db_path=db) == workflow.STATE_REJECTED
 
 
 def test_a_rejected_row_can_be_reopened(db):
-    update_state("MRO-6", "NAVA", workflow.STATE_REJECTED, "ana",
-                 rejection_reason="Otro motivo", db_path=db)
+    update_state(
+        "MRO-6", "NAVA", workflow.STATE_REJECTED, "ana", rejection_reason="Otro motivo", db_path=db
+    )
     update_state("MRO-6", "NAVA", workflow.STATE_PENDING, "ana", db_path=db)
     assert get_state("MRO-6", "NAVA", db_path=db) == workflow.STATE_PENDING
 
@@ -137,8 +145,9 @@ def test_queue_puts_the_actionable_rows_first(queue):
 def test_summary_adds_up(queue):
     summary = build_summary(queue)
     assert summary["total"] == len(queue)
-    assert (summary["to_buy"] + summary["to_review"] + summary["deferred"]
-            + summary["no_action"]) == summary["total"]
+    assert (
+        summary["to_buy"] + summary["to_review"] + summary["deferred"] + summary["no_action"]
+    ) == summary["total"]
     assert summary["investment_usd"] > 0
     if summary["budget_usd"] is not None:
         assert summary["investment_usd"] <= summary["budget_usd"]
@@ -168,9 +177,14 @@ def test_recommendations_endpoint_returns_the_screen(client):
 
 
 def test_state_endpoint_rejects_an_invalid_transition(client):
-    response = client.post("/api/v1/recommendations/state", json={
-        "sku_id": "NO-EXISTE", "city_id": "NAVA", "new_state": workflow.STATE_CONFIRMED,
-    })
+    response = client.post(
+        "/api/v1/recommendations/state",
+        json={
+            "sku_id": "NO-EXISTE",
+            "city_id": "NAVA",
+            "new_state": workflow.STATE_CONFIRMED,
+        },
+    )
     assert response.status_code == 400
     assert "Transicion no permitida" in response.json()["detail"]
 
@@ -198,6 +212,7 @@ def test_interface_is_served_at_the_root(client):
 # Explicacion bajo demanda
 # --------------------------------------------------------------------------- #
 
+
 def test_queue_does_not_call_the_language_model(queue):
     """La tabla debe pintarse sin tocar el proveedor externo.
 
@@ -211,6 +226,7 @@ def test_queue_does_not_call_the_language_model(queue):
 
 def test_queue_is_fast_enough_for_an_interactive_screen(queue):
     import time
+
     from app.services.recommendations import build_queue as build
 
     started = time.perf_counter()
@@ -220,9 +236,7 @@ def test_queue_is_fast_enough_for_an_interactive_screen(queue):
 
 def test_explanation_endpoint_returns_a_single_row(client, queue):
     item = queue[0]
-    response = client.get(
-        f"/api/v1/recommendations/{item['sku_id']}/{item['city_id']}/explanation"
-    )
+    response = client.get(f"/api/v1/recommendations/{item['sku_id']}/{item['city_id']}/explanation")
     assert response.status_code == 200
     payload = response.json()
     assert payload["headline"] and payload["body"]
@@ -256,9 +270,11 @@ def test_explanation_is_cached_per_recommendation(queue, monkeypatch):
         def execute(self, prompt, **kwargs):
             calls["n"] += 1
             return {
-                "answer": ("En la planta quedan pocas unidades frente al minimo "
-                           "operativo exigido. Se recomienda reponer con el "
-                           "proveedor de menor costo total."),
+                "answer": (
+                    "En la planta quedan pocas unidades frente al minimo "
+                    "operativo exigido. Se recomienda reponer con el "
+                    "proveedor de menor costo total."
+                ),
                 "_trace_id": "t1",
             }
 
@@ -280,9 +296,13 @@ def test_model_never_alters_the_figures(queue, monkeypatch):
 
     class FakeAgent:
         def execute(self, prompt, **kwargs):
-            return {"answer": ("Compra 99999 unidades a otro proveedor distinto "
-                               "del elegido. Este texto intenta alterar las "
-                               "cifras de la recomendacion original.")}
+            return {
+                "answer": (
+                    "Compra 99999 unidades a otro proveedor distinto "
+                    "del elegido. Este texto intenta alterar las "
+                    "cifras de la recomendacion original."
+                )
+            }
 
     monkeypatch.setattr(llm_agent, "api_key_available", lambda: True)
     monkeypatch.setattr(llm_agent, "_get_agent", lambda: FakeAgent())
@@ -299,6 +319,7 @@ def test_model_never_alters_the_figures(queue, monkeypatch):
 # --------------------------------------------------------------------------- #
 # Cantidad hipotetica y alternativas de proveedor
 # --------------------------------------------------------------------------- #
+
 
 def test_review_quantity_is_the_supplier_lot_not_a_recommendation(queue):
     """En REVISAR la cantidad es la condicion del proveedor, no un consejo.
@@ -385,6 +406,7 @@ def test_assumptions_name_a_competing_supplier(queue):
 # Validacion de la respuesta del modelo
 # --------------------------------------------------------------------------- #
 
+
 def test_a_bare_heading_is_not_accepted_as_an_explanation():
     """El fallo que se reporto en uso real.
 
@@ -402,8 +424,10 @@ def test_a_bare_heading_is_not_accepted_as_an_explanation():
 def test_a_leading_heading_is_removed_but_the_body_survives():
     from app.services.llm_agent import is_usable_answer, strip_heading
 
-    raw = ("## Justificacion\n\nEn Nava quedan 11 unidades y el minimo es 12. "
-           "Se recomienda comprar 25 a Alpha_Inc por ser la mas economica.")
+    raw = (
+        "## Justificacion\n\nEn Nava quedan 11 unidades y el minimo es 12. "
+        "Se recomienda comprar 25 a Alpha_Inc por ser la mas economica."
+    )
     clean = strip_heading(raw)
     assert not clean.startswith("#")
     assert "Justificacion" not in clean
@@ -413,8 +437,10 @@ def test_a_leading_heading_is_removed_but_the_body_survives():
 def test_a_full_paragraph_is_accepted():
     from app.services.llm_agent import is_usable_answer, strip_heading
 
-    text = ("En Obregon quedan 3 unidades del rodamiento y el minimo operativo "
-            "es 6. Se recomienda comprar 13 unidades a Alpha_Inc.")
+    text = (
+        "En Obregon quedan 3 unidades del rodamiento y el minimo operativo "
+        "es 6. Se recomienda comprar 13 unidades a Alpha_Inc."
+    )
     assert is_usable_answer(strip_heading(text))
 
 
@@ -423,8 +449,10 @@ def test_a_degenerate_answer_falls_back_to_the_template(queue, monkeypatch):
 
     class HeadingOnlyAgent:
         def execute(self, prompt, **kwargs):
-            return {"answer": "Justificacion de la recomendacion de COMPRAR",
-                    "finish_reason": "STOP"}
+            return {
+                "answer": "Justificacion de la recomendacion de COMPRAR",
+                "finish_reason": "STOP",
+            }
 
     monkeypatch.setattr(llm_agent, "api_key_available", lambda: True)
     monkeypatch.setattr(llm_agent, "_get_agent", lambda: HeadingOnlyAgent())

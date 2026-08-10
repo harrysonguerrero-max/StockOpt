@@ -26,8 +26,8 @@ from app.core.dataset import (
     shift_demand_to_horizon,
 )
 from app.core.synthesis import extend_history
-from app.services.dictionary import write_data_dictionary
 from app.core.validation import validate
+from app.services.dictionary import write_data_dictionary
 
 FILE_NAMES = {
     "cities": "cities.csv",

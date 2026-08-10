@@ -26,15 +26,24 @@ def quality_report():
         },
         "limpieza": {
             "spine": [
-                {"regla": "Rellenar wo_type nulo con SIN_ORDEN",
-                 "motivo": "El nulo significa sin orden", "filas": 700},
-                {"regla": "Descartar meses incompletos",
-                 "motivo": "Se leerian como caida", "filas": 50},
+                {
+                    "regla": "Rellenar wo_type nulo con SIN_ORDEN",
+                    "motivo": "El nulo significa sin orden",
+                    "filas": 700,
+                },
+                {
+                    "regla": "Descartar meses incompletos",
+                    "motivo": "Se leerian como caida",
+                    "filas": 50,
+                },
                 {"regla": "RESULTADO", "motivo": "De 1000 quedan 950", "filas": 50},
             ],
             "compras": [
-                {"regla": "Conservar solo ordenes entregadas",
-                 "motivo": "Una cancelada no evidencia plazo", "filas": 20},
+                {
+                    "regla": "Conservar solo ordenes entregadas",
+                    "motivo": "Una cancelada no evidencia plazo",
+                    "filas": 20,
+                },
                 {"regla": "RESULTADO", "motivo": "De 100 quedan 80", "filas": 20},
             ],
         },
@@ -46,8 +55,15 @@ def demand():
     rows = []
     for month, synthetic in [("2025-01", 1), ("2025-02", 1), ("2025-03", 0)]:
         for sku, city in [("MRO-1", "NAVA"), ("MRO-2", "OBRE")]:
-            rows.append({"sku_id": sku, "city_id": city, "period_month": month,
-                         "qty_issued": 10, "is_synthetic": synthetic})
+            rows.append(
+                {
+                    "sku_id": sku,
+                    "city_id": city,
+                    "period_month": month,
+                    "qty_issued": 10,
+                    "is_synthetic": synthetic,
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -66,47 +82,103 @@ def tables(demand):
 
 @pytest.fixture
 def catalog():
-    offers = pd.DataFrame([
-        {"sku_id": "MRO-1", "supplier_id": "SUP-01", "unit_price_usd": 10.0,
-         "moq": 5, "capacity_per_month": 100},
-        {"sku_id": "MRO-1", "supplier_id": "SUP-02", "unit_price_usd": 14.0,
-         "moq": 5, "capacity_per_month": 100},
-    ])
-    coverage = pd.DataFrame([
-        {"supplier_id": "SUP-01", "city_id": "NAVA", "freight_cost_usd": 10.0,
-         "lead_time_extra_days": 0},
-        {"supplier_id": "SUP-02", "city_id": "NAVA", "freight_cost_usd": 20.0,
-         "lead_time_extra_days": 2},
-    ])
-    suppliers = pd.DataFrame([
-        {"supplier_id": "SUP-01", "name": "Alpha", "active": True,
-         "lead_time_avg_days": 10.0},
-        {"supplier_id": "SUP-02", "name": "Beta", "active": True,
-         "lead_time_avg_days": 12.0},
-    ])
+    offers = pd.DataFrame(
+        [
+            {
+                "sku_id": "MRO-1",
+                "supplier_id": "SUP-01",
+                "unit_price_usd": 10.0,
+                "moq": 5,
+                "capacity_per_month": 100,
+            },
+            {
+                "sku_id": "MRO-1",
+                "supplier_id": "SUP-02",
+                "unit_price_usd": 14.0,
+                "moq": 5,
+                "capacity_per_month": 100,
+            },
+        ]
+    )
+    coverage = pd.DataFrame(
+        [
+            {
+                "supplier_id": "SUP-01",
+                "city_id": "NAVA",
+                "freight_cost_usd": 10.0,
+                "lead_time_extra_days": 0,
+            },
+            {
+                "supplier_id": "SUP-02",
+                "city_id": "NAVA",
+                "freight_cost_usd": 20.0,
+                "lead_time_extra_days": 2,
+            },
+        ]
+    )
+    suppliers = pd.DataFrame(
+        [
+            {"supplier_id": "SUP-01", "name": "Alpha", "active": True, "lead_time_avg_days": 10.0},
+            {"supplier_id": "SUP-02", "name": "Beta", "active": True, "lead_time_avg_days": 12.0},
+        ]
+    )
     return offers, coverage, suppliers
 
 
 @pytest.fixture
 def recommendations():
-    return pd.DataFrame([
-        {"sku_id": "MRO-1", "city_id": "NAVA", "decision": DECISION_BUY,
-         "reason": "Quedan 3 unidades y el minimo es 10. Se eligio Alpha",
-         "recommended_qty": 10, "supplier_id": "SUP-01", "total_cost_usd": 110.0,
-         "stockout_cost_usd": 4500.0, "net_benefit_usd": 4390.0, "needs_review": 0},
-        {"sku_id": "MRO-2", "city_id": "NAVA", "decision": DECISION_BUY,
-         "reason": f"Quedan 1 unidades y el minimo es 4. {REASON_LOW_CONFIDENCE}",
-         "recommended_qty": 5, "supplier_id": "SUP-01", "total_cost_usd": 60.0,
-         "stockout_cost_usd": 900.0, "net_benefit_usd": 840.0, "needs_review": 1},
-        {"sku_id": "MRO-3", "city_id": "NAVA", "decision": DECISION_HOLD,
-         "reason": REASON_ABOVE_MINIMUM, "recommended_qty": 0, "supplier_id": None,
-         "total_cost_usd": 0.0, "stockout_cost_usd": 0.0, "net_benefit_usd": 0.0,
-         "needs_review": 0},
-        {"sku_id": "MRO-4", "city_id": "NAVA", "decision": DECISION_REVIEW,
-         "reason": "El minimo de orden de Alpha es 100 unidades y el maximo es 12",
-         "recommended_qty": 100, "supplier_id": "SUP-01", "total_cost_usd": 1010.0,
-         "stockout_cost_usd": 1200.0, "net_benefit_usd": 190.0, "needs_review": 1},
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "sku_id": "MRO-1",
+                "city_id": "NAVA",
+                "decision": DECISION_BUY,
+                "reason": "Quedan 3 unidades y el minimo es 10. Se eligio Alpha",
+                "recommended_qty": 10,
+                "supplier_id": "SUP-01",
+                "total_cost_usd": 110.0,
+                "stockout_cost_usd": 4500.0,
+                "net_benefit_usd": 4390.0,
+                "needs_review": 0,
+            },
+            {
+                "sku_id": "MRO-2",
+                "city_id": "NAVA",
+                "decision": DECISION_BUY,
+                "reason": f"Quedan 1 unidades y el minimo es 4. {REASON_LOW_CONFIDENCE}",
+                "recommended_qty": 5,
+                "supplier_id": "SUP-01",
+                "total_cost_usd": 60.0,
+                "stockout_cost_usd": 900.0,
+                "net_benefit_usd": 840.0,
+                "needs_review": 1,
+            },
+            {
+                "sku_id": "MRO-3",
+                "city_id": "NAVA",
+                "decision": DECISION_HOLD,
+                "reason": REASON_ABOVE_MINIMUM,
+                "recommended_qty": 0,
+                "supplier_id": None,
+                "total_cost_usd": 0.0,
+                "stockout_cost_usd": 0.0,
+                "net_benefit_usd": 0.0,
+                "needs_review": 0,
+            },
+            {
+                "sku_id": "MRO-4",
+                "city_id": "NAVA",
+                "decision": DECISION_REVIEW,
+                "reason": "El minimo de orden de Alpha es 100 unidades y el maximo es 12",
+                "recommended_qty": 100,
+                "supplier_id": "SUP-01",
+                "total_cost_usd": 1010.0,
+                "stockout_cost_usd": 1200.0,
+                "net_benefit_usd": 190.0,
+                "needs_review": 1,
+            },
+        ]
+    )
 
 
 def test_adjust_rules_are_not_counted_as_discards(quality_report):
@@ -147,12 +219,28 @@ def test_dataset_summary_survives_history_without_the_flag(tables):
 
 
 def test_pattern_summary_reports_the_thresholds_it_applied():
-    patterns = pd.DataFrame([
-        {"sku_id": "MRO-1", "city_id": "NAVA", "cv": 0.2, "seasonal_strength": 0.6,
-         "seasonal_pvalue": 0.01, "confidence": 0.9, "pattern": "Estacional"},
-        {"sku_id": "MRO-2", "city_id": "NAVA", "cv": 0.8, "seasonal_strength": 0.1,
-         "seasonal_pvalue": 0.7, "confidence": 0.4, "pattern": "Volatil"},
-    ])
+    patterns = pd.DataFrame(
+        [
+            {
+                "sku_id": "MRO-1",
+                "city_id": "NAVA",
+                "cv": 0.2,
+                "seasonal_strength": 0.6,
+                "seasonal_pvalue": 0.01,
+                "confidence": 0.9,
+                "pattern": "Estacional",
+            },
+            {
+                "sku_id": "MRO-2",
+                "city_id": "NAVA",
+                "cv": 0.8,
+                "seasonal_strength": 0.1,
+                "seasonal_pvalue": 0.7,
+                "confidence": 0.4,
+                "pattern": "Volatil",
+            },
+        ]
+    )
     summary = pipeline.pattern_summary(patterns)
 
     assert summary["counts"] == {"Estacional": 1, "Volatil": 1}
@@ -173,11 +261,20 @@ def test_features_are_grouped_into_readable_families():
 
 
 def test_every_feature_lands_in_exactly_one_family():
-    features = ["lag_1", "roll_std_3", "issue_events_lag_1", "breakdown_lag_1",
-                "month_cos", "shelf_life_days", "criticality_rank", "is_nava",
-                "is_synthetic"]
-    grouped = [name for family in pipeline.feature_families(features)
-               for name in family["features"]]
+    features = [
+        "lag_1",
+        "roll_std_3",
+        "issue_events_lag_1",
+        "breakdown_lag_1",
+        "month_cos",
+        "shelf_life_days",
+        "criticality_rank",
+        "is_nava",
+        "is_synthetic",
+    ]
+    grouped = [
+        name for family in pipeline.feature_families(features) for name in family["features"]
+    ]
 
     assert sorted(grouped) == sorted(features)
 
@@ -191,9 +288,7 @@ def test_buy_reasons_collapse_into_one_cause():
 
 def test_hold_reasons_keep_their_own_cause():
     above = pipeline.reason_cause(DECISION_HOLD, REASON_ABOVE_MINIMUM)
-    detailed = pipeline.reason_cause(
-        DECISION_HOLD, f"{REASON_ABOVE_MINIMUM} y ademas sobra"
-    )
+    detailed = pipeline.reason_cause(DECISION_HOLD, f"{REASON_ABOVE_MINIMUM} y ademas sobra")
 
     assert above == REASON_ABOVE_MINIMUM
     assert detailed == REASON_ABOVE_MINIMUM
@@ -228,26 +323,38 @@ def test_series_without_offers_are_left_out_of_the_saving(recommendations, catal
     assert [item["sku_id"] for item in summary["savings"]] == ["MRO-1"]
 
 
-def test_trace_returns_nothing_for_an_unknown_combination(demand, recommendations,
-                                                          catalog):
+def test_trace_returns_nothing_for_an_unknown_combination(demand, recommendations, catalog):
     offers, coverage, suppliers = catalog
     empty = pd.DataFrame(columns=["sku_id", "city_id"])
 
-    assert pipeline.trace_part(
-        "MRO-99", "NAVA", demand, empty, empty, recommendations,
-        offers, coverage, suppliers,
-    ) is None
+    assert (
+        pipeline.trace_part(
+            "MRO-99",
+            "NAVA",
+            demand,
+            empty,
+            empty,
+            recommendations,
+            offers,
+            coverage,
+            suppliers,
+        )
+        is None
+    )
 
 
 def test_trace_follows_a_piece_through_every_stage(demand, recommendations, catalog):
     offers, coverage, suppliers = catalog
-    patterns = pd.DataFrame([{"sku_id": "MRO-1", "city_id": "NAVA",
-                              "pattern": "Estable", "cv": 0.2}])
-    forecast = pd.DataFrame([{"sku_id": "MRO-1", "city_id": "NAVA",
-                              "forecast_q50": 12.0, "inventory_min": 10}])
+    patterns = pd.DataFrame(
+        [{"sku_id": "MRO-1", "city_id": "NAVA", "pattern": "Estable", "cv": 0.2}]
+    )
+    forecast = pd.DataFrame(
+        [{"sku_id": "MRO-1", "city_id": "NAVA", "forecast_q50": 12.0, "inventory_min": 10}]
+    )
 
-    trace = pipeline.trace_part("MRO-1", "NAVA", demand, patterns, forecast,
-                                recommendations, offers, coverage, suppliers)
+    trace = pipeline.trace_part(
+        "MRO-1", "NAVA", demand, patterns, forecast, recommendations, offers, coverage, suppliers
+    )
 
     assert len(trace["history"]) == 3
     assert trace["pattern"]["pattern"] == "Estable"
@@ -256,18 +363,28 @@ def test_trace_follows_a_piece_through_every_stage(demand, recommendations, cata
     assert [offer["chosen"] for offer in trace["offers"]] == [True, False]
 
 
-def test_every_stage_declares_where_its_charts_come_from(quality_report, tables,
-                                                         recommendations, catalog):
-    patterns = pd.DataFrame([{"sku_id": "MRO-1", "city_id": "NAVA", "cv": 0.2,
-                              "seasonal_strength": 0.1, "seasonal_pvalue": 0.5,
-                              "confidence": 0.8, "pattern": "Estable"}])
+def test_every_stage_declares_where_its_charts_come_from(
+    quality_report, tables, recommendations, catalog
+):
+    patterns = pd.DataFrame(
+        [
+            {
+                "sku_id": "MRO-1",
+                "city_id": "NAVA",
+                "cv": 0.2,
+                "seasonal_strength": 0.1,
+                "seasonal_pvalue": 0.5,
+                "confidence": 0.8,
+                "pattern": "Estable",
+            }
+        ]
+    )
     offers, coverage, suppliers = catalog
     tables["supplier_offers"] = offers
     tables["supplier_coverage"] = coverage
     tables["suppliers"] = suppliers
 
-    stages = pipeline.build_stages(quality_report, tables, patterns, {},
-                                   recommendations)
+    stages = pipeline.build_stages(quality_report, tables, patterns, {}, recommendations)
 
     assert [stage["id"] for stage in stages] == pipeline.STAGE_ORDER
     for stage in stages:

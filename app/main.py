@@ -18,9 +18,7 @@ from app.core.config import settings
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
-app = FastAPI(
-    title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json"
-)
+app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")
 
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(

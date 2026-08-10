@@ -58,8 +58,7 @@ STAGE_PATTERNS = "patrones"
 STAGE_MODEL = "modelo"
 STAGE_OPTIMIZATION = "optimizacion"
 
-STAGE_ORDER = [STAGE_CLEANING, STAGE_DATASET, STAGE_PATTERNS, STAGE_MODEL,
-               STAGE_OPTIMIZATION]
+STAGE_ORDER = [STAGE_CLEANING, STAGE_DATASET, STAGE_PATTERNS, STAGE_MODEL, STAGE_OPTIMIZATION]
 
 SOURCE_PIPELINE = "pipeline"
 SOURCE_TRAINING = "training"
@@ -68,11 +67,14 @@ STAGE_CHARTS = {
     STAGE_CLEANING: [(SOURCE_PIPELINE, "limpieza")],
     STAGE_DATASET: [(SOURCE_PIPELINE, "dataset")],
     STAGE_PATTERNS: [(SOURCE_PIPELINE, "patrones")],
-    STAGE_MODEL: [(SOURCE_TRAINING, "comparison"), (SOURCE_TRAINING, "series"),
-                  (SOURCE_TRAINING, "scatter"), (SOURCE_TRAINING, "errors"),
-                  (SOURCE_TRAINING, "importance")],
-    STAGE_OPTIMIZATION: [(SOURCE_PIPELINE, "decisiones"),
-                         (SOURCE_PIPELINE, "ahorro")],
+    STAGE_MODEL: [
+        (SOURCE_TRAINING, "comparison"),
+        (SOURCE_TRAINING, "series"),
+        (SOURCE_TRAINING, "scatter"),
+        (SOURCE_TRAINING, "errors"),
+        (SOURCE_TRAINING, "importance"),
+    ],
+    STAGE_OPTIMIZATION: [(SOURCE_PIPELINE, "decisiones"), (SOURCE_PIPELINE, "ahorro")],
 }
 
 STAGE_TITLES = {
@@ -97,8 +99,7 @@ CAUSE_BY_DECISION = {
     DECISION_DEFERRED: REASON_OVER_BUDGET,
 }
 
-HOLD_CAUSES = (REASON_ABOVE_MINIMUM, REASON_NO_SUPPLIER, REASON_SHELF_LIFE_BLOCK,
-               REASON_INFEASIBLE)
+HOLD_CAUSES = (REASON_ABOVE_MINIMUM, REASON_NO_SUPPLIER, REASON_SHELF_LIFE_BLOCK, REASON_INFEASIBLE)
 
 FEATURE_FAMILIES = [
     ("Rezagos de la propia serie", ("lag_",)),
@@ -169,20 +170,26 @@ def cleaning_summary(quality_report: dict) -> dict:
             }
             for rule in rules.get(key, [])
         ]
-        sources.append({
-            "key": key,
-            "name": detail.get("name", key),
-            "rows_before": rows_before,
-            "rows_after": rows_after,
-            "discarded": rows_before - rows_after,
-            "columns_before": int(detail.get("columns", 0)),
-            "columns_after": int(after.get(key, {}).get("columns", 0)),
-            "rules": classified,
-        })
+        sources.append(
+            {
+                "key": key,
+                "name": detail.get("name", key),
+                "rows_before": rows_before,
+                "rows_after": rows_after,
+                "discarded": rows_before - rows_after,
+                "columns_before": int(detail.get("columns", 0)),
+                "columns_after": int(after.get(key, {}).get("columns", 0)),
+                "rules": classified,
+            }
+        )
 
     sources.sort(key=lambda source: -source["rows_before"])
-    flagged = sum(rule["rows"] for source in sources for rule in source["rules"]
-                  if rule["kind"] == KIND_ADJUST)
+    flagged = sum(
+        rule["rows"]
+        for source in sources
+        for rule in source["rules"]
+        if rule["kind"] == KIND_ADJUST
+    )
 
     return {
         "id": STAGE_CLEANING,
@@ -222,11 +229,13 @@ def dataset_summary(tables: dict) -> dict:
     monthly = []
     for month, block in demand.groupby("period_month", sort=True):
         share = float(block["is_synthetic"].mean()) if has_flag else 0.0
-        monthly.append({
-            "period_month": str(month),
-            "qty_issued": int(block["qty_issued"].sum()),
-            "is_synthetic": int(share > 0.5),
-        })
+        monthly.append(
+            {
+                "period_month": str(month),
+                "qty_issued": int(block["qty_issued"].sum()),
+                "is_synthetic": int(share > 0.5),
+            }
+        )
 
     synthetic_rows = int(demand["is_synthetic"].sum()) if has_flag else 0
 
@@ -235,18 +244,17 @@ def dataset_summary(tables: dict) -> dict:
         "title": STAGE_TITLES[STAGE_DATASET],
         "input": "Fuentes limpias",
         "output": "Tablas relacionadas y validadas por pieza, ciudad y proveedor",
-        "tables": [{"name": name, "rows": int(len(frame))}
-                   for name, frame in tables.items()],
+        "tables": [{"name": name, "rows": len(frame)} for name, frame in tables.items()],
         "months": len(months),
         "first_month": str(months[0]) if months else "",
         "last_month": str(months[-1]) if months else "",
         "series": int(demand.groupby(["sku_id", "city_id"]).ngroups),
-        "parts": int(len(tables["parts_master"])),
-        "cities": int(len(tables["cities"])),
-        "suppliers": int(len(tables["suppliers"])),
-        "offers": int(len(tables["supplier_offers"])),
+        "parts": len(tables["parts_master"]),
+        "cities": len(tables["cities"]),
+        "suppliers": len(tables["suppliers"]),
+        "offers": len(tables["supplier_offers"]),
         "synthetic_rows": synthetic_rows,
-        "real_rows": int(len(demand)) - synthetic_rows,
+        "real_rows": len(demand) - synthetic_rows,
         "monthly": monthly,
     }
 
@@ -391,8 +399,12 @@ def reason_cause(decision: str, reason: str) -> str:
     return reason
 
 
-def optimization_summary(recommendations: pd.DataFrame, offers: pd.DataFrame,
-                         coverage: pd.DataFrame, suppliers: pd.DataFrame) -> dict:
+def optimization_summary(
+    recommendations: pd.DataFrame,
+    offers: pd.DataFrame,
+    coverage: pd.DataFrame,
+    suppliers: pd.DataFrame,
+) -> dict:
     """Resume como se reparten las decisiones de compra y que ahorran.
 
     Entrada:
@@ -424,38 +436,45 @@ def optimization_summary(recommendations: pd.DataFrame, offers: pd.DataFrame,
         )
         entry["count"] += 1
         if len(entry["examples"]) < 3:
-            entry["examples"].append({
-                "sku_id": record["sku_id"],
-                "city_id": record["city_id"],
-                "reason": record["reason"],
-            })
+            entry["examples"].append(
+                {
+                    "sku_id": record["sku_id"],
+                    "city_id": record["city_id"],
+                    "reason": record["reason"],
+                }
+            )
 
     reasons = sorted(grouped.values(), key=lambda item: -item["count"])
 
-    low_confidence = int(
-        recommendations["reason"].str.endswith(REASON_LOW_CONFIDENCE).sum()
-    )
+    low_confidence = int(recommendations["reason"].str.endswith(REASON_LOW_CONFIDENCE).sum())
 
     savings = []
     for record in recommendations.to_dict(orient="records"):
         if record["decision"] != DECISION_BUY:
             continue
         quotes = offer_costs(
-            record["sku_id"], record["city_id"], record["recommended_qty"],
-            offers, coverage, suppliers, chosen_supplier=record["supplier_id"],
+            record["sku_id"],
+            record["city_id"],
+            record["recommended_qty"],
+            offers,
+            coverage,
+            suppliers,
+            chosen_supplier=record["supplier_id"],
         )
         if len(quotes) < 2:
             continue
         chosen = next((quote for quote in quotes if quote["chosen"]), quotes[0])
         worst = quotes[-1]
-        savings.append({
-            "sku_id": record["sku_id"],
-            "city_id": record["city_id"],
-            "chosen_cost_usd": chosen["total_cost_usd"],
-            "worst_cost_usd": worst["total_cost_usd"],
-            "saving_usd": round(worst["total_cost_usd"] - chosen["total_cost_usd"], 2),
-            "offers": len(quotes),
-        })
+        savings.append(
+            {
+                "sku_id": record["sku_id"],
+                "city_id": record["city_id"],
+                "chosen_cost_usd": chosen["total_cost_usd"],
+                "worst_cost_usd": worst["total_cost_usd"],
+                "saving_usd": round(worst["total_cost_usd"] - chosen["total_cost_usd"], 2),
+                "offers": len(quotes),
+            }
+        )
 
     savings.sort(key=lambda item: -item["saving_usd"])
     buying = recommendations[recommendations["decision"] == DECISION_BUY]
@@ -477,9 +496,10 @@ def optimization_summary(recommendations: pd.DataFrame, offers: pd.DataFrame,
         "stockout_avoided_usd": round(float(buying["stockout_cost_usd"].sum()), 2),
         "stockout_exposed_usd": round(float(deferring["stockout_cost_usd"].sum()), 2),
         "stockout_return": round(
-            float(buying["stockout_cost_usd"].sum()
-                  / buying["total_cost_usd"].sum()), 1
-        ) if float(buying["total_cost_usd"].sum()) > 0 else 0.0,
+            float(buying["stockout_cost_usd"].sum() / buying["total_cost_usd"].sum()), 1
+        )
+        if float(buying["total_cost_usd"].sum()) > 0
+        else 0.0,
         "reasons": reasons,
         "savings": savings,
         "investment_usd": round(float(buying["total_cost_usd"].sum()), 2),
@@ -491,10 +511,17 @@ def optimization_summary(recommendations: pd.DataFrame, offers: pd.DataFrame,
     }
 
 
-def trace_part(sku_id: str, city_id: str, demand: pd.DataFrame,
-               patterns: pd.DataFrame, forecast: pd.DataFrame,
-               recommendations: pd.DataFrame, offers: pd.DataFrame,
-               coverage: pd.DataFrame, suppliers: pd.DataFrame) -> dict:
+def trace_part(
+    sku_id: str,
+    city_id: str,
+    demand: pd.DataFrame,
+    patterns: pd.DataFrame,
+    forecast: pd.DataFrame,
+    recommendations: pd.DataFrame,
+    offers: pd.DataFrame,
+    coverage: pd.DataFrame,
+    suppliers: pd.DataFrame,
+) -> dict:
     """Sigue una pieza concreta por todas las etapas del pipeline.
 
     Entrada:
@@ -523,25 +550,20 @@ def trace_part(sku_id: str, city_id: str, demand: pd.DataFrame,
         ninguna hizo falta.
     """
     decision_rows = recommendations[
-        (recommendations["sku_id"] == sku_id)
-        & (recommendations["city_id"] == city_id)
+        (recommendations["sku_id"] == sku_id) & (recommendations["city_id"] == city_id)
     ]
     if decision_rows.empty:
         return None
 
     decision = decision_rows.iloc[0].to_dict()
 
-    history = demand[
-        (demand["sku_id"] == sku_id) & (demand["city_id"] == city_id)
-    ].sort_values("period_month")
+    history = demand[(demand["sku_id"] == sku_id) & (demand["city_id"] == city_id)].sort_values(
+        "period_month"
+    )
     has_flag = "is_synthetic" in history.columns
 
-    pattern_rows = patterns[
-        (patterns["sku_id"] == sku_id) & (patterns["city_id"] == city_id)
-    ]
-    forecast_rows = forecast[
-        (forecast["sku_id"] == sku_id) & (forecast["city_id"] == city_id)
-    ]
+    pattern_rows = patterns[(patterns["sku_id"] == sku_id) & (patterns["city_id"] == city_id)]
+    forecast_rows = forecast[(forecast["sku_id"] == sku_id) & (forecast["city_id"] == city_id)]
 
     return {
         "sku_id": sku_id,
@@ -560,15 +582,24 @@ def trace_part(sku_id: str, city_id: str, demand: pd.DataFrame,
         "forecast": forecast_rows.iloc[0].to_dict() if not forecast_rows.empty else None,
         "decision": decision,
         "offers": offer_costs(
-            sku_id, city_id, decision.get("recommended_qty") or 0,
-            offers, coverage, suppliers,
+            sku_id,
+            city_id,
+            decision.get("recommended_qty") or 0,
+            offers,
+            coverage,
+            suppliers,
             chosen_supplier=decision.get("supplier_id"),
         ),
     }
 
 
-def build_stages(quality_report: dict, tables: dict, patterns: pd.DataFrame,
-                 training_metrics: dict, recommendations: pd.DataFrame) -> list:
+def build_stages(
+    quality_report: dict,
+    tables: dict,
+    patterns: pd.DataFrame,
+    training_metrics: dict,
+    recommendations: pd.DataFrame,
+) -> list:
     """Compone el recorrido completo del pipeline.
 
     Entrada:
@@ -595,11 +626,16 @@ def build_stages(quality_report: dict, tables: dict, patterns: pd.DataFrame,
         dataset_summary(tables),
         pattern_summary(patterns),
         model_summary(training_metrics),
-        optimization_summary(recommendations, tables["supplier_offers"],
-                             tables["supplier_coverage"], tables["suppliers"]),
+        optimization_summary(
+            recommendations,
+            tables["supplier_offers"],
+            tables["supplier_coverage"],
+            tables["suppliers"],
+        ),
     ]
 
     for stage in stages:
-        stage["charts"] = [{"source": source, "key": key}
-                           for source, key in STAGE_CHARTS[stage["id"]]]
+        stage["charts"] = [
+            {"source": source, "key": key} for source, key in STAGE_CHARTS[stage["id"]]
+        ]
     return stages

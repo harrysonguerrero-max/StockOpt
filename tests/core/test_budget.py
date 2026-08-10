@@ -49,32 +49,47 @@ def recommendation(sku, decision, cost, benefit, **extra):
         Solo rellena lo que apply_budget necesita, para que cada test declare
         unicamente lo que esta probando.
     """
-    row = {column: None for column in COLUMNS}
-    row.update({
-        "sku_id": sku, "city_id": "NAVA", "decision": decision,
-        "total_cost_usd": cost, "net_benefit_usd": benefit,
-        "stockout_cost_usd": cost + benefit,
-        "recommended_qty": 10, "needs_review": 0, "reason": "motivo original",
-        "inventory_min": 10, "on_hand_qty": 4, "supplier_name": "Alpha",
-    })
+    row = dict.fromkeys(COLUMNS)
+    row.update(
+        {
+            "sku_id": sku,
+            "city_id": "NAVA",
+            "decision": decision,
+            "total_cost_usd": cost,
+            "net_benefit_usd": benefit,
+            "stockout_cost_usd": cost + benefit,
+            "recommended_qty": 10,
+            "needs_review": 0,
+            "reason": "motivo original",
+            "inventory_min": 10,
+            "on_hand_qty": 4,
+            "supplier_name": "Alpha",
+        }
+    )
     row.update(extra)
     return row
 
 
 @pytest.fixture
 def table():
-    return pd.DataFrame([
-        recommendation("MRO-1", DECISION_BUY, 600.0, 900.0),
-        recommendation("MRO-2", DECISION_BUY, 300.0, 500.0),
-        recommendation("MRO-3", DECISION_BUY, 300.0, 450.0),
-        recommendation("MRO-4", DECISION_REVIEW, 900.0, 0.0),
-        recommendation("MRO-5", DECISION_HOLD, 0.0, 0.0),
-    ], columns=COLUMNS)
+    return pd.DataFrame(
+        [
+            recommendation("MRO-1", DECISION_BUY, 600.0, 900.0),
+            recommendation("MRO-2", DECISION_BUY, 300.0, 500.0),
+            recommendation("MRO-3", DECISION_BUY, 300.0, 450.0),
+            recommendation("MRO-4", DECISION_REVIEW, 900.0, 0.0),
+            recommendation("MRO-5", DECISION_HOLD, 0.0, 0.0),
+        ],
+        columns=COLUMNS,
+    )
 
 
 def test_the_knapsack_maximises_the_benefit_it_buys():
-    candidates = [candidate("a", 600.0, 900.0), candidate("b", 300.0, 500.0),
-                  candidate("c", 300.0, 480.0)]
+    candidates = [
+        candidate("a", 600.0, 900.0),
+        candidate("b", 300.0, 500.0),
+        candidate("c", 300.0, 480.0),
+    ]
     chosen = allocate_budget(candidates, 600.0)
 
     assert chosen == {"b", "c"}

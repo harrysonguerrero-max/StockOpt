@@ -63,15 +63,18 @@ def model_projection(demand: pd.DataFrame, parts: pd.DataFrame, model) -> pd.Dat
     latest = latest_feature_rows(demand, parts)
     columns = feature_columns(latest)
     predictions = np.clip(model.predict(latest[columns]), 0, None)
-    return pd.DataFrame({
-        "sku_id": latest["sku_id"],
-        "city_id": latest["city_id"],
-        "forecast_model": np.round(predictions, 2),
-    })
+    return pd.DataFrame(
+        {
+            "sku_id": latest["sku_id"],
+            "city_id": latest["city_id"],
+            "forecast_model": np.round(predictions, 2),
+        }
+    )
 
 
-def blend_forecasts(statistical: pd.DataFrame, model_based: pd.DataFrame,
-                    weight: float = MODEL_WEIGHT) -> pd.DataFrame:
+def blend_forecasts(
+    statistical: pd.DataFrame, model_based: pd.DataFrame, weight: float = MODEL_WEIGHT
+) -> pd.DataFrame:
     """Combina la proyeccion estadistica con la del modelo.
 
     Entrada:
@@ -127,9 +130,7 @@ def load_trained_model():
     """
     import pickle
 
-    candidates = sorted(
-        ARTIFACT_ROOT.glob("*/model.pkl"), key=lambda path: path.stat().st_mtime
-    )
+    candidates = sorted(ARTIFACT_ROOT.glob("*/model.pkl"), key=lambda path: path.stat().st_mtime)
     if not candidates:
         return None, None
 

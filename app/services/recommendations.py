@@ -12,17 +12,6 @@ Funcionalidad:
 
 import pandas as pd
 
-from app.services.approvals import (
-    ALLOWED_TRANSITIONS,
-    REJECTION_REASONS,
-    STATE_PENDING,
-    STATE_APPROVED,
-    STATE_CONTACTED,
-    STATE_CONFIRMED,
-    STATE_REJECTED,
-    WORKFLOW_STATES,
-    load_states,
-)
 from app.core.dataset import OUT_DIR
 from app.core.explanation import build_explanation
 from app.core.optimization import (
@@ -32,6 +21,17 @@ from app.core.optimization import (
     DECISION_REVIEW,
     SCENARIO_BUDGET_USD,
     offer_costs,
+)
+from app.services.approvals import (
+    ALLOWED_TRANSITIONS,
+    REJECTION_REASONS,
+    STATE_APPROVED,
+    STATE_CONFIRMED,
+    STATE_CONTACTED,
+    STATE_PENDING,
+    STATE_REJECTED,
+    WORKFLOW_STATES,
+    load_states,
 )
 
 SOURCES = [
@@ -139,8 +139,13 @@ def build_alternatives(record: dict, offers, coverage, suppliers) -> list:
         resumen del pipeline no puedan discrepar en el costo de una misma oferta.
     """
     return offer_costs(
-        record["sku_id"], record["city_id"], record.get("recommended_qty") or 0,
-        offers, coverage, suppliers, chosen_supplier=record.get("supplier_id"),
+        record["sku_id"],
+        record["city_id"],
+        record.get("recommended_qty") or 0,
+        offers,
+        coverage,
+        suppliers,
+        chosen_supplier=record.get("supplier_id"),
     )
 
 
@@ -177,9 +182,9 @@ def build_queue(refresh: bool = False) -> list:
         cities[["city_id", "city_name", "warehouse_id"]], on="city_id", how="left"
     )
     merged = merged.merge(
-        suppliers[["supplier_id", "contact_email", "lead_time_min_days",
-                   "lead_time_max_days"]],
-        on="supplier_id", how="left",
+        suppliers[["supplier_id", "contact_email", "lead_time_min_days", "lead_time_max_days"]],
+        on="supplier_id",
+        how="left",
     )
 
     states = load_states()
@@ -192,9 +197,7 @@ def build_queue(refresh: bool = False) -> list:
 
     queue = []
     for record in merged.to_dict(orient="records"):
-        clean = {
-            key: (None if pd.isna(value) else value) for key, value in record.items()
-        }
+        clean = {key: (None if pd.isna(value) else value) for key, value in record.items()}
         clean["pattern"] = clean.get("pattern") or "Sin clasificar"
         stored = states.get((clean["sku_id"], clean["city_id"]))
 
@@ -206,8 +209,10 @@ def build_queue(refresh: bool = False) -> list:
         clean["updated_by"] = stored["updated_by"] if stored else None
         clean["gauge"] = _supply_gauge(clean)
         clean["alternatives"] = build_alternatives(
-            clean, sources["supplier_offers.csv"],
-            sources["supplier_coverage.csv"], suppliers,
+            clean,
+            sources["supplier_offers.csv"],
+            sources["supplier_coverage.csv"],
+            suppliers,
         )
         clean["explanation"] = {**build_explanation(clean), "source": "plantilla"}
         clean["next_states"] = ALLOWED_TRANSITIONS.get(clean["state"], [])
@@ -241,9 +246,11 @@ def build_summary(queue: list) -> dict:
     to_buy = [item for item in queue if item["decision"] == DECISION_BUY]
     to_review = [item for item in queue if item["decision"] == DECISION_REVIEW]
     deferred = [item for item in queue if item["decision"] == DECISION_DEFERRED]
-    approved = [item for item in queue
-                if item["state"] in (STATE_APPROVED, STATE_CONTACTED,
-                                     STATE_CONFIRMED)]
+    approved = [
+        item
+        for item in queue
+        if item["state"] in (STATE_APPROVED, STATE_CONTACTED, STATE_CONFIRMED)
+    ]
 
     return {
         "total": len(queue),
@@ -256,10 +263,8 @@ def build_summary(queue: list) -> dict:
         "investment_usd": round(sum(item["total_cost_usd"] for item in to_buy), 2),
         "deferred_usd": round(sum(item["total_cost_usd"] for item in deferred), 2),
         "budget_usd": SCENARIO_BUDGET_USD,
-        "stockout_avoided_usd": round(
-            sum(item["stockout_cost_usd"] or 0 for item in to_buy), 2),
-        "stockout_exposed_usd": round(
-            sum(item["stockout_cost_usd"] or 0 for item in deferred), 2),
+        "stockout_avoided_usd": round(sum(item["stockout_cost_usd"] or 0 for item in to_buy), 2),
+        "stockout_exposed_usd": round(sum(item["stockout_cost_usd"] or 0 for item in deferred), 2),
         "units": int(sum(item["recommended_qty"] for item in to_buy)),
         "needs_review": len([i for i in queue if i["needs_review"] == 1]),
     }
@@ -282,9 +287,8 @@ def filter_options(queue: list) -> dict:
     cities = sorted({(item["city_id"], item["city_name"]) for item in queue})
     return {
         "cities": [{"id": city_id, "name": name} for city_id, name in cities],
-        "decisions": [DECISION_BUY, DECISION_REVIEW, DECISION_DEFERRED,
-                      DECISION_HOLD],
-        "states": WORKFLOW_STATES + [STATE_REJECTED],
+        "decisions": [DECISION_BUY, DECISION_REVIEW, DECISION_DEFERRED, DECISION_HOLD],
+        "states": [*WORKFLOW_STATES, STATE_REJECTED],
         "criticalities": sorted({item["criticality"] for item in queue}),
         "rejection_reasons": REJECTION_REASONS,
     }

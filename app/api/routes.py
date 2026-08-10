@@ -9,7 +9,6 @@ Funcionalidad:
 import csv
 import io
 import json
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -32,10 +31,24 @@ from app.services.recommendations import (
 router = APIRouter()
 
 EXPORT_COLUMNS = [
-    "sku_id", "city_id", "description", "criticality", "decision", "state",
-    "on_hand_qty", "inventory_min", "inventory_max", "recommended_qty",
-    "supplier_id", "supplier_name", "unit_price_usd", "total_cost_usd",
-    "lead_time_days", "confidence", "needs_review", "reason",
+    "sku_id",
+    "city_id",
+    "description",
+    "criticality",
+    "decision",
+    "state",
+    "on_hand_qty",
+    "inventory_min",
+    "inventory_max",
+    "recommended_qty",
+    "supplier_id",
+    "supplier_name",
+    "unit_price_usd",
+    "total_cost_usd",
+    "lead_time_days",
+    "confidence",
+    "needs_review",
+    "reason",
 ]
 
 
@@ -51,10 +64,10 @@ class StateChange(BaseModel):
     city_id: str
     new_state: str
     updated_by: str = "comprador"
-    rejection_reason: Optional[str] = None
-    comment: Optional[str] = None
-    purchase_order: Optional[str] = None
-    expected_delivery: Optional[str] = None
+    rejection_reason: str | None = None
+    comment: str | None = None
+    purchase_order: str | None = None
+    expected_delivery: str | None = None
 
 
 @router.get("/health")
@@ -157,7 +170,7 @@ def read_explanation(sku_id: str, city_id: str):
 
 
 @router.get("/recommendations/audit")
-def read_audit(sku_id: Optional[str] = None, city_id: Optional[str] = None):
+def read_audit(sku_id: str | None = None, city_id: str | None = None):
     """Devuelve el historial de decisiones.
 
     Entrada:
@@ -314,9 +327,7 @@ def read_data_table(name: str, refresh: bool = False):
     if not is_known_table(name):
         raise HTTPException(status_code=404, detail=f"Tabla desconocida: {name}")
     if not table_path(name).exists():
-        raise HTTPException(
-            status_code=503, detail=f"La tabla {name} aun no se ha generado."
-        )
+        raise HTTPException(status_code=503, detail=f"La tabla {name} aun no se ha generado.")
     return read_table(name, refresh=refresh)
 
 
@@ -338,9 +349,7 @@ def download_data_table(name: str):
         raise HTTPException(status_code=404, detail=f"Tabla desconocida: {name}")
     path = table_path(name)
     if not path.exists():
-        raise HTTPException(
-            status_code=503, detail=f"La tabla {name} aun no se ha generado."
-        )
+        raise HTTPException(status_code=503, detail=f"La tabla {name} aun no se ha generado.")
     return FileResponse(path, media_type="text/csv", filename=path.name)
 
 
@@ -364,7 +373,7 @@ def read_pipeline_stages():
         raise HTTPException(
             status_code=503,
             detail="Aun no se ha publicado el recorrido. Corre: "
-                   "python -m app.services.build_pipeline_report",
+            "python -m app.services.build_pipeline_report",
         )
     return pipeline_report.load_report()
 
@@ -409,9 +418,7 @@ def read_pipeline_trace(sku_id: str, city_id: str):
         detalle de las cuarenta series no cabe en el informe publicado.
     """
     if not dataset_is_available():
-        raise HTTPException(
-            status_code=503, detail="El dataset no esta generado."
-        )
+        raise HTTPException(status_code=503, detail="El dataset no esta generado.")
     trace = pipeline_report.trace_part(sku_id, city_id)
     if trace is None:
         raise HTTPException(

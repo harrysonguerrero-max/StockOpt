@@ -56,9 +56,20 @@ W_RECENT = 0.25
 RECENT_WINDOW = 3
 
 COLUMNS = [
-    "sku_id", "city_id", "n_periods", "mean_monthly", "std_monthly", "cv",
-    "zero_ratio", "seasonal_strength", "seasonal_pvalue", "trend_tau",
-    "trend_pvalue", "pattern", "confidence", "recommended_model",
+    "sku_id",
+    "city_id",
+    "n_periods",
+    "mean_monthly",
+    "std_monthly",
+    "cv",
+    "zero_ratio",
+    "seasonal_strength",
+    "seasonal_pvalue",
+    "trend_tau",
+    "trend_pvalue",
+    "pattern",
+    "confidence",
+    "recommended_model",
 ]
 
 
@@ -84,7 +95,9 @@ def seasonal_strength(values: np.ndarray) -> float:
         warning_control.simplefilter("ignore")
         try:
             decomposed = seasonal_decompose(
-                values, model="additive", period=SEASONAL_PERIOD,
+                values,
+                model="additive",
+                period=SEASONAL_PERIOD,
                 extrapolate_trend="freq",
             )
         except ValueError:
@@ -200,11 +213,7 @@ def confidence_score(n_periods: int, cv: float, values: np.ndarray) -> float:
             shift = abs(recent - historical) / historical
             recent_factor = float(np.clip(1.0 - shift, 0.0, 1.0))
 
-    score = (
-        W_VOLUME * volume_factor
-        + W_VOLATILITY * volatility_factor
-        + W_RECENT * recent_factor
-    )
+    score = W_VOLUME * volume_factor + W_VOLATILITY * volatility_factor + W_RECENT * recent_factor
     return round(float(np.clip(score, 0.0, 1.0)), 2)
 
 

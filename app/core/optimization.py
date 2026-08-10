@@ -113,14 +113,33 @@ def _solver():
 
 
 COLUMNS = [
-    "sku_id", "city_id", "description", "criticality",
-    "on_hand_qty", "inventory_min", "inventory_max",
-    "demand_monthly", "forecast_source", "shelf_life_days",
-    "target_qty", "max_allowed_qty", "coverage_months",
-    "decision", "recommended_qty", "supplier_id", "supplier_name",
-    "unit_price_usd", "freight_cost_usd", "lead_time_days",
-    "total_cost_usd", "alternatives_evaluated", "confidence",
-    "stockout_cost_usd", "net_benefit_usd", "needs_review", "reason",
+    "sku_id",
+    "city_id",
+    "description",
+    "criticality",
+    "on_hand_qty",
+    "inventory_min",
+    "inventory_max",
+    "demand_monthly",
+    "forecast_source",
+    "shelf_life_days",
+    "target_qty",
+    "max_allowed_qty",
+    "coverage_months",
+    "decision",
+    "recommended_qty",
+    "supplier_id",
+    "supplier_name",
+    "unit_price_usd",
+    "freight_cost_usd",
+    "lead_time_days",
+    "total_cost_usd",
+    "alternatives_evaluated",
+    "confidence",
+    "stockout_cost_usd",
+    "net_benefit_usd",
+    "needs_review",
+    "reason",
 ]
 
 
@@ -145,8 +164,7 @@ def days_of_cover(on_hand: int, monthly_demand: float) -> float:
     return on_hand / (monthly_demand / DAYS_PER_MONTH)
 
 
-def stockout_days_avoided(on_hand: int, monthly_demand: float,
-                          lead_time_days: float) -> float:
+def stockout_days_avoided(on_hand: int, monthly_demand: float, lead_time_days: float) -> float:
     """Estima cuantos dias de quiebre evita reponer ahora.
 
     Entrada:
@@ -177,8 +195,13 @@ def stockout_days_avoided(on_hand: int, monthly_demand: float,
     return round(exposed_later - exposed_now, 2)
 
 
-def stockout_cost(on_hand: int, monthly_demand: float, lead_time_days: float,
-                  criticality: str, issue_rate: float = 1.0) -> float:
+def stockout_cost(
+    on_hand: int,
+    monthly_demand: float,
+    lead_time_days: float,
+    criticality: str,
+    issue_rate: float = 1.0,
+) -> float:
     """Valora en dolares el quiebre que evita reponer ahora.
 
     Entrada:
@@ -215,8 +238,9 @@ def stockout_cost(on_hand: int, monthly_demand: float, lead_time_days: float,
     """
     per_day = STOCKOUT_COST_PER_DAY_USD.get(criticality, 0.0)
     frequency = min(1.0, max(0.0, issue_rate))
-    return round(stockout_days_avoided(on_hand, monthly_demand, lead_time_days)
-                 * frequency * per_day, 2)
+    return round(
+        stockout_days_avoided(on_hand, monthly_demand, lead_time_days) * frequency * per_day, 2
+    )
 
 
 def allocate_budget(candidates: list, budget) -> set:
@@ -256,12 +280,13 @@ def allocate_budget(candidates: list, budget) -> set:
         for index, candidate in enumerate(affordable)
     }
 
-    problem += pulp.lpSum([
-        candidate["benefit"] * switches[candidate["key"]] for candidate in affordable
-    ])
-    problem += pulp.lpSum([
-        candidate["cost"] * switches[candidate["key"]] for candidate in affordable
-    ]) <= budget
+    problem += pulp.lpSum(
+        [candidate["benefit"] * switches[candidate["key"]] for candidate in affordable]
+    )
+    problem += (
+        pulp.lpSum([candidate["cost"] * switches[candidate["key"]] for candidate in affordable])
+        <= budget
+    )
 
     problem.solve(_solver())
     if pulp.LpStatus[problem.status] != "Optimal":
@@ -310,8 +335,9 @@ def apply_budget(recommendations: pd.DataFrame, budget) -> pd.DataFrame:
 
     result = recommendations.copy()
     deferred = result.apply(
-        lambda row: row["decision"] == DECISION_BUY
-        and (row["sku_id"], row["city_id"]) not in approved,
+        lambda row: (
+            row["decision"] == DECISION_BUY and (row["sku_id"], row["city_id"]) not in approved
+        ),
         axis=1,
     )
     result.loc[deferred, "reason"] = result.loc[deferred].apply(
@@ -328,8 +354,7 @@ def apply_budget(recommendations: pd.DataFrame, budget) -> pd.DataFrame:
     return result
 
 
-def consumable_within_shelf_life(monthly_demand: float, shelf_life_days: int,
-                                 on_hand: int) -> int:
+def consumable_within_shelf_life(monthly_demand: float, shelf_life_days: int, on_hand: int) -> int:
     """Calcula cuanto se alcanza a consumir antes de que la pieza venza.
 
     Entrada:
@@ -347,7 +372,7 @@ def consumable_within_shelf_life(monthly_demand: float, shelf_life_days: int,
     """
     daily_demand = monthly_demand / DAYS_PER_MONTH
     usable_days = shelf_life_days * SHELF_LIFE_SAFETY_RATIO
-    return max(0, int(math.floor(daily_demand * usable_days)) - on_hand)
+    return max(0, math.floor(daily_demand * usable_days) - on_hand)
 
 
 def target_inventory(monthly_demand: float, inventory_min: int) -> int:
@@ -368,7 +393,7 @@ def target_inventory(monthly_demand: float, inventory_min: int) -> int:
         lote minimo del proveedor solo actua como piso.
     """
     horizon = monthly_demand * TARGET_COVERAGE_MONTHS
-    return max(inventory_min, int(math.ceil(inventory_min + horizon)))
+    return max(inventory_min, math.ceil(inventory_min + horizon))
 
 
 def maximum_inventory(monthly_demand: float, inventory_min: int) -> int:
@@ -388,11 +413,12 @@ def maximum_inventory(monthly_demand: float, inventory_min: int) -> int:
         menor que el minimo dejaria el problema sin solucion.
     """
     coverage = monthly_demand * MAX_COVERAGE_MONTHS
-    return max(inventory_min, int(math.ceil(coverage)))
+    return max(inventory_min, math.ceil(coverage))
 
 
-def candidate_offers(sku: str, city: str, offers: pd.DataFrame,
-                     coverage: pd.DataFrame, suppliers: pd.DataFrame) -> pd.DataFrame:
+def candidate_offers(
+    sku: str, city: str, offers: pd.DataFrame, coverage: pd.DataFrame, suppliers: pd.DataFrame
+) -> pd.DataFrame:
     """Reune las ofertas disponibles para una pieza en una ciudad.
 
     Entrada:
@@ -423,9 +449,15 @@ def candidate_offers(sku: str, city: str, offers: pd.DataFrame,
     return result
 
 
-def offer_costs(sku: str, city: str, quantity: int, offers: pd.DataFrame,
-                coverage: pd.DataFrame, suppliers: pd.DataFrame,
-                chosen_supplier=None) -> list:
+def offer_costs(
+    sku: str,
+    city: str,
+    quantity: int,
+    offers: pd.DataFrame,
+    coverage: pd.DataFrame,
+    suppliers: pd.DataFrame,
+    chosen_supplier=None,
+) -> list:
     """Cotiza cada oferta aplicable a una pieza en una ciudad.
 
     Entrada:
@@ -459,18 +491,21 @@ def offer_costs(sku: str, city: str, quantity: int, offers: pd.DataFrame,
     rows = []
     for _, offer in applicable.iterrows():
         units = max(int(quantity), int(offer["moq"])) if quantity else int(offer["moq"])
-        rows.append({
-            "supplier_id": offer["supplier_id"],
-            "supplier_name": offer["name"],
-            "unit_price_usd": round(float(offer["unit_price_usd"]), 2),
-            "moq": int(offer["moq"]),
-            "freight_cost_usd": round(float(offer["freight_cost_usd"]), 2),
-            "lead_time_days": round(float(offer["lead_time_days"]), 1),
-            "units": units,
-            "total_cost_usd": round(units * float(offer["unit_price_usd"])
-                                    + float(offer["freight_cost_usd"]), 2),
-            "chosen": offer["supplier_id"] == chosen_supplier,
-        })
+        rows.append(
+            {
+                "supplier_id": offer["supplier_id"],
+                "supplier_name": offer["name"],
+                "unit_price_usd": round(float(offer["unit_price_usd"]), 2),
+                "moq": int(offer["moq"]),
+                "freight_cost_usd": round(float(offer["freight_cost_usd"]), 2),
+                "lead_time_days": round(float(offer["lead_time_days"]), 1),
+                "units": units,
+                "total_cost_usd": round(
+                    units * float(offer["unit_price_usd"]) + float(offer["freight_cost_usd"]), 2
+                ),
+                "chosen": offer["supplier_id"] == chosen_supplier,
+            }
+        )
 
     return sorted(rows, key=lambda item: item["total_cost_usd"])
 
@@ -506,11 +541,13 @@ def solve_single_purchase(need: int, ceiling: int, offers: pd.DataFrame) -> dict
         quantities[offer_id] = problem.add_variable(f"qty_{offer_id}", 0, upper, cat="Integer")
         switches[offer_id] = problem.add_variable(f"use_{offer_id}", cat="Binary")
 
-    problem += pulp.lpSum([
-        offer["unit_price_usd"] * quantities[offer["offer_id"]]
-        + offer["freight_cost_usd"] * switches[offer["offer_id"]]
-        for _, offer in offers.iterrows()
-    ])
+    problem += pulp.lpSum(
+        [
+            offer["unit_price_usd"] * quantities[offer["offer_id"]]
+            + offer["freight_cost_usd"] * switches[offer["offer_id"]]
+            for _, offer in offers.iterrows()
+        ]
+    )
 
     problem += pulp.lpSum(quantities.values()) >= need
     problem += pulp.lpSum(quantities.values()) <= ceiling
@@ -530,7 +567,7 @@ def solve_single_purchase(need: int, ceiling: int, offers: pd.DataFrame) -> dict
 
     for _, offer in offers.iterrows():
         offer_id = offer["offer_id"]
-        quantity = int(round(quantities[offer_id].value() or 0))
+        quantity = round(quantities[offer_id].value() or 0)
         if quantity > 0:
             return {
                 "status": status,
@@ -543,10 +580,15 @@ def solve_single_purchase(need: int, ceiling: int, offers: pd.DataFrame) -> dict
     return {"status": status, "quantity": 0, "offer": None, "total_cost": 0.0}
 
 
-def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
-                          parts: pd.DataFrame, offers: pd.DataFrame,
-                          coverage: pd.DataFrame, suppliers: pd.DataFrame,
-                          budget=SCENARIO_BUDGET_USD) -> pd.DataFrame:
+def build_recommendations(
+    inventory: pd.DataFrame,
+    forecast: pd.DataFrame,
+    parts: pd.DataFrame,
+    offers: pd.DataFrame,
+    coverage: pd.DataFrame,
+    suppliers: pd.DataFrame,
+    budget=SCENARIO_BUDGET_USD,
+) -> pd.DataFrame:
     """Genera la recomendacion de compra para todo el catalogo.
 
     Entrada:
@@ -640,8 +682,9 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
             else:
                 reason = REASON_INFEASIBLE
         else:
-            solution = solve_single_purchase(max(desired, need),
-                                             max(max_allowed, desired, need), applicable)
+            solution = solve_single_purchase(
+                max(desired, need), max(max_allowed, desired, need), applicable
+            )
             if solution["quantity"] > 0:
                 decision = DECISION_BUY
                 quantity = solution["quantity"]
@@ -659,10 +702,13 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
             else:
                 reason = REASON_INFEASIBLE
 
-        exposure = stockout_cost(on_hand, monthly_demand,
-                                 float(record["lead_time_days"]),
-                                 part["criticality"],
-                                 float(record.get("issue_rate", 1.0) or 1.0))
+        exposure = stockout_cost(
+            on_hand,
+            monthly_demand,
+            float(record["lead_time_days"]),
+            part["criticality"],
+            float(record.get("issue_rate", 1.0) or 1.0),
+        )
         net_benefit = round(exposure - total_cost, 2)
 
         if decision == DECISION_BUY and net_benefit <= 0:
@@ -685,34 +731,36 @@ def build_recommendations(inventory: pd.DataFrame, forecast: pd.DataFrame,
             needs_review = 1
             reason = f"{reason}. {REASON_LOW_CONFIDENCE}"
 
-        rows.append({
-            "sku_id": sku,
-            "city_id": city,
-            "description": part["description"],
-            "criticality": part["criticality"],
-            "on_hand_qty": on_hand,
-            "inventory_min": inventory_min,
-            "inventory_max": inventory_max,
-            "demand_monthly": round(monthly_demand, 2),
-            "forecast_source": record.get("forecast_source", "estadistico"),
-            "shelf_life_days": shelf_life,
-            "target_qty": target,
-            "max_allowed_qty": max(0, max_allowed),
-            "coverage_months": coverage_months,
-            "decision": decision,
-            "recommended_qty": quantity,
-            "supplier_id": None if chosen is None else chosen["supplier_id"],
-            "supplier_name": None if chosen is None else chosen["name"],
-            "unit_price_usd": None if chosen is None else chosen["unit_price_usd"],
-            "freight_cost_usd": None if chosen is None else chosen["freight_cost_usd"],
-            "lead_time_days": None if chosen is None else round(chosen["lead_time_days"], 1),
-            "total_cost_usd": total_cost,
-            "alternatives_evaluated": len(applicable),
-            "confidence": confidence,
-            "stockout_cost_usd": exposure,
-            "net_benefit_usd": net_benefit,
-            "needs_review": needs_review,
-            "reason": reason,
-        })
+        rows.append(
+            {
+                "sku_id": sku,
+                "city_id": city,
+                "description": part["description"],
+                "criticality": part["criticality"],
+                "on_hand_qty": on_hand,
+                "inventory_min": inventory_min,
+                "inventory_max": inventory_max,
+                "demand_monthly": round(monthly_demand, 2),
+                "forecast_source": record.get("forecast_source", "estadistico"),
+                "shelf_life_days": shelf_life,
+                "target_qty": target,
+                "max_allowed_qty": max(0, max_allowed),
+                "coverage_months": coverage_months,
+                "decision": decision,
+                "recommended_qty": quantity,
+                "supplier_id": None if chosen is None else chosen["supplier_id"],
+                "supplier_name": None if chosen is None else chosen["name"],
+                "unit_price_usd": None if chosen is None else chosen["unit_price_usd"],
+                "freight_cost_usd": None if chosen is None else chosen["freight_cost_usd"],
+                "lead_time_days": None if chosen is None else round(chosen["lead_time_days"], 1),
+                "total_cost_usd": total_cost,
+                "alternatives_evaluated": len(applicable),
+                "confidence": confidence,
+                "stockout_cost_usd": exposure,
+                "net_benefit_usd": net_benefit,
+                "needs_review": needs_review,
+                "reason": reason,
+            }
+        )
 
     return apply_budget(pd.DataFrame(rows, columns=COLUMNS), budget)

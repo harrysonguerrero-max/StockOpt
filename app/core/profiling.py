@@ -51,17 +51,19 @@ def column_profile(series: pd.Series) -> dict:
     if pd.api.types.is_numeric_dtype(series):
         clean = series.dropna()
         if len(clean):
-            profile.update({
-                "mean": round(float(clean.mean()), 4),
-                "std": round(float(clean.std()), 4),
-                "min": round(float(clean.min()), 4),
-                "p25": round(float(clean.quantile(0.25)), 4),
-                "p50": round(float(clean.quantile(0.50)), 4),
-                "p75": round(float(clean.quantile(0.75)), 4),
-                "max": round(float(clean.max()), 4),
-                "zeros": int((clean == 0).sum()),
-                "negatives": int((clean < 0).sum()),
-            })
+            profile.update(
+                {
+                    "mean": round(float(clean.mean()), 4),
+                    "std": round(float(clean.std()), 4),
+                    "min": round(float(clean.min()), 4),
+                    "p25": round(float(clean.quantile(0.25)), 4),
+                    "p50": round(float(clean.quantile(0.50)), 4),
+                    "p75": round(float(clean.quantile(0.75)), 4),
+                    "max": round(float(clean.max()), 4),
+                    "zeros": int((clean == 0).sum()),
+                    "negatives": int((clean < 0).sum()),
+                }
+            )
     else:
         top = series.dropna().value_counts().head(5)
         profile["top_values"] = {str(k): int(v) for k, v in top.items()}
@@ -169,7 +171,7 @@ def outlier_summary(frame: pd.DataFrame) -> dict:
     return summary
 
 
-def duplicate_summary(frame: pd.DataFrame, keys: list = None) -> dict:
+def duplicate_summary(frame: pd.DataFrame, keys: list | None = None) -> dict:
     """Cuantifica los registros repetidos.
 
     Entrada:
@@ -223,7 +225,7 @@ def quality_flags(frame: pd.DataFrame, profile: dict) -> list:
     return flags
 
 
-def profile_dataset(frame: pd.DataFrame, name: str, keys: list = None) -> dict:
+def profile_dataset(frame: pd.DataFrame, name: str, keys: list | None = None) -> dict:
     """Genera el informe completo de una tabla.
 
     Entrada:

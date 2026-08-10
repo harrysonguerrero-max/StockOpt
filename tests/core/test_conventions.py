@@ -40,13 +40,11 @@ def test_no_hay_comentarios_de_almohadilla(path):
     source = path.read_text(encoding="utf-8")
     tokens = tokenize.generate_tokens(io.StringIO(source).readline)
     comments = [
-        (token.start[0], token.string.strip())
-        for token in tokens if token.type == tokenize.COMMENT
+        (token.start[0], token.string.strip()) for token in tokens if token.type == tokenize.COMMENT
     ]
 
     assert not comments, (
-        f"{path.name} tiene comentarios; la explicacion va en el docstring: "
-        f"{comments}"
+        f"{path.name} tiene comentarios; la explicacion va en el docstring: {comments}"
     )
 
 

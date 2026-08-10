@@ -21,7 +21,7 @@ from app.services.pipeline_report import (
     quality_report_path,
 )
 
-REQUIRED = list(DATASET_TABLES.values()) + [PATTERNS_TABLE, RECOMMENDATIONS_TABLE]
+REQUIRED = [*list(DATASET_TABLES.values()), PATTERNS_TABLE, RECOMMENDATIONS_TABLE]
 
 
 def main() -> None:
@@ -67,30 +67,38 @@ def main() -> None:
     cleaning, dataset, patterns, model, optimization = stages
 
     if cleaning["sources"]:
-        print(f"\nLimpieza: de {cleaning['rows_before']:,} filas crudas quedan "
-              f"{cleaning['rows_after']:,}, con {cleaning['adjusted']:,} filas "
-              f"ajustadas sin descartar")
+        print(
+            f"\nLimpieza: de {cleaning['rows_before']:,} filas crudas quedan "
+            f"{cleaning['rows_after']:,}, con {cleaning['adjusted']:,} filas "
+            f"ajustadas sin descartar"
+        )
 
-    print(f"\nDataset: {dataset['months']} meses "
-          f"({dataset['first_month']} a {dataset['last_month']}), "
-          f"{dataset['series']} series, "
-          f"{dataset['synthetic_rows']:,} filas simuladas de "
-          f"{dataset['synthetic_rows'] + dataset['real_rows']:,}")
+    print(
+        f"\nDataset: {dataset['months']} meses "
+        f"({dataset['first_month']} a {dataset['last_month']}), "
+        f"{dataset['series']} series, "
+        f"{dataset['synthetic_rows']:,} filas simuladas de "
+        f"{dataset['synthetic_rows'] + dataset['real_rows']:,}"
+    )
 
-    print("\nPatrones: " + " · ".join(
-        f"{count} {name}" for name, count in patterns["counts"].items()))
+    print(
+        "\nPatrones: " + " · ".join(f"{count} {name}" for name, count in patterns["counts"].items())
+    )
 
     if model["metrics"]:
-        print(f"\nModelo: {len(model['features'])} variables en "
-              f"{len(model['families'])} familias, "
-              f"WMAPE {model['metrics']['wmape']:.1%}")
+        print(
+            f"\nModelo: {len(model['features'])} variables en "
+            f"{len(model['families'])} familias, "
+            f"WMAPE {model['metrics']['wmape']:.1%}"
+        )
     else:
         print("\nModelo: sin metricas. Corre: python -m app.services.train_model")
 
-    print(f"\nOptimizacion: " + " · ".join(
-        f"{count} {decision}" for decision, count in optimization["counts"].items()))
-    print(f"  ahorro frente a la peor oferta aplicable: "
-          f"{optimization['saving_usd']:,.2f} USD")
+    print(
+        "\nOptimizacion: "
+        + " · ".join(f"{count} {decision}" for decision, count in optimization["counts"].items())
+    )
+    print(f"  ahorro frente a la peor oferta aplicable: {optimization['saving_usd']:,.2f} USD")
 
     print("\nGraficas generadas:")
     for name, path in document["charts"].items():

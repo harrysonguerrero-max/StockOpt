@@ -154,7 +154,7 @@ def table_catalog() -> list:
         }
         if available:
             frame = load_table(name)
-            entry["row_count"] = int(len(frame))
+            entry["row_count"] = len(frame)
             entry["column_count"] = int(frame.shape[1])
         catalog.append(entry)
     return catalog
@@ -186,15 +186,23 @@ def read_table(name: str, refresh: bool = False) -> dict:
     documented = {column["name"]: column for column in described["columns"]}
 
     columns = [
-        documented.get(column, {
-            "name": column, "type": "", "unit": "",
-            "origin": "", "description": "",
-        })
+        documented.get(
+            column,
+            {
+                "name": column,
+                "type": "",
+                "unit": "",
+                "origin": "",
+                "description": "",
+            },
+        )
         for column in frame.columns
     ]
 
-    rows = [[json_safe(value) for value in record]
-            for record in frame.itertuples(index=False, name=None)]
+    rows = [
+        [json_safe(value) for value in record]
+        for record in frame.itertuples(index=False, name=None)
+    ]
 
     return {
         "name": name,

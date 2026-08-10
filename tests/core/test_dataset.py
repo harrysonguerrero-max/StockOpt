@@ -3,12 +3,9 @@
 import numpy as np
 import pytest
 
-from app.services.dataset_builder import FILE_NAMES, build_all, publish
 from app.core.dataset import (
     CITY_IDS,
     DEMAND_HORIZON,
-    MIN_DAYS_PER_MONTH,
-    OUT_DIR,
     RAW_DIR,
     SEED,
     build_demand_history,
@@ -20,10 +17,18 @@ from app.core.dataset import (
     load_spine,
 )
 from app.core.validation import validate
+from app.services.dataset_builder import FILE_NAMES, build_all, publish
 
 FAMILIES = {
-    "Bearing", "Coupling", "Drive Belt", "Electrical", "Fastener",
-    "Filter", "Lubrication", "Seal & Gasket", "Sensor",
+    "Bearing",
+    "Coupling",
+    "Drive Belt",
+    "Electrical",
+    "Fastener",
+    "Filter",
+    "Lubrication",
+    "Seal & Gasket",
+    "Sensor",
 }
 
 
@@ -35,6 +40,7 @@ def tables():
 # --------------------------------------------------------------------------- #
 # Fuentes crudas
 # --------------------------------------------------------------------------- #
+
 
 def test_spine_loads_with_expected_scope():
     spine = load_spine(RAW_DIR)
@@ -54,6 +60,7 @@ def test_raw_files_are_not_modified_by_build():
 # --------------------------------------------------------------------------- #
 # Entrada 1: maestro de piezas
 # --------------------------------------------------------------------------- #
+
 
 def test_parts_master_scope_and_currency(tables):
     parts = tables["parts"]
@@ -75,6 +82,7 @@ def test_parts_master_shelf_life_covers_every_family(tables):
 # --------------------------------------------------------------------------- #
 # Entrada 2: inventario actual
 # --------------------------------------------------------------------------- #
+
 
 def test_inventory_has_one_row_per_sku_city(tables):
     inv = tables["inventory"]
@@ -101,6 +109,7 @@ def test_inventory_mixes_both_sides_of_the_reorder_point(tables):
 # --------------------------------------------------------------------------- #
 # Entrada 3: demanda historica
 # --------------------------------------------------------------------------- #
+
 
 def test_demand_preserves_observed_quantity(tables):
     """El agregado mensual no debe perder ni inventar consumo observado.
@@ -169,6 +178,7 @@ def test_cities_are_the_configured_ones(tables):
 # Entrada 4: proveedores y ofertas
 # --------------------------------------------------------------------------- #
 
+
 def test_suppliers_lead_times_are_ordered(tables):
     sup = tables["suppliers"]
     assert len(sup) == 5
@@ -185,7 +195,7 @@ def test_every_sku_has_at_least_two_offers(tables):
 
 def test_offer_price_never_below_cost(tables):
     offers, parts = tables["offers"], tables["parts"]
-    cost = dict(zip(parts["sku_id"], parts["unit_cost_usd"]))
+    cost = dict(zip(parts["sku_id"], parts["unit_cost_usd"], strict=False))
     assert all(r["unit_price_usd"] >= cost[r["sku_id"]] for _, r in offers.iterrows())
 
 
@@ -199,6 +209,7 @@ def test_offer_capacity_meets_peak_demand(tables):
 # --------------------------------------------------------------------------- #
 # Integridad referencial y validacion
 # --------------------------------------------------------------------------- #
+
 
 def test_referential_integrity_holds(tables):
     skus = set(tables["parts"]["sku_id"])
@@ -240,6 +251,7 @@ def test_validate_rejects_negative_price(tables):
 # Determinismo y escritura
 # --------------------------------------------------------------------------- #
 
+
 def test_synthetic_fields_are_deterministic():
     spine = load_spine(RAW_DIR)
     parts = build_parts_master(spine)
@@ -257,9 +269,10 @@ def test_synthetic_fields_are_deterministic():
 
 def test_publish_writes_every_file_and_is_idempotent(tmp_path, monkeypatch):
     import app.services.dataset_builder as pipeline
+
     monkeypatch.setattr(pipeline, "OUT_DIR", tmp_path)
     publish(build_all())
-    for filename in list(FILE_NAMES.values()) + ["data_dictionary.md"]:
+    for filename in [*list(FILE_NAMES.values()), "data_dictionary.md"]:
         assert (tmp_path / filename).exists(), filename
 
     snapshot = {f: (tmp_path / f).read_bytes() for f in FILE_NAMES.values()}
