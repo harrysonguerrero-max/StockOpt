@@ -110,22 +110,77 @@ capacidad, el inventario máximo y la vida útil. Devuelve `COMPRAR`,
 
 ## La interfaz
 
-**Cola de compras.** Una fila por pieza y ciudad, ordenadas poniendo delante lo
-que exige acción. La tabla se pinta al instante con la justificación
-determinista; cuando abres una fila, el sistema pide la redacción del modelo de
-lenguaje **solo para esa fila** y muestra un indicador mientras llega. Si el
-modelo tarda más de 12 segundos o falla, se queda la versión determinista.
+Tres vistas. La pantalla abre arriba y se baja al detalle, en lugar de empezar
+por la tabla completa.
 
-Cada fila lleva un medidor que muestra las existencias frente al mínimo. Al
-abrirla aparecen la justificación, los supuestos aplicados, el contacto del
-proveedor y los botones de decisión.
+**El turno.** Una frase resume el día —cuántas decisiones hay abiertas, cuánto
+suman y cuántas el sistema no pudo resolver— con las cifras dentro del texto:
+cada una filtra al pulsarla. Debajo, dos columnas, una por planta. Que la
+decisión sea por pieza y por ciudad no hace falta escribirlo: es la estructura
+de la página.
 
-El flujo de aprobación es `Pendiente → Aprobado → Contactado proveedor → Orden
-confirmada`, con rechazo desde cualquier punto previo. Las transiciones se
-validan en el servidor y cada cambio queda auditado. Las aprobaciones viven en
-SQLite y sobreviven a regenerar el dataset.
+Dentro de cada planta, tres bandas ordenadas por quién debe actuar: *el sistema
+no puede decidir esto*, *listo para aprobar* y *sin acción*, esta última plegada.
+Cada caso es una tarjeta que se lee sola: qué pieza, cómo está el stock —con el
+medidor de existencias frente al mínimo—, qué hay que hacer, por qué, y a quién
+comprarle.
 
-**Modelo de demanda.** Métricas de validación y las gráficas del entrenamiento.
+**El caso.** Al abrir una tarjeta, un panel cuenta la decisión en el orden en
+que se forma:
+
+1. *Qué consume* — la serie mensual real, con los meses simulados en trazo
+   discontinuo para no presentarlos como observación.
+2. *Qué va a consumir* — la proyección con su rango probable, el patrón y la
+   confianza.
+3. *Cuánto necesita en bodega* — el medidor, y de dónde sale el mínimo.
+4. *A quién comprarle* — los proveedores que compitieron, con lo que gana el
+   elegido.
+
+Los casos marcados `REVISAR` no reciben plantilla de recomendación sino de
+pregunta: las dos salidas enfrentadas con su costo, porque ahí el sistema no
+decide.
+
+El flujo `Pendiente → Aprobado → Contactado proveedor → Orden confirmada` se
+dibuja como secuencia, con el botón de la acción siguiente pegado a la barra.
+El rechazo sale desde cualquier punto previo. Las transiciones se validan en el
+servidor, cada cambio queda auditado, y las aprobaciones viven en SQLite y
+sobreviven a regenerar el dataset.
+
+La justificación redactada por el modelo de lenguaje queda plegada al final y
+solo se pide al abrirla, para una fila. Si falla o tarda, se queda la versión
+determinista.
+
+**Todas las piezas.** La tabla leída: nueve columnas con el dato traducido a lo
+que significa —el medidor en vez de tres números, la confianza en tramos, el
+estado en la palabra que usa una persona—, cualquiera de ellas ordenable y con
+la cabecera fija al desplazar. El pie recalcula con el filtro puesto, que es lo
+que la convierte en una consulta: al dejar solo criticidad A responde cuántas
+compras son y cuánto cuestan.
+
+**Datos en crudo.** Las mismas cuarenta filas con los treinta y siete campos del
+registro, tal como salen del pipeline: la cabecera es el nombre del campo y la
+celda es su valor, sin traducir ni redondear. `NO_COMPRAR` se lee `NO_COMPRAR`,
+la confianza es `0.49` y el plazo `14.5`. Los nulos aparecen como `·` para
+distinguirlos de un cero.
+
+Las dos existen a propósito. El turno y la tabla leída interpretan el dato
+—eligen qué enseñar, en qué unidad y con qué palabra—, y precisamente por eso
+hace falta un sitio donde comprobar contra qué se hizo esa interpretación. Al
+crudo solo se le añade lo mecánico: cabecera fija, columna de la pieza fija al
+desplazar a lo ancho, ordenar por cualquier campo —con los nulos siempre al
+final, en los dos sentidos— y los filtros. El código de pieza abre el caso; el
+resto de la fila se deja seleccionar y copiar.
+
+Cada tabla mantiene sus propios filtros: acotar el crudo para inspeccionar un
+caso no deja la otra pantalla acotada al volver. Y cada una descarga el recorte
+que tiene en pantalla, con sus columnas, a diferencia del enlace de la barra
+superior, que baja las cuarenta con las que elige el servidor.
+
+**Modelo.** Las dos gráficas que responden si el modelo aporta algo; el resto
+del diagnóstico, detrás de un plegable. Se llega desde el paso 2 de un caso.
+
+> La versión anterior de la interfaz queda congelada en [`app/web_v1/`](app/web_v1/),
+> sin servir, para poder comparar.
 
 ---
 
@@ -137,6 +192,7 @@ SQLite y sobreviven a regenerar el dataset.
 | `GET /api/v1/recommendations` | Cola completa con resumen y filtros |
 | `POST /api/v1/recommendations/state` | Aplica una decisión del comprador |
 | `GET /api/v1/recommendations/{sku}/{ciudad}/explanation` | Justificación de **una** fila, redactada por el LLM |
+| `GET /api/v1/recommendations/{sku}/{ciudad}/history` | Serie de consumo marcada por origen, proyección y política |
 | `GET /api/v1/recommendations/audit` | Historial de decisiones |
 | `GET /api/v1/recommendations/export` | Descarga la cola en CSV |
 | `GET /api/v1/training/metrics` | Métricas del último entrenamiento |

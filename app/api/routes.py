@@ -22,6 +22,7 @@ from app.services.recommendations import (
     build_queue,
     build_summary,
     dataset_is_available,
+    demand_series,
     filter_options,
     find_recommendation,
 )
@@ -151,6 +152,33 @@ def read_explanation(sku_id: str, city_id: str):
             status_code=404, detail=f"No existe la recomendacion {sku_id} / {city_id}"
         )
     return explain_with_model(record)
+
+
+@router.get("/recommendations/{sku_id}/{city_id}/history")
+def read_history(sku_id: str, city_id: str, months: int = 48):
+    """Devuelve el consumo pasado y la proyeccion de una pieza en una ciudad.
+
+    Entrada:
+        sku_id: identificador de la pieza.
+        city_id: identificador de la ciudad.
+        months: cuantos meses de historia devolver.
+
+    Salida:
+        Diccionario con la serie mensual marcada por origen, la proyeccion con
+        sus cuartiles y los parametros de la politica de inventario.
+
+    Funcionalidad:
+        Sostiene el primer paso de la narrativa de un caso. Sin la serie, la
+        demanda mensual es un numero que hay que creer; con ella el comprador ve
+        de donde sale y si el patron que declara el sistema se corresponde con
+        lo que la planta consumio.
+    """
+    series = demand_series(sku_id, city_id, months=months)
+    if series is None:
+        raise HTTPException(
+            status_code=404, detail=f"No hay historico de {sku_id} / {city_id}"
+        )
+    return series
 
 
 @router.get("/recommendations/audit")

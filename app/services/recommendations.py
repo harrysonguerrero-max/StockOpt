@@ -39,6 +39,8 @@ SOURCES = [
     "cities.csv",
     "supplier_offers.csv",
     "supplier_coverage.csv",
+    "demand_history.csv",
+    "demand_forecast.csv",
 ]
 
 _cache = {}
@@ -291,6 +293,78 @@ def filter_options(queue: list) -> dict:
         "states": WORKFLOW_STATES + [STATE_REJECTED],
         "criticalities": sorted({item["criticality"] for item in queue}),
         "rejection_reasons": REJECTION_REASONS,
+    }
+
+
+def demand_series(sku_id: str, city_id: str, months: int = 48,
+                  refresh: bool = False) -> dict:
+    """Reune el consumo pasado y la proyeccion de una pieza en una ciudad.
+
+    Entrada:
+        sku_id: identificador de la pieza.
+        city_id: identificador de la ciudad.
+        months: cuantos meses de historia devolver, contando desde el mas
+            reciente hacia atras.
+        refresh: fuerza recargar los archivos del pipeline.
+
+    Salida:
+        Diccionario con la serie mensual, la proyeccion con sus cuartiles y los
+        parametros de la politica de inventario. None si la pieza no existe.
+
+    Funcionalidad:
+        Es lo que permite mostrar la decision como una consecuencia y no como un
+        numero suelto: primero lo que la planta consumio de verdad, despues lo
+        que se espera que consuma, y con eso el minimo que debe haber en bodega.
+
+        Cada mes viaja con su marca de sintetico, de modo que la interfaz pueda
+        distinguir el historico real del que genero el build para dar
+        profundidad al entrenamiento. Taparlo seria presentar como observacion
+        algo que es un supuesto.
+    """
+    sources = load_sources(refresh)
+
+    history = sources["demand_history.csv"]
+    rows = history[(history["sku_id"] == sku_id) & (history["city_id"] == city_id)]
+    if rows.empty:
+        return None
+    rows = rows.sort_values("period_month").tail(months)
+
+    forecast = sources["demand_forecast.csv"]
+    projection = forecast[(forecast["sku_id"] == sku_id)
+                          & (forecast["city_id"] == city_id)]
+    horizon = projection.iloc[0].to_dict() if not projection.empty else {}
+
+    def number(key, digits=2):
+        value = horizon.get(key)
+        return None if value is None or pd.isna(value) else round(float(value), digits)
+
+    return {
+        "sku_id": sku_id,
+        "city_id": city_id,
+        "history": [
+            {
+                "month": record["period_month"],
+                "qty": int(record["qty_issued"]),
+                "is_synthetic": int(record["is_synthetic"]),
+            }
+            for record in rows.to_dict(orient="records")
+        ],
+        "forecast": {
+            "q25": number("forecast_q25"),
+            "q50": number("forecast_q50"),
+            "q75": number("forecast_q75"),
+            "pattern": horizon.get("pattern"),
+            "method": horizon.get("method"),
+            "source": horizon.get("forecast_source"),
+            "confidence": number("confidence_final"),
+            "wmape_backtest": number("wmape_backtest", 3),
+        },
+        "policy": {
+            "inventory_min": number("inventory_min", 0),
+            "safety_stock": number("safety_stock"),
+            "demand_lead_time": number("demand_lead_time"),
+            "lead_time_days": number("lead_time_days", 1),
+        },
     }
 
 

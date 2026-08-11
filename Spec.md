@@ -519,18 +519,40 @@ Genera una explicación clara, breve y orientada a compras que:
 interfaz estática (`app/web/`). Un solo proceso y una sola imagen de contenedor,
 en lugar de levantar Streamlit aparte.
 
-**Concepto de pantalla: una cola de decisiones, no un tablero.** El usuario es
-un comprador que debe despachar 40 casos, así que la pantalla se ordena poniendo
-delante lo que exige acción (revisiones y compras) y al final lo que no requiere
-nada. La densidad es deliberada: cifras tabulares, tipografía monoespaciada para
-los datos y filas compactas, como un instrumento de trabajo.
+**Concepto de pantalla: se abre arriba y se baja al detalle.** La primera
+versión abría en el nivel más granular que tenía —cuarenta filas por siete
+columnas— y no ofrecía ninguno por encima. De ahí salía todo lo demás: la tabla
+completa de entrada, seis filtros antes de saber qué se quiere filtrar, y la
+necesidad de explicar con palabras que cada decisión es por pieza y por ciudad.
 
-**Elemento distintivo: el medidor de existencias.** Cada fila lleva una barra que
-muestra el stock actual sobre la escala del máximo permitido, con una marca en el
-punto mínimo. Codifica de un vistazo la tensión que decide cada caso — si la
-barra no llega a la marca, hay que reponer — sin obligar a leer tres números.
-Los colores de estado del spec se usan solo aquí y en las etiquetas de decisión,
+Ahora hay tres niveles. **El turno** resume el día en una frase con las cifras
+dentro del texto y reparte los casos en dos columnas, una por planta: el grano
+de la decisión deja de necesitar explicación porque es la estructura de la
+página. Dentro de cada planta, tres bandas ordenadas por quién debe actuar, y la
+primera dice de forma explícita que ahí hace falta una persona. **El caso** es un
+panel propio que cuenta la decisión en el orden en que se forma: qué consume,
+qué va a consumir, cuánto necesita en bodega y a quién comprarle. **La tabla**
+completa sigue existiendo como destino, no como portada.
+
+**Elemento distintivo: el medidor de existencias.** Una barra que muestra el
+stock actual sobre la escala del máximo permitido, con una marca en el punto
+mínimo. Codifica de un vistazo la tensión que decide cada caso —si la barra no
+llega a la marca, hay que reponer— sin obligar a leer tres números. Era la
+tercera columna de una tabla de siete; ahora es el centro de cada tarjeta. Los
+colores de estado del spec se usan solo aquí y en las etiquetas de decisión,
 nunca como decoración.
+
+**Los casos `REVISAR` no reciben plantilla de recomendación sino de pregunta.**
+Son el 39 % de lo accionable y antes se veían igual que una compra, con una
+etiqueta ámbar. Ahora enfrentan las dos salidas con su costo —comprar el lote
+mínimo con su sobrestock, o no comprar con su riesgo de quiebre— porque ahí el
+sistema no decide y fingir que sí lo hace es lo que confundía.
+
+**El dato generado va marcado, no tapado.** Vida útil, lote mínimo, flete y
+capacidad los produce el build con semilla fija (§11.3). Llevan un distintivo
+donde aparecen, y los meses de histórico simulado se dibujan en trazo
+discontinuo. Presentar como observación algo que es un supuesto era la parte
+menos defendible de la pantalla anterior.
 
 **Flujo de estados** con transiciones validadas en servidor:
 `Pendiente aprobación → Aprobado → Contactado proveedor → Orden confirmada`,

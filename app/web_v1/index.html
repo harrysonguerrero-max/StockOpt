@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockOpt · Cola de abastecimiento</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__brand">
+    <span class="topbar__mark" aria-hidden="true"></span>
+    <div>
+      <h1>StockOpt</h1>
+      <p class="topbar__context" id="context">Abastecimiento de refacciones</p>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Secciones">
+    <button class="tab tab--on" data-view="queue" type="button">Cola de compras</button>
+    <button class="tab" data-view="model" type="button">Modelo de demanda</button>
+  </nav>
+  <div class="topbar__actions">
+    <button class="toggle" id="ai-toggle" type="button" role="switch" aria-checked="true">
+      <span class="toggle__track"><span class="toggle__knob"></span></span>
+      <span class="toggle__text">Redacción con IA</span>
+    </button>
+    <a class="btn btn--ghost" href="/api/v1/recommendations/export">Descargar CSV</a>
+    <button class="btn btn--ghost" id="refresh" type="button">Recargar datos</button>
+  </div>
+</header>
+
+<main id="view-queue">
+  <section class="strip" aria-label="Resumen de la cola">
+    <div class="strip__item">
+      <span class="label">Por decidir</span>
+      <strong class="figure" id="s-pending">—</strong>
+      <span class="sub" id="s-total"></span>
+    </div>
+    <div class="strip__item">
+      <span class="label">Comprar</span>
+      <strong class="figure figure--go" id="s-buy">—</strong>
+      <span class="sub" id="s-units"></span>
+    </div>
+    <div class="strip__item">
+      <span class="label">Revisar</span>
+      <strong class="figure figure--hold" id="s-review">—</strong>
+      <span class="sub">lote mínimo excede el máximo</span>
+    </div>
+    <div class="strip__item">
+      <span class="label">Sin acción</span>
+      <strong class="figure" id="s-none">—</strong>
+      <span class="sub">inventario suficiente</span>
+    </div>
+    <div class="strip__item strip__item--money">
+      <span class="label">Inversión recomendada</span>
+      <strong class="figure" id="s-money">—</strong>
+      <span class="sub">solo filas por comprar</span>
+    </div>
+  </section>
+
+  <section class="filters" aria-label="Filtros">
+    <label class="field field--grow">
+      <span class="label">Buscar pieza</span>
+      <input type="search" id="f-search" placeholder="Código o descripción" autocomplete="off">
+    </label>
+    <label class="field">
+      <span class="label">Planta</span>
+      <select id="f-city"><option value="">Todas</option></select>
+    </label>
+    <label class="field">
+      <span class="label">Decisión</span>
+      <select id="f-decision"><option value="">Todas</option></select>
+    </label>
+    <label class="field">
+      <span class="label">Estado</span>
+      <select id="f-state"><option value="">Todos</option></select>
+    </label>
+    <label class="field">
+      <span class="label">Criticidad</span>
+      <select id="f-crit"><option value="">Todas</option></select>
+    </label>
+    <label class="field field--check">
+      <input type="checkbox" id="f-review">
+      <span>Solo revisión humana</span>
+    </label>
+  </section>
+
+  <div class="tablewrap">
+    <table class="queue">
+      <thead>
+        <tr>
+          <th scope="col">Pieza</th>
+          <th scope="col">Planta</th>
+          <th scope="col" class="col-gauge">Existencias frente al mínimo</th>
+          <th scope="col" class="num">Decisión</th>
+          <th scope="col">Proveedor</th>
+          <th scope="col" class="num">Costo</th>
+          <th scope="col">Estado</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="empty" id="empty" hidden>Ninguna fila coincide con los filtros.</p>
+  </div>
+</main>
+
+<main id="view-model" hidden>
+  <section class="strip" aria-label="Resumen del entrenamiento">
+    <div class="strip__item">
+      <span class="label">Error del modelo</span>
+      <strong class="figure figure--go" id="m-wmape">—</strong>
+      <span class="sub">WMAPE en validación</span>
+    </div>
+    <div class="strip__item">
+      <span class="label">Mejora vs. último mes</span>
+      <strong class="figure" id="m-naive">—</strong>
+      <span class="sub">referencia trivial</span>
+    </div>
+    <div class="strip__item">
+      <span class="label">Mejora vs. promedio móvil</span>
+      <strong class="figure figure--hold" id="m-ma">—</strong>
+      <span class="sub">método en producción</span>
+    </div>
+    <div class="strip__item">
+      <span class="label">Sesgo</span>
+      <strong class="figure" id="m-bias">—</strong>
+      <span class="sub">unidades por mes</span>
+    </div>
+    <div class="strip__item strip__item--money">
+      <span class="label">Series entrenadas</span>
+      <strong class="figure" id="m-series">—</strong>
+      <span class="sub" id="m-split"></span>
+    </div>
+  </section>
+
+  <div class="note note--wide" id="m-verdict"></div>
+
+  <div class="charts" id="charts"></div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<template id="tpl-detail">
+  <tr class="detail">
+    <td colspan="7">
+      <div class="detail__grid">
+        <div class="detail__why">
+          <p class="label">Por qué</p>
+          <p class="detail__headline"></p>
+          <p class="detail__body"></p>
+          <p class="label label--spaced">Supuestos aplicados</p>
+          <ul class="assumptions"></ul>
+        </div>
+        <div class="detail__side">
+          <p class="label">Proveedor</p>
+          <dl class="kv"></dl>
+          <p class="label label--spaced">Acciones</p>
+          <div class="actions"></div>
+          <div class="alts-wrap" hidden>
+            <p class="label label--spaced">Proveedores evaluados</p>
+            <table class="alts"><tbody></tbody></table>
+          </div>
+        </div>
+      </div>
+    </td>
+  </tr>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
