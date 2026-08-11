@@ -33,8 +33,13 @@ def _months(n=MONTHS):
 
 @pytest.fixture(scope="module")
 def published():
-    names = ["demand_history.csv", "demand_patterns.csv", "parts_master.csv",
-             "suppliers.csv", "inventory_current.csv"]
+    names = [
+        "demand_history.csv",
+        "demand_patterns.csv",
+        "parts_master.csv",
+        "suppliers.csv",
+        "inventory_current.csv",
+    ]
     return {name: pd.read_csv(OUT_DIR / name) for name in names}
 
 
@@ -180,12 +185,16 @@ def test_inventory_minimum_has_no_systematic_bias_against_reorder_point(publishe
 
 def test_forecast_is_deterministic(published):
     first = build_demand_forecast(
-        published["demand_history.csv"], published["demand_patterns.csv"],
-        published["parts_master.csv"], published["suppliers.csv"],
+        published["demand_history.csv"],
+        published["demand_patterns.csv"],
+        published["parts_master.csv"],
+        published["suppliers.csv"],
     )
     second = build_demand_forecast(
-        published["demand_history.csv"], published["demand_patterns.csv"],
-        published["parts_master.csv"], published["suppliers.csv"],
+        published["demand_history.csv"],
+        published["demand_patterns.csv"],
+        published["parts_master.csv"],
+        published["suppliers.csv"],
     )
     assert first.equals(second)
 

@@ -11,7 +11,7 @@ Funcionalidad:
 import pandas as pd
 
 from app.core import optimization as config
-from app.core.dataset import CITY_IDS, OUT_DIR
+from app.core.dataset import OUT_DIR
 from app.core.optimization import build_recommendations
 
 OUTPUT_NAME = "purchase_recommendations.csv"
@@ -64,20 +64,49 @@ def main() -> None:
     buy = recommendations[recommendations["decision"] == config.DECISION_BUY]
     hold = recommendations[recommendations["decision"] == config.DECISION_HOLD]
     review = recommendations[recommendations["decision"] == config.DECISION_REVIEW]
+    deferred = recommendations[recommendations["decision"] == config.DECISION_DEFERRED]
 
     print(f"Recomendaciones generadas en {OUT_DIR / OUTPUT_NAME}")
     print(f"  {len(recommendations)} combinaciones evaluadas\n")
     print(f"  {config.DECISION_BUY:<12} {len(buy):>3}")
     print(f"  {config.DECISION_HOLD:<12} {len(hold):>3}")
-    print(f"  {config.DECISION_REVIEW:<12} {len(review):>3}\n")
+    print(f"  {config.DECISION_REVIEW:<12} {len(review):>3}")
+    print(f"  {config.DECISION_DEFERRED:<12} {len(deferred):>3}\n")
+
+    if config.SCENARIO_BUDGET_USD is not None:
+        print(f"Presupuesto de la corrida: {config.SCENARIO_BUDGET_USD:,.2f} USD")
+        print(
+            f"  comprometido {buy['total_cost_usd'].sum():,.2f} USD "
+            f"({buy['total_cost_usd'].sum() / config.SCENARIO_BUDGET_USD:.0%})"
+        )
+        if len(buy):
+            avoided = buy["stockout_cost_usd"].sum()
+            print(
+                f"  evita {avoided:,.2f} USD de quiebre "
+                f"({avoided / buy['total_cost_usd'].sum():.0f}x lo invertido)"
+            )
+        if len(deferred):
+            print(
+                f"  aplazado {deferred['total_cost_usd'].sum():,.2f} USD en "
+                f"{len(deferred)} reposiciones que exponen "
+                f"{deferred['stockout_cost_usd'].sum():,.2f} USD de quiebre"
+            )
+        print()
+
+    print("Costo de quiebre asumido por dia sin la pieza:")
+    for level, cost in config.STOCKOUT_COST_PER_DAY_USD.items():
+        print(f"  criticidad {level}: {cost:,.2f} USD")
+    print("  parametro de negocio: validar con mantenimiento antes de usarlo\n")
 
     if len(buy):
         print(f"Inversion total recomendada: {buy['total_cost_usd'].sum():,.2f} USD")
         print(f"Unidades totales: {int(buy['recommended_qty'].sum())}\n")
         print("Reparto por proveedor:")
         for supplier, group in buy.groupby("supplier_name"):
-            print(f"  {supplier:<18} {len(group):>2} ordenes  "
-                  f"{group['total_cost_usd'].sum():>10,.2f} USD")
+            print(
+                f"  {supplier:<18} {len(group):>2} ordenes  "
+                f"{group['total_cost_usd'].sum():>10,.2f} USD"
+            )
 
     print("\nMotivos de no comprar:")
     for reason, count in hold["reason"].value_counts().items():
@@ -92,8 +121,16 @@ def main() -> None:
     print(f"\n{len(flagged)} filas marcadas para revision humana")
 
     print("\nEjemplo de recomendaciones de compra:")
-    columns = ["sku_id", "city_id", "on_hand_qty", "inventory_min",
-               "recommended_qty", "supplier_id", "total_cost_usd", "lead_time_days"]
+    columns = [
+        "sku_id",
+        "city_id",
+        "on_hand_qty",
+        "inventory_min",
+        "recommended_qty",
+        "supplier_id",
+        "total_cost_usd",
+        "lead_time_days",
+    ]
     print(buy.nlargest(8, "total_cost_usd")[columns].to_string(index=False))
 
 

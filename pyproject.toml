@@ -24,3 +24,44 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.ruff]
+# 100 columnas es el ancho con el que ya estaba escrito el proyecto: solo 48
+# lineas lo superan, frente a 166 que superarian el default de 88. Bajar a 88
+# reformatearia codigo correcto sin ganar legibilidad.
+line-length = 100
+target-version = "py310"
+# docs guarda specs y planes de sesiones pasadas: son un registro historico y
+# reformatear los fragmentos de codigo que citan reescribiria lo que se decidio
+# entonces. artifacts y app/data son salidas generadas, no fuente.
+extend-exclude = ["artifacts", "app/data", "docs"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle
+    "W",     # espacios en blanco
+    "F",     # pyflakes: nombres sin usar, imports muertos
+    "I",     # orden de imports
+    "UP",    # sintaxis moderna de Python
+    "B",     # bugbear: fallos sutiles
+    "C4",    # comprensiones
+    "SIM",   # simplificaciones
+    "ISC",   # concatenacion implicita de cadenas
+    "PERF",  # rendimiento
+    "FURB",  # modernizaciones
+    "RUF",   # reglas propias de ruff
+]
+# BLE001 y S110 quedan fuera a proposito: las capturas amplias de este proyecto
+# son barreras de respaldo deliberadas y documentadas en su docstring. El agente
+# de lenguaje devuelve la redaccion por plantilla ante cualquier fallo del
+# proveedor, y la sonda del solver tiene que poder fallar sin tumbar el arranque.
+# Convertirlas en capturas concretas haria que un error nuevo del proveedor
+# rompiera la pantalla en lugar de degradarla.
+
+[tool.ruff.lint.per-file-ignores]
+# Los tests declaran datos de ejemplo largos y comparan cifras literales.
+"tests/**" = ["E501"]
+# Los rotulos de las graficas usan notacion matematica de verdad: sigma y mu
+# para el coeficiente de variacion, y el signo menos tipografico en las cifras.
+# Sustituirlos por sus homoglifos ASCII empeoraria la grafica que ve el usuario.
+"app/services/charts.py" = ["RUF001"]

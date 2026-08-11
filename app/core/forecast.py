@@ -17,7 +17,12 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
-from app.core.inventory import Z_BY_CRITICALITY, inventory_minimum, planning_lead_time
+from app.core.inventory import (
+    DAYS_PER_MONTH,
+    Z_BY_CRITICALITY,
+    inventory_minimum,
+    planning_lead_time,
+)
 from app.core.patterns import (
     INSUFFICIENT,
     MIN_PERIODS_SEASONAL,
@@ -41,12 +46,51 @@ ACCURACY_PENALTY_MEDIUM = 0.85
 ACCURACY_PENALTY_HIGH = 0.65
 
 COLUMNS = [
-    "sku_id", "city_id", "pattern", "method", "n_periods",
-    "forecast_q25", "forecast_q50", "forecast_q75",
-    "wmape_backtest", "confidence_pattern", "confidence_final",
-    "lead_time_days", "demand_lead_time", "safety_stock", "inventory_min",
-    "forecast_model", "forecast_source", "needs_review",
+    "sku_id",
+    "city_id",
+    "pattern",
+    "method",
+    "n_periods",
+    "forecast_q25",
+    "forecast_q50",
+    "forecast_q75",
+    "wmape_backtest",
+    "confidence_pattern",
+    "confidence_final",
+    "lead_time_days",
+    "demand_lead_time",
+    "safety_stock",
+    "inventory_min",
+    "issue_rate",
+    "forecast_model",
+    "forecast_source",
+    "needs_review",
 ]
+
+
+def issue_rate(group) -> float:
+    """Mide con que frecuencia se pide realmente una pieza.
+
+    Entrada:
+        group: historico mensual de una serie, con la columna issue_events.
+
+    Salida:
+        Proporcion de dias del mes en que la pieza registra algun consumo,
+        entre 0 y 1.
+
+    Funcionalidad:
+        El consumo de refacciones es intermitente: la mediana de estas series
+        tiene movimiento solo once dias de cada treinta. Esa frecuencia es la
+        que convierte un dia sin existencias en un dia que cuesta dinero, porque
+        quedarse sin una pieza que nadie pide ese dia no interrumpe nada.
+
+        Sin este dato, cualquier valoracion del quiebre supone que la pieza hace
+        falta todos los dias y sobreestima el riesgo por un factor de tres.
+    """
+    if "issue_events" not in group or group.empty:
+        return 1.0
+    days = float(group["issue_events"].mean())
+    return round(min(1.0, max(0.0, days / DAYS_PER_MONTH)), 4)
 
 
 def _spread_from_std(center: float, std: float) -> tuple:
@@ -98,9 +142,11 @@ def forecast_volatile(values: np.ndarray) -> tuple:
         para que unos pocos meses extremos no arrastren la proyeccion.
     """
     window = values[-MOVING_WINDOW:]
-    return (float(np.percentile(window, 25)),
-            float(np.percentile(window, 50)),
-            float(np.percentile(window, 75)))
+    return (
+        float(np.percentile(window, 25)),
+        float(np.percentile(window, 50)),
+        float(np.percentile(window, 75)),
+    )
 
 
 def forecast_trend(values: np.ndarray) -> tuple:
@@ -145,7 +191,9 @@ def forecast_seasonal(values: np.ndarray) -> tuple:
         with warning_control.catch_warnings():
             warning_control.simplefilter("ignore")
             model = ExponentialSmoothing(
-                values, trend=None, seasonal="add",
+                values,
+                trend=None,
+                seasonal="add",
                 seasonal_periods=SEASONAL_PERIOD,
                 initialization_method="estimated",
             ).fit()
@@ -249,9 +297,13 @@ def adjust_confidence(confidence: float, wmape: float) -> float:
     return round(float(np.clip(confidence * factor, 0.0, 1.0)), 2)
 
 
-def build_demand_forecast(demand: pd.DataFrame, patterns: pd.DataFrame,
-                          parts: pd.DataFrame, suppliers: pd.DataFrame,
-                          override_demand: pd.DataFrame = None) -> pd.DataFrame:
+def build_demand_forecast(
+    demand: pd.DataFrame,
+    patterns: pd.DataFrame,
+    parts: pd.DataFrame,
+    suppliers: pd.DataFrame,
+    override_demand: pd.DataFrame = None,
+) -> pd.DataFrame:
     """Proyecta todas las series y calcula su inventario minimo.
 
     Entrada:
@@ -268,11 +320,11 @@ def build_demand_forecast(demand: pd.DataFrame, patterns: pd.DataFrame,
         Para cada serie proyecta la demanda mensual con su metodo, valida el
         metodo contra los ultimos meses conocidos, ajusta la confianza segun ese
         error y traduce el resultado a la demanda esperada durante el tiempo de
-        entrega mas su stock de seguridad. Marca para revision humana las series
+        entrega mas su colchon de seguridad. Marca para revision humana las series
         de baja confianza y las que no admiten proyeccion automatica.
     """
     lead_time, lead_time_std = planning_lead_time(suppliers)
-    criticality = dict(zip(parts["sku_id"], parts["criticality"]))
+    criticality = dict(zip(parts["sku_id"], parts["criticality"], strict=False))
     pattern_by_series = {
         (row["sku_id"], row["city_id"]): (row["pattern"], row["confidence"])
         for _, row in patterns.iterrows()
@@ -280,18 +332,13 @@ def build_demand_forecast(demand: pd.DataFrame, patterns: pd.DataFrame,
 
     overrides = {}
     if override_demand is not None:
-        overrides = {
-            (row["sku_id"], row["city_id"]): row
-            for _, row in override_demand.iterrows()
-        }
+        overrides = {(row["sku_id"], row["city_id"]): row for _, row in override_demand.iterrows()}
 
     ordered = demand.sort_values(["sku_id", "city_id", "period_month"])
     rows = []
     for (sku, city), group in ordered.groupby(["sku_id", "city_id"], sort=True):
         values = group["qty_issued"].to_numpy(dtype=float)
-        pattern, base_confidence = pattern_by_series.get(
-            (sku, city), (INSUFFICIENT, 0.0)
-        )
+        pattern, base_confidence = pattern_by_series.get((sku, city), (INSUFFICIENT, 0.0))
 
         q25, q50, q75 = forecast_series(values, pattern)
         wmape = backtest_wmape(values, pattern)
@@ -312,25 +359,28 @@ def build_demand_forecast(demand: pd.DataFrame, patterns: pd.DataFrame,
             q50, float(np.std(values, ddof=0)), lead_time, lead_time_std, z
         )
 
-        rows.append({
-            "sku_id": sku,
-            "city_id": city,
-            "pattern": pattern,
-            "method": RECOMMENDED_MODEL[pattern],
-            "n_periods": len(values),
-            "forecast_q25": round(q25, 2),
-            "forecast_q50": round(q50, 2),
-            "forecast_q75": round(q75, 2),
-            "wmape_backtest": None if np.isnan(wmape) else round(wmape, 3),
-            "confidence_pattern": round(float(base_confidence), 2),
-            "confidence_final": confidence,
-            "lead_time_days": round(lead_time, 1),
-            "demand_lead_time": round(demand_lead_time, 2),
-            "safety_stock": round(buffer, 2),
-            "inventory_min": minimum,
-            "forecast_model": None if model_value is None else round(float(model_value), 2),
-            "forecast_source": source,
-            "needs_review": int(confidence < 0.5 or pattern == INSUFFICIENT),
-        })
+        rows.append(
+            {
+                "sku_id": sku,
+                "city_id": city,
+                "pattern": pattern,
+                "method": RECOMMENDED_MODEL[pattern],
+                "n_periods": len(values),
+                "forecast_q25": round(q25, 2),
+                "forecast_q50": round(q50, 2),
+                "forecast_q75": round(q75, 2),
+                "wmape_backtest": None if np.isnan(wmape) else round(wmape, 3),
+                "confidence_pattern": round(float(base_confidence), 2),
+                "confidence_final": confidence,
+                "lead_time_days": round(lead_time, 1),
+                "demand_lead_time": round(demand_lead_time, 2),
+                "safety_stock": round(buffer, 2),
+                "inventory_min": minimum,
+                "issue_rate": issue_rate(group),
+                "forecast_model": None if model_value is None else round(float(model_value), 2),
+                "forecast_source": source,
+                "needs_review": int(confidence < 0.5 or pattern == INSUFFICIENT),
+            }
+        )
 
     return pd.DataFrame(rows, columns=COLUMNS)

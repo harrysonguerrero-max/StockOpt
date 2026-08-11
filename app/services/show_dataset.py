@@ -27,6 +27,18 @@ TABLES = [
 
 
 def _rule(title: str) -> None:
+    """Imprime un encabezado de seccion en el reporte de consola.
+
+    Entrada:
+        title: rotulo de la seccion.
+
+    Salida:
+        Ninguna. Escribe por consola.
+
+    Funcionalidad:
+        Separa visualmente cada tabla del volcado, que de otro modo se lee como
+        un bloque continuo de cifras.
+    """
     print(f"\n{'=' * 78}\n{title}\n{'=' * 78}")
 
 
@@ -47,8 +59,7 @@ def main() -> None:
     missing = [f for f, _ in TABLES if not (OUT_DIR / f).exists()]
     if missing:
         raise SystemExit(
-            "Faltan archivos: " + ", ".join(missing)
-            + "\nCorre primero:\n"
+            "Faltan archivos: " + ", ".join(missing) + "\nCorre primero:\n"
             "  python -m app.services.build_dataset\n"
             "  python -m app.services.build_patterns"
         )
@@ -66,32 +77,47 @@ def main() -> None:
     _rule("3. INVENTARIO: QUE NECESITA COMPRA")
     inv = data["inventory_current.csv"]
     bajo = inv[inv.below_reorder == 1]
-    print(f"  {len(bajo)} de {len(inv)} combinaciones pieza-ciudad estan bajo el punto de reorden\n")
-    print(bajo.nsmallest(8, "on_hand_qty")[
-        ["sku_id", "city_id", "on_hand_qty", "reorder_point", "reorder_qty", "stock_value_usd"]
-    ].to_string(index=False))
+    print(
+        f"  {len(bajo)} de {len(inv)} combinaciones pieza-ciudad estan bajo el punto de reorden\n"
+    )
+    print(
+        bajo.nsmallest(8, "on_hand_qty")[
+            ["sku_id", "city_id", "on_hand_qty", "reorder_point", "reorder_qty", "stock_value_usd"]
+        ].to_string(index=False)
+    )
 
     _rule("4. DEMANDA: ULTIMOS 6 MESES DE UNA PIEZA")
     dem = data["demand_history.csv"]
     sku = dem.sku_id.iloc[0]
     print(f"  Pieza {sku}, las 3 ciudades:\n")
     ultimos = sorted(dem.period_month.unique())[-6:]
-    pivot = (dem[(dem.sku_id == sku) & (dem.period_month.isin(ultimos))]
-             .pivot(index="period_month", columns="city_id", values="qty_issued"))
+    pivot = dem[(dem.sku_id == sku) & (dem.period_month.isin(ultimos))].pivot(
+        index="period_month", columns="city_id", values="qty_issued"
+    )
     print(pivot.to_string())
 
     _rule("5. PROVEEDORES Y SUS TIEMPOS DE ENTREGA")
-    print(data["suppliers.csv"][
-        ["supplier_id", "name", "city_id", "lead_time_avg_days",
-         "lead_time_max_days", "lead_time_std_days"]
-    ].to_string(index=False))
+    print(
+        data["suppliers.csv"][
+            [
+                "supplier_id",
+                "name",
+                "city_id",
+                "lead_time_avg_days",
+                "lead_time_max_days",
+                "lead_time_std_days",
+            ]
+        ].to_string(index=False)
+    )
 
     _rule("6. OFERTAS: A QUIEN SE LE PUEDE COMPRAR UNA PIEZA")
     off = data["supplier_offers.csv"]
     print(f"  Ejemplo con {sku}:\n")
-    print(off[off.sku_id == sku][
-        ["supplier_id", "unit_price_usd", "moq", "capacity_per_month", "freight_cost_usd"]
-    ].to_string(index=False))
+    print(
+        off[off.sku_id == sku][
+            ["supplier_id", "unit_price_usd", "moq", "capacity_per_month", "freight_cost_usd"]
+        ].to_string(index=False)
+    )
 
     _rule("7. PATRONES DE DEMANDA (Etapa 1.3)")
     pat = data["demand_patterns.csv"]
@@ -99,25 +125,44 @@ def main() -> None:
     for label, n in pat.pattern.value_counts().items():
         model = pat.loc[pat.pattern == label, "recommended_model"].iloc[0]
         print(f"    {label:<13} {n:>3} series ({n / len(pat):>5.1%})  -> {model}")
-    print(f"\n  Confianza: media {pat.confidence.mean():.2f} | "
-          f"min {pat.confidence.min():.2f} | max {pat.confidence.max():.2f}")
+    print(
+        f"\n  Confianza: media {pat.confidence.mean():.2f} | "
+        f"min {pat.confidence.min():.2f} | max {pat.confidence.max():.2f}"
+    )
 
     revision = pat.nsmallest(5, "confidence")
     print("\n  Las 5 series con menos confianza (candidatas a revision humana):")
     print(revision[["sku_id", "city_id", "cv", "pattern", "confidence"]].to_string(index=False))
 
     _rule("8. TODO UNIDO: LO QUE VERA EL OPTIMIZADOR")
-    full = (inv
-            .merge(data["parts_master.csv"], on="sku_id")
-            .merge(off, on="sku_id")
-            .merge(data["suppliers.csv"], on="supplier_id", suffixes=("", "_sup"))
-            .merge(pat, on=["sku_id", "city_id"]))
-    print(f"  El join de las 6 tablas produce {len(full)} filas, "
-          f"nulos: {int(full.isna().sum().sum())}\n")
-    print(full[full.below_reorder == 1].head(6)[
-        ["sku_id", "city_id", "criticality", "on_hand_qty", "reorder_point",
-         "pattern", "confidence", "supplier_id", "unit_price_usd", "lead_time_avg_days"]
-    ].to_string(index=False))
+    full = (
+        inv.merge(data["parts_master.csv"], on="sku_id")
+        .merge(off, on="sku_id")
+        .merge(data["suppliers.csv"], on="supplier_id", suffixes=("", "_sup"))
+        .merge(pat, on=["sku_id", "city_id"])
+    )
+    print(
+        f"  El join de las 6 tablas produce {len(full)} filas, "
+        f"nulos: {int(full.isna().sum().sum())}\n"
+    )
+    print(
+        full[full.below_reorder == 1]
+        .head(6)[
+            [
+                "sku_id",
+                "city_id",
+                "criticality",
+                "on_hand_qty",
+                "reorder_point",
+                "pattern",
+                "confidence",
+                "supplier_id",
+                "unit_price_usd",
+                "lead_time_avg_days",
+            ]
+        ]
+        .to_string(index=False)
+    )
     print("\n  Cada fila ya tiene: que pieza, donde, cuanto queda, como se comporta")
     print("  su demanda, quien la vende, a que precio y en cuantos dias llega.")
     print()

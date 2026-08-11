@@ -70,22 +70,22 @@ def main() -> None:
     procurement_raw = pd.read_csv(RAW_DIR / PROCUREMENT_FILE)
 
     before = {
-        "spine": profile_dataset(spine_raw, SPINE_FILE,
-                                 keys=["transaction_date", "asset_tag", "part_no"]),
+        "spine": profile_dataset(
+            spine_raw, SPINE_FILE, keys=["transaction_date", "asset_tag", "part_no"]
+        ),
         "procurement": profile_dataset(procurement_raw, PROCUREMENT_FILE, keys=["PO_ID"]),
     }
 
     print("=" * 74)
     print("PERFILADO DE FUENTES CRUDAS")
     print("=" * 74)
-    for key, report in before.items():
+    for report in before.values():
         print(f"\n{report['name']}: {report['rows']} filas x {report['columns']} columnas")
         if report["flags"]:
             print("  Advertencias:")
             for flag in report["flags"]:
                 print(f"    - {flag}")
-        worst = sorted(report["outliers"].items(),
-                       key=lambda item: -item[1]["mad_outliers"])[:3]
+        worst = sorted(report["outliers"].items(), key=lambda item: -item[1]["mad_outliers"])[:3]
         if worst:
             print("  Columnas con mas atipicos:")
             for column, stats in worst:
@@ -114,10 +114,15 @@ def main() -> None:
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     (REPORT_DIR / REPORT_FILE).write_text(
-        json.dumps({"antes": before, "despues": after,
-                    "limpieza": {"spine": spine_log + sensor_log,
-                                 "procurement": procurement_log}},
-                   indent=2, ensure_ascii=False),
+        json.dumps(
+            {
+                "antes": before,
+                "despues": after,
+                "limpieza": {"spine": spine_log + sensor_log, "procurement": procurement_log},
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
     if len(outliers):

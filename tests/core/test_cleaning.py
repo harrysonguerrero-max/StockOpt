@@ -38,6 +38,7 @@ def spine_raw():
 # Perfilado
 # --------------------------------------------------------------------------- #
 
+
 def test_profile_reports_nulls_and_cardinality():
     series = pd.Series([1.0, 2.0, None, 2.0])
     profile = column_profile(series)
@@ -121,6 +122,7 @@ def test_profile_dataset_covers_the_real_source(procurement_raw):
 # Limpieza
 # --------------------------------------------------------------------------- #
 
+
 def test_cleaning_drops_orders_that_were_never_delivered(procurement_raw):
     """Una orden cancelada con fecha de entrega no evidencia un plazo real.
 
@@ -152,7 +154,9 @@ def test_cleaning_log_explains_every_rule(procurement_raw):
 
 def test_spine_cleaning_drops_incomplete_months(spine_raw):
     clean, log = clean_spine(spine_raw)
-    days = clean.groupby(clean["transaction_date"].dt.strftime("%Y-%m"))["transaction_date"].nunique()
+    days = clean.groupby(clean["transaction_date"].dt.strftime("%Y-%m"))[
+        "transaction_date"
+    ].nunique()
     assert (days >= 20).all()
     assert any("dias registrados" in entry["regla"] for entry in log)
 
@@ -179,12 +183,14 @@ def test_sensor_outliers_are_flagged_not_removed(spine_raw):
 
 
 def test_demand_outlier_report_compares_each_series_with_itself():
-    demand = pd.DataFrame({
-        "sku_id": ["A"] * 12 + ["B"] * 12,
-        "city_id": ["NAVA"] * 24,
-        "period_month": [f"2025-{m:02d}" for m in range(1, 13)] * 2,
-        "qty_issued": [2] * 11 + [40] + [100] * 12,
-    })
+    demand = pd.DataFrame(
+        {
+            "sku_id": ["A"] * 12 + ["B"] * 12,
+            "city_id": ["NAVA"] * 24,
+            "period_month": [f"2025-{m:02d}" for m in range(1, 13)] * 2,
+            "qty_issued": [2] * 11 + [40] + [100] * 12,
+        }
+    )
     report = demand_outlier_report(demand)
     assert set(report["sku_id"]) == {"A"}, "solo A tiene un mes fuera de su escala"
     assert report.iloc[0]["qty_issued"] == 40
@@ -193,6 +199,7 @@ def test_demand_outlier_report_compares_each_series_with_itself():
 # --------------------------------------------------------------------------- #
 # Historia sintetica
 # --------------------------------------------------------------------------- #
+
 
 def test_negative_binomial_reproduces_the_requested_mean():
     rng = np.random.default_rng(1)
@@ -225,14 +232,16 @@ def test_process_does_not_invent_seasonality_on_noise():
 
 
 def test_extension_marks_and_places_synthetic_months():
-    demand = pd.DataFrame({
-        "sku_id": ["A"] * 24,
-        "city_id": ["NAVA"] * 24,
-        "period_month": [str(pd.Period("2024-01", freq="M") + i) for i in range(24)],
-        "qty_issued": list(np.random.default_rng(3).poisson(15, 24)),
-        "issue_events": [10] * 24,
-        "breakdown_events": [3] * 24,
-    })
+    demand = pd.DataFrame(
+        {
+            "sku_id": ["A"] * 24,
+            "city_id": ["NAVA"] * 24,
+            "period_month": [str(pd.Period("2024-01", freq="M") + i) for i in range(24)],
+            "qty_issued": list(np.random.default_rng(3).poisson(15, 24)),
+            "issue_events": [10] * 24,
+            "breakdown_events": [3] * 24,
+        }
+    )
     extended = extend_history(demand, extra_years=2)
 
     assert len(extended) == 24 + 24
@@ -242,11 +251,16 @@ def test_extension_marks_and_places_synthetic_months():
 
 
 def test_extension_is_reproducible():
-    demand = pd.DataFrame({
-        "sku_id": ["A"] * 24, "city_id": ["NAVA"] * 24,
-        "period_month": [str(pd.Period("2024-01", freq="M") + i) for i in range(24)],
-        "qty_issued": [12] * 24, "issue_events": [8] * 24, "breakdown_events": [2] * 24,
-    })
+    demand = pd.DataFrame(
+        {
+            "sku_id": ["A"] * 24,
+            "city_id": ["NAVA"] * 24,
+            "period_month": [str(pd.Period("2024-01", freq="M") + i) for i in range(24)],
+            "qty_issued": [12] * 24,
+            "issue_events": [8] * 24,
+            "breakdown_events": [2] * 24,
+        }
+    )
     assert extend_history(demand, 2).equals(extend_history(demand, 2))
 
 

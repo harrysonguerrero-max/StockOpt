@@ -12,24 +12,26 @@ Funcionalidad:
 
 import pandas as pd
 
-from app.services.approvals import (
-    ALLOWED_TRANSITIONS,
-    REJECTION_REASONS,
-    STATE_PENDING,
-    STATE_APPROVED,
-    STATE_CONTACTED,
-    STATE_CONFIRMED,
-    STATE_REJECTED,
-    WORKFLOW_STATES,
-    load_states,
-)
 from app.core.dataset import OUT_DIR
 from app.core.explanation import build_explanation
 from app.core.optimization import (
     DECISION_BUY,
+    DECISION_DEFERRED,
     DECISION_HOLD,
     DECISION_REVIEW,
-    candidate_offers,
+    SCENARIO_BUDGET_USD,
+    offer_costs,
+)
+from app.services.approvals import (
+    ALLOWED_TRANSITIONS,
+    REJECTION_REASONS,
+    STATE_APPROVED,
+    STATE_CONFIRMED,
+    STATE_CONTACTED,
+    STATE_PENDING,
+    STATE_REJECTED,
+    WORKFLOW_STATES,
+    load_states,
 )
 
 SOURCES = [
@@ -82,7 +84,7 @@ def load_sources(refresh: bool = False) -> dict:
     return _cache
 
 
-def _stock_gauge(record: dict) -> dict:
+def _supply_gauge(record: dict) -> dict:
     """Calcula la lectura del medidor de existencias de una fila.
 
     Entrada:
@@ -90,12 +92,12 @@ def _stock_gauge(record: dict) -> dict:
 
     Salida:
         Diccionario con el porcentaje de llenado, la posicion del minimo y la
-        zona en que cae el stock.
+        zona en que caen las existencias.
 
     Funcionalidad:
         Traduce tres numeros a una sola lectura visual. La escala llega hasta el
         maximo permitido, de modo que la posicion del minimo dentro de la barra
-        indica de un vistazo si la pieza esta en zona critica, ajustada o
+        indique de un vistazo si la pieza esta en zona critica, ajustada o
         holgada, que es la tension que decide cada fila.
     """
     ceiling = max(record["inventory_max"], record["on_hand_qty"], 1)
@@ -135,33 +137,18 @@ def build_alternatives(record: dict, offers, coverage, suppliers) -> list:
         recomendacion pide un acto de fe: dice que un proveedor es el mas
         conveniente sin mostrar contra que se comparo.
 
-        El costo se calcula sobre la misma cantidad recomendada, salvo que el
-        lote minimo del proveedor obligue a mas, que es la comparacion honesta.
+        La cotizacion la resuelve el dominio, de modo que esta pantalla y el
+        resumen del pipeline no puedan discrepar en el costo de una misma oferta.
     """
-    applicable = candidate_offers(
-        record["sku_id"], record["city_id"], offers, coverage, suppliers
+    return offer_costs(
+        record["sku_id"],
+        record["city_id"],
+        record.get("recommended_qty") or 0,
+        offers,
+        coverage,
+        suppliers,
+        chosen_supplier=record.get("supplier_id"),
     )
-    if applicable.empty:
-        return []
-
-    quantity = record.get("recommended_qty") or 0
-    rows = []
-    for _, offer in applicable.iterrows():
-        units = max(int(quantity), int(offer["moq"])) if quantity else int(offer["moq"])
-        rows.append({
-            "supplier_id": offer["supplier_id"],
-            "supplier_name": offer["name"],
-            "unit_price_usd": round(float(offer["unit_price_usd"]), 2),
-            "moq": int(offer["moq"]),
-            "freight_cost_usd": round(float(offer["freight_cost_usd"]), 2),
-            "lead_time_days": round(float(offer["lead_time_days"]), 1),
-            "units": units,
-            "total_cost_usd": round(units * float(offer["unit_price_usd"])
-                                    + float(offer["freight_cost_usd"]), 2),
-            "chosen": offer["supplier_id"] == record.get("supplier_id"),
-        })
-
-    return sorted(rows, key=lambda item: item["total_cost_usd"])
 
 
 def build_queue(refresh: bool = False) -> list:
@@ -197,23 +184,22 @@ def build_queue(refresh: bool = False) -> list:
         cities[["city_id", "city_name", "warehouse_id"]], on="city_id", how="left"
     )
     merged = merged.merge(
-        suppliers[["supplier_id", "contact_email", "lead_time_min_days",
-                   "lead_time_max_days"]],
-        on="supplier_id", how="left",
+        suppliers[["supplier_id", "contact_email", "lead_time_min_days", "lead_time_max_days"]],
+        on="supplier_id",
+        how="left",
     )
 
     states = load_states()
     priority = {
         DECISION_REVIEW: 0,
         DECISION_BUY: 1,
-        DECISION_HOLD: 2,
+        DECISION_DEFERRED: 2,
+        DECISION_HOLD: 3,
     }
 
     queue = []
     for record in merged.to_dict(orient="records"):
-        clean = {
-            key: (None if pd.isna(value) else value) for key, value in record.items()
-        }
+        clean = {key: (None if pd.isna(value) else value) for key, value in record.items()}
         clean["pattern"] = clean.get("pattern") or "Sin clasificar"
         stored = states.get((clean["sku_id"], clean["city_id"]))
 
@@ -223,10 +209,12 @@ def build_queue(refresh: bool = False) -> list:
         clean["purchase_order"] = stored["purchase_order"] if stored else None
         clean["updated_at"] = stored["updated_at"] if stored else None
         clean["updated_by"] = stored["updated_by"] if stored else None
-        clean["gauge"] = _stock_gauge(clean)
+        clean["gauge"] = _supply_gauge(clean)
         clean["alternatives"] = build_alternatives(
-            clean, sources["supplier_offers.csv"],
-            sources["supplier_coverage.csv"], suppliers,
+            clean,
+            sources["supplier_offers.csv"],
+            sources["supplier_coverage.csv"],
+            suppliers,
         )
         clean["explanation"] = {**build_explanation(clean), "source": "plantilla"}
         clean["next_states"] = ALLOWED_TRANSITIONS.get(clean["state"], [])
@@ -250,22 +238,35 @@ def build_summary(queue: list) -> dict:
         Cuenta las decisiones por tipo, la inversion pendiente de aprobar y
         cuantas filas siguen esperando accion del comprador, que es lo que
         indica cuanto trabajo queda por delante.
+
+        Lo aplazado se reporta aparte de la inversion aprobada. Sumarlo seria
+        engañoso, porque no es gasto de esta corrida; restarlo del todo tambien,
+        porque es la cifra con la que el comprador defiende una ampliacion del
+        presupuesto.
     """
     pending = [item for item in queue if item["state"] == STATE_PENDING]
     to_buy = [item for item in queue if item["decision"] == DECISION_BUY]
     to_review = [item for item in queue if item["decision"] == DECISION_REVIEW]
-    approved = [item for item in queue
-                if item["state"] in (STATE_APPROVED, STATE_CONTACTED,
-                                     STATE_CONFIRMED)]
+    deferred = [item for item in queue if item["decision"] == DECISION_DEFERRED]
+    approved = [
+        item
+        for item in queue
+        if item["state"] in (STATE_APPROVED, STATE_CONTACTED, STATE_CONFIRMED)
+    ]
 
     return {
         "total": len(queue),
         "to_buy": len(to_buy),
         "to_review": len(to_review),
+        "deferred": len(deferred),
         "no_action": len([i for i in queue if i["decision"] == DECISION_HOLD]),
         "pending_decision": len(pending),
         "approved": len(approved),
         "investment_usd": round(sum(item["total_cost_usd"] for item in to_buy), 2),
+        "deferred_usd": round(sum(item["total_cost_usd"] for item in deferred), 2),
+        "budget_usd": SCENARIO_BUDGET_USD,
+        "stockout_avoided_usd": round(sum(item["stockout_cost_usd"] or 0 for item in to_buy), 2),
+        "stockout_exposed_usd": round(sum(item["stockout_cost_usd"] or 0 for item in deferred), 2),
         "units": int(sum(item["recommended_qty"] for item in to_buy)),
         "needs_review": len([i for i in queue if i["needs_review"] == 1]),
     }
@@ -288,9 +289,8 @@ def filter_options(queue: list) -> dict:
     cities = sorted({(item["city_id"], item["city_name"]) for item in queue})
     return {
         "cities": [{"id": city_id, "name": name} for city_id, name in cities],
-        "decisions": [DECISION_BUY, DECISION_REVIEW,
-                      DECISION_HOLD],
-        "states": WORKFLOW_STATES + [STATE_REJECTED],
+        "decisions": [DECISION_BUY, DECISION_REVIEW, DECISION_DEFERRED, DECISION_HOLD],
+        "states": [*WORKFLOW_STATES, STATE_REJECTED],
         "criticalities": sorted({item["criticality"] for item in queue}),
         "rejection_reasons": REJECTION_REASONS,
     }

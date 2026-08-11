@@ -23,8 +23,9 @@ DAYS_PER_MONTH = 30
 Z_BY_CRITICALITY = {"A": 1.65, "B": 1.28, "C": 0.84}
 
 
-def safety_stock(daily_demand: float, daily_std: float, lead_time: float,
-                 lead_time_std: float, z: float) -> float:
+def safety_stock(
+    daily_demand: float, daily_std: float, lead_time: float, lead_time_std: float, z: float
+) -> float:
     """Calcula el colchon de seguridad de una pieza.
 
     Entrada:
@@ -35,7 +36,7 @@ def safety_stock(daily_demand: float, daily_std: float, lead_time: float,
         z: factor de nivel de servicio segun criticidad de la pieza.
 
     Salida:
-        Unidades de stock de seguridad.
+        Unidades del colchon de seguridad.
 
     Funcionalidad:
         Compone la varianza de la demanda durante el tiempo de entrega sumando
@@ -43,7 +44,7 @@ def safety_stock(daily_demand: float, daily_std: float, lead_time: float,
         la segunda dejaria el minimo corto cuando el proveedor es irregular,
         como ocurre aqui con entregas que oscilan entre 1 y 20 dias.
     """
-    variance = lead_time * daily_std ** 2 + (daily_demand ** 2) * (lead_time_std ** 2)
+    variance = lead_time * daily_std**2 + (daily_demand**2) * (lead_time_std**2)
     return float(z * np.sqrt(max(variance, 0.0)))
 
 
@@ -66,8 +67,9 @@ def monthly_to_daily(monthly_mean: float, monthly_std: float) -> tuple:
     return (monthly_mean / days, monthly_std / np.sqrt(days))
 
 
-def inventory_minimum(monthly_mean: float, monthly_std: float, lead_time: float,
-                      lead_time_std: float, z: float) -> tuple:
+def inventory_minimum(
+    monthly_mean: float, monthly_std: float, lead_time: float, lead_time_std: float, z: float
+) -> tuple:
     """Calcula el inventario minimo de una pieza.
 
     Entrada:
@@ -78,7 +80,7 @@ def inventory_minimum(monthly_mean: float, monthly_std: float, lead_time: float,
         z: factor de nivel de servicio segun criticidad de la pieza.
 
     Salida:
-        Tupla (demanda_durante_entrega, stock_seguridad, minimo_redondeado).
+        Tupla (demanda_durante_entrega, colchon_seguridad, minimo_redondeado).
 
     Funcionalidad:
         Traduce la demanda mensual al horizonte real de reposicion y le suma el
@@ -106,5 +108,4 @@ def planning_lead_time(suppliers) -> tuple:
         recalculara con el plazo del que finalmente seleccione.
     """
     active = suppliers[suppliers["active"]] if "active" in suppliers else suppliers
-    return (float(active["lead_time_avg_days"].mean()),
-            float(active["lead_time_std_days"].mean()))
+    return (float(active["lead_time_avg_days"].mean()), float(active["lead_time_std_days"].mean()))

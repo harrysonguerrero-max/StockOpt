@@ -1,0 +1,1323 @@
+{
+  "stages": [
+    {
+      "id": "limpieza",
+      "title": "Limpieza de fuentes",
+      "input": "Fuentes crudas tal como llegaron",
+      "output": "Las mismas fuentes, sin las filas que no evidencian nada",
+      "sources": [
+        {
+          "key": "spine",
+          "name": "synthetic_industrial_machine_data.csv",
+          "rows_before": 219000,
+          "rows_after": 218800,
+          "discarded": 200,
+          "columns_before": 22,
+          "columns_after": 23,
+          "rules": [
+            {
+              "rule": "Rellenar wo_type nulo con SIN_ORDEN",
+              "reason": "El nulo significa movimiento sin orden de trabajo asociada",
+              "rows": 176207,
+              "kind": "ajuste"
+            },
+            {
+              "rule": "Descartar meses con menos de 20 dias registrados",
+              "reason": "Meses incompletos se leerian como caida de demanda: ['2025-01']",
+              "rows": 200,
+              "kind": "descarte"
+            },
+            {
+              "rule": "RESULTADO",
+              "reason": "De 219000 filas quedan 218800",
+              "rows": 200,
+              "kind": "resultado"
+            },
+            {
+              "rule": "Marcar lecturas de sensor atipicas",
+              "reason": "Se conservan porque una lectura extrema anticipa la falla",
+              "rows": 44860,
+              "kind": "ajuste"
+            }
+          ]
+        },
+        {
+          "key": "procurement",
+          "name": "Procurement KPI Analysis Dataset.csv",
+          "rows_before": 777,
+          "rows_after": 559,
+          "discarded": 218,
+          "columns_before": 11,
+          "columns_after": 12,
+          "rules": [
+            {
+              "rule": "Descartar ordenes sin fecha de pedido o de entrega",
+              "reason": "Sin ambas fechas no se puede medir el plazo",
+              "rows": 87,
+              "kind": "descarte"
+            },
+            {
+              "rule": "Conservar solo ordenes en estado ['Delivered', 'Partially Delivered']",
+              "reason": "Una orden cancelada o pendiente no evidencia un plazo real",
+              "rows": 130,
+              "kind": "descarte"
+            },
+            {
+              "rule": "Descartar plazos fuera de (0, 365] dias",
+              "reason": "Entrega anterior al pedido o plazo implausible",
+              "rows": 1,
+              "kind": "descarte"
+            },
+            {
+              "rule": "Imputar Defective_Units nulo como cero",
+              "reason": "Ausencia de registro significa que no se reportaron defectos",
+              "rows": 136,
+              "kind": "ajuste"
+            },
+            {
+              "rule": "RESULTADO",
+              "reason": "De 777 filas quedan 559",
+              "rows": 218,
+              "kind": "resultado"
+            }
+          ]
+        }
+      ],
+      "rows_before": 219777,
+      "rows_after": 219359,
+      "discarded": 418,
+      "adjusted": 221203,
+      "charts": [
+        {
+          "source": "pipeline",
+          "key": "limpieza"
+        }
+      ]
+    },
+    {
+      "id": "dataset",
+      "title": "Dataset relacional",
+      "input": "Fuentes limpias",
+      "output": "Tablas relacionadas y validadas por pieza, ciudad y proveedor",
+      "tables": [
+        {
+          "name": "parts_master",
+          "rows": 20
+        },
+        {
+          "name": "cities",
+          "rows": 2
+        },
+        {
+          "name": "inventory_current",
+          "rows": 40
+        },
+        {
+          "name": "demand_history",
+          "rows": 2880
+        },
+        {
+          "name": "suppliers",
+          "rows": 5
+        },
+        {
+          "name": "supplier_offers",
+          "rows": 52
+        },
+        {
+          "name": "supplier_coverage",
+          "rows": 10
+        }
+      ],
+      "months": 72,
+      "first_month": "2020-02",
+      "last_month": "2026-01",
+      "series": 40,
+      "parts": 20,
+      "cities": 2,
+      "suppliers": 5,
+      "offers": 52,
+      "synthetic_rows": 1440,
+      "real_rows": 1440,
+      "monthly": [
+        {
+          "period_month": "2020-02",
+          "qty_issued": 631,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-03",
+          "qty_issued": 707,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-04",
+          "qty_issued": 786,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-05",
+          "qty_issued": 609,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-06",
+          "qty_issued": 710,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-07",
+          "qty_issued": 725,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-08",
+          "qty_issued": 709,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-09",
+          "qty_issued": 678,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-10",
+          "qty_issued": 705,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-11",
+          "qty_issued": 718,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2020-12",
+          "qty_issued": 728,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-01",
+          "qty_issued": 761,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-02",
+          "qty_issued": 694,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-03",
+          "qty_issued": 688,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-04",
+          "qty_issued": 695,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-05",
+          "qty_issued": 640,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-06",
+          "qty_issued": 676,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-07",
+          "qty_issued": 766,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-08",
+          "qty_issued": 703,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-09",
+          "qty_issued": 689,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-10",
+          "qty_issued": 838,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-11",
+          "qty_issued": 675,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2021-12",
+          "qty_issued": 734,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-01",
+          "qty_issued": 796,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-02",
+          "qty_issued": 698,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-03",
+          "qty_issued": 607,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-04",
+          "qty_issued": 772,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-05",
+          "qty_issued": 717,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-06",
+          "qty_issued": 668,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-07",
+          "qty_issued": 756,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-08",
+          "qty_issued": 691,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-09",
+          "qty_issued": 672,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-10",
+          "qty_issued": 798,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-11",
+          "qty_issued": 735,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2022-12",
+          "qty_issued": 700,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2023-01",
+          "qty_issued": 778,
+          "is_synthetic": 1
+        },
+        {
+          "period_month": "2023-02",
+          "qty_issued": 622,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-03",
+          "qty_issued": 644,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-04",
+          "qty_issued": 882,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-05",
+          "qty_issued": 613,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-06",
+          "qty_issued": 642,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-07",
+          "qty_issued": 847,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-08",
+          "qty_issued": 622,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-09",
+          "qty_issued": 726,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-10",
+          "qty_issued": 895,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-11",
+          "qty_issued": 672,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2023-12",
+          "qty_issued": 621,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-01",
+          "qty_issued": 867,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-02",
+          "qty_issued": 668,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-03",
+          "qty_issued": 592,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-04",
+          "qty_issued": 941,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-05",
+          "qty_issued": 585,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-06",
+          "qty_issued": 715,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-07",
+          "qty_issued": 910,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-08",
+          "qty_issued": 639,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-09",
+          "qty_issued": 670,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-10",
+          "qty_issued": 795,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-11",
+          "qty_issued": 662,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2024-12",
+          "qty_issued": 674,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-01",
+          "qty_issued": 791,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-02",
+          "qty_issued": 733,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-03",
+          "qty_issued": 609,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-04",
+          "qty_issued": 845,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-05",
+          "qty_issued": 741,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-06",
+          "qty_issued": 722,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-07",
+          "qty_issued": 800,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-08",
+          "qty_issued": 728,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-09",
+          "qty_issued": 652,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-10",
+          "qty_issued": 866,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-11",
+          "qty_issued": 709,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2025-12",
+          "qty_issued": 667,
+          "is_synthetic": 0
+        },
+        {
+          "period_month": "2026-01",
+          "qty_issued": 983,
+          "is_synthetic": 0
+        }
+      ],
+      "charts": [
+        {
+          "source": "pipeline",
+          "key": "dataset"
+        }
+      ]
+    },
+    {
+      "id": "patrones",
+      "title": "Patrones de demanda",
+      "input": "72 meses de consumo por serie",
+      "output": "Una etiqueta de patron y una confianza por serie",
+      "counts": {
+        "Estable": 26,
+        "Volatil": 9,
+        "Estacional": 5
+      },
+      "points": [
+        {
+          "sku_id": "MRO-10045",
+          "city_id": "NAVA",
+          "cv": 0.277,
+          "seasonal_strength": 0.116,
+          "seasonal_pvalue": 0.6548,
+          "confidence": 0.89,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-10045",
+          "city_id": "OBRE",
+          "cv": 0.34,
+          "seasonal_strength": 0.325,
+          "seasonal_pvalue": 0.0312,
+          "confidence": 0.9,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-10046",
+          "city_id": "NAVA",
+          "cv": 0.301,
+          "seasonal_strength": 0.21,
+          "seasonal_pvalue": 0.1903,
+          "confidence": 0.85,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-10046",
+          "city_id": "OBRE",
+          "cv": 0.408,
+          "seasonal_strength": 0.149,
+          "seasonal_pvalue": 0.4616,
+          "confidence": 0.9,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-10047",
+          "city_id": "NAVA",
+          "cv": 0.241,
+          "seasonal_strength": 0.105,
+          "seasonal_pvalue": 0.8243,
+          "confidence": 0.99,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-10047",
+          "city_id": "OBRE",
+          "cv": 0.363,
+          "seasonal_strength": 0.224,
+          "seasonal_pvalue": 0.1886,
+          "confidence": 0.9,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-20031",
+          "city_id": "NAVA",
+          "cv": 0.247,
+          "seasonal_strength": 0.276,
+          "seasonal_pvalue": 0.0959,
+          "confidence": 0.95,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-20031",
+          "city_id": "OBRE",
+          "cv": 0.358,
+          "seasonal_strength": 0.127,
+          "seasonal_pvalue": 0.5296,
+          "confidence": 0.87,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-20032",
+          "city_id": "NAVA",
+          "cv": 0.315,
+          "seasonal_strength": 0.111,
+          "seasonal_pvalue": 0.7015,
+          "confidence": 0.86,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-20032",
+          "city_id": "OBRE",
+          "cv": 0.408,
+          "seasonal_strength": 0.133,
+          "seasonal_pvalue": 0.7695,
+          "confidence": 0.89,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-20033",
+          "city_id": "NAVA",
+          "cv": 0.288,
+          "seasonal_strength": 0.239,
+          "seasonal_pvalue": 0.1006,
+          "confidence": 0.89,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-20033",
+          "city_id": "OBRE",
+          "cv": 0.399,
+          "seasonal_strength": 0.091,
+          "seasonal_pvalue": 0.8359,
+          "confidence": 0.9,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-30011",
+          "city_id": "NAVA",
+          "cv": 0.239,
+          "seasonal_strength": 0.644,
+          "seasonal_pvalue": 0.0,
+          "confidence": 0.98,
+          "pattern": "Estacional"
+        },
+        {
+          "sku_id": "MRO-30011",
+          "city_id": "OBRE",
+          "cv": 0.23,
+          "seasonal_strength": 0.209,
+          "seasonal_pvalue": 0.1541,
+          "confidence": 0.99,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-30012",
+          "city_id": "NAVA",
+          "cv": 0.207,
+          "seasonal_strength": 0.587,
+          "seasonal_pvalue": 0.0002,
+          "confidence": 0.99,
+          "pattern": "Estacional"
+        },
+        {
+          "sku_id": "MRO-30012",
+          "city_id": "OBRE",
+          "cv": 0.312,
+          "seasonal_strength": 0.24,
+          "seasonal_pvalue": 0.1414,
+          "confidence": 0.91,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-40021",
+          "city_id": "NAVA",
+          "cv": 0.278,
+          "seasonal_strength": 0.093,
+          "seasonal_pvalue": 0.9469,
+          "confidence": 0.81,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-40021",
+          "city_id": "OBRE",
+          "cv": 0.399,
+          "seasonal_strength": 0.135,
+          "seasonal_pvalue": 0.7481,
+          "confidence": 0.91,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-40022",
+          "city_id": "NAVA",
+          "cv": 0.244,
+          "seasonal_strength": 0.552,
+          "seasonal_pvalue": 0.0004,
+          "confidence": 0.94,
+          "pattern": "Estacional"
+        },
+        {
+          "sku_id": "MRO-40022",
+          "city_id": "OBRE",
+          "cv": 0.31,
+          "seasonal_strength": 0.142,
+          "seasonal_pvalue": 0.6585,
+          "confidence": 0.86,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-50008",
+          "city_id": "NAVA",
+          "cv": 0.624,
+          "seasonal_strength": 0.109,
+          "seasonal_pvalue": 0.761,
+          "confidence": 0.7,
+          "pattern": "Volatil"
+        },
+        {
+          "sku_id": "MRO-50008",
+          "city_id": "OBRE",
+          "cv": 0.815,
+          "seasonal_strength": 0.066,
+          "seasonal_pvalue": 0.9145,
+          "confidence": 0.75,
+          "pattern": "Volatil"
+        },
+        {
+          "sku_id": "MRO-50009",
+          "city_id": "NAVA",
+          "cv": 0.569,
+          "seasonal_strength": 0.437,
+          "seasonal_pvalue": 0.0018,
+          "confidence": 0.74,
+          "pattern": "Volatil"
+        },
+        {
+          "sku_id": "MRO-50009",
+          "city_id": "OBRE",
+          "cv": 0.81,
+          "seasonal_strength": 0.149,
+          "seasonal_pvalue": 0.7211,
+          "confidence": 0.66,
+          "pattern": "Volatil"
+        },
+        {
+          "sku_id": "MRO-60015",
+          "city_id": "NAVA",
+          "cv": 0.475,
+          "seasonal_strength": 0.091,
+          "seasonal_pvalue": 0.953,
+          "confidence": 0.9,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-60015",
+          "city_id": "OBRE",
+          "cv": 0.529,
+          "seasonal_strength": 0.151,
+          "seasonal_pvalue": 0.5168,
+          "confidence": 0.7,
+          "pattern": "Volatil"
+        },
+        {
+          "sku_id": "MRO-60016",
+          "city_id": "NAVA",
+          "cv": 0.738,
+          "seasonal_strength": 0.213,
+          "seasonal_pvalue": 0.2511,
+          "confidence": 0.56,
+          "pattern": "Volatil"
+        },
+        {
+          "sku_id": "MRO-60016",
+          "city_id": "OBRE",
+          "cv": 1.05,
+          "seasonal_strength": 0.186,
+          "seasonal_pvalue": 0.3066,
+          "confidence": 0.62,
+          "pattern": "Volatil"
+        },
+        {
+          "sku_id": "MRO-70004",
+          "city_id": "NAVA",
+          "cv": 0.264,
+          "seasonal_strength": 0.336,
+          "seasonal_pvalue": 0.0166,
+          "confidence": 0.9,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-70004",
+          "city_id": "OBRE",
+          "cv": 0.369,
+          "seasonal_strength": 0.166,
+          "seasonal_pvalue": 0.3608,
+          "confidence": 0.88,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-70005",
+          "city_id": "NAVA",
+          "cv": 0.218,
+          "seasonal_strength": 0.268,
+          "seasonal_pvalue": 0.1871,
+          "confidence": 0.98,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-70005",
+          "city_id": "OBRE",
+          "cv": 0.329,
+          "seasonal_strength": 0.232,
+          "seasonal_pvalue": 0.2618,
+          "confidence": 0.88,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-80001",
+          "city_id": "NAVA",
+          "cv": 0.461,
+          "seasonal_strength": 0.606,
+          "seasonal_pvalue": 0.0,
+          "confidence": 0.91,
+          "pattern": "Estacional"
+        },
+        {
+          "sku_id": "MRO-80001",
+          "city_id": "OBRE",
+          "cv": 0.538,
+          "seasonal_strength": 0.102,
+          "seasonal_pvalue": 0.807,
+          "confidence": 0.71,
+          "pattern": "Volatil"
+        },
+        {
+          "sku_id": "MRO-80002",
+          "city_id": "NAVA",
+          "cv": 0.491,
+          "seasonal_strength": 0.141,
+          "seasonal_pvalue": 0.4184,
+          "confidence": 0.87,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-80002",
+          "city_id": "OBRE",
+          "cv": 0.757,
+          "seasonal_strength": 0.176,
+          "seasonal_pvalue": 0.3786,
+          "confidence": 0.67,
+          "pattern": "Volatil"
+        },
+        {
+          "sku_id": "MRO-90011",
+          "city_id": "NAVA",
+          "cv": 0.234,
+          "seasonal_strength": 0.224,
+          "seasonal_pvalue": 0.0364,
+          "confidence": 0.96,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-90011",
+          "city_id": "OBRE",
+          "cv": 0.244,
+          "seasonal_strength": 0.287,
+          "seasonal_pvalue": 0.1298,
+          "confidence": 1.0,
+          "pattern": "Estable"
+        },
+        {
+          "sku_id": "MRO-90012",
+          "city_id": "NAVA",
+          "cv": 0.212,
+          "seasonal_strength": 0.651,
+          "seasonal_pvalue": 0.0,
+          "confidence": 0.96,
+          "pattern": "Estacional"
+        },
+        {
+          "sku_id": "MRO-90012",
+          "city_id": "OBRE",
+          "cv": 0.262,
+          "seasonal_strength": 0.176,
+          "seasonal_pvalue": 0.2737,
+          "confidence": 0.84,
+          "pattern": "Estable"
+        }
+      ],
+      "thresholds": {
+        "cv_volatile": 0.5,
+        "seasonal_strength": 0.45,
+        "seasonal_pvalue": 0.05
+      },
+      "charts": [
+        {
+          "source": "pipeline",
+          "key": "patrones"
+        }
+      ]
+    },
+    {
+      "id": "modelo",
+      "title": "Modelo de proyeccion",
+      "input": "18 variables derivadas de cada serie y su pieza",
+      "output": "Una proyeccion de consumo por serie y mes",
+      "features": [
+        "is_synthetic",
+        "lag_1",
+        "lag_2",
+        "lag_3",
+        "lag_6",
+        "lag_12",
+        "roll_mean_3",
+        "roll_std_3",
+        "roll_mean_6",
+        "roll_std_6",
+        "issue_events_lag_1",
+        "breakdown_lag_1",
+        "month_sin",
+        "month_cos",
+        "unit_cost_usd",
+        "shelf_life_days",
+        "criticality_rank",
+        "is_nava"
+      ],
+      "families": [
+        {
+          "family": "Rezagos de la propia serie",
+          "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_6",
+            "lag_12"
+          ]
+        },
+        {
+          "family": "Medias y desviaciones moviles",
+          "features": [
+            "roll_mean_3",
+            "roll_std_3",
+            "roll_mean_6",
+            "roll_std_6"
+          ]
+        },
+        {
+          "family": "Señal operativa",
+          "features": [
+            "issue_events_lag_1",
+            "breakdown_lag_1"
+          ]
+        },
+        {
+          "family": "Calendario",
+          "features": [
+            "month_sin",
+            "month_cos"
+          ]
+        },
+        {
+          "family": "Atributos de la pieza",
+          "features": [
+            "unit_cost_usd",
+            "shelf_life_days",
+            "criticality_rank"
+          ]
+        },
+        {
+          "family": "Ubicacion",
+          "features": [
+            "is_nava"
+          ]
+        },
+        {
+          "family": "Origen del dato",
+          "features": [
+            "is_synthetic"
+          ]
+        }
+      ],
+      "metrics": {
+        "mae": 4.0488577629935225,
+        "rmse": 6.9280974406703075,
+        "mape": 0.33448734745181496,
+        "smape": 0.33514117849835845,
+        "wmape": 0.2110153882993367,
+        "bias": -0.6212887452656811,
+        "wmape_ultimo_mes": 0.2938110749185668,
+        "mejora_vs_ultimo_mes": 0.2818,
+        "wmape_promedio_movil": 0.21798769453492578,
+        "mejora_vs_promedio_movil": 0.032,
+        "seconds": 3.627,
+        "n_train": 2160,
+        "n_val": 240
+      },
+      "baselines": {
+        "ultimo_mes": {
+          "mae": 5.6375,
+          "rmse": 9.721753956977105,
+          "mape": 0.4741646060798037,
+          "smape": 0.492507385611315,
+          "wmape": 0.2938110749185668,
+          "bias": -0.7625
+        },
+        "promedio_movil": {
+          "mae": 4.182638888888889,
+          "rmse": 7.0410749258271,
+          "mape": 0.35903801779413824,
+          "smape": 0.3525519996570213,
+          "wmape": 0.21798769453492578,
+          "bias": -0.5826388888888888
+        }
+      },
+      "importance": [
+        {
+          "variable": "roll_mean_6",
+          "aporte": 0.453127846166823
+        },
+        {
+          "variable": "roll_mean_3",
+          "aporte": 0.07720083995761275
+        },
+        {
+          "variable": "lag_12",
+          "aporte": 0.06972687737032014
+        },
+        {
+          "variable": "lag_3",
+          "aporte": 0.0354825544987072
+        },
+        {
+          "variable": "lag_6",
+          "aporte": 0.026126998351246877
+        },
+        {
+          "variable": "month_cos",
+          "aporte": 0.010474103658582307
+        },
+        {
+          "variable": "lag_2",
+          "aporte": 0.004469207410491999
+        },
+        {
+          "variable": "issue_events_lag_1",
+          "aporte": 0.0029189954859918156
+        },
+        {
+          "variable": "lag_1",
+          "aporte": 0.002264580745696598
+        },
+        {
+          "variable": "roll_std_3",
+          "aporte": 0.0013647872920951932
+        },
+        {
+          "variable": "shelf_life_days",
+          "aporte": 0.0010142682467822628
+        },
+        {
+          "variable": "is_nava",
+          "aporte": 5.05841407245744e-05
+        },
+        {
+          "variable": "is_synthetic",
+          "aporte": 0.0
+        },
+        {
+          "variable": "criticality_rank",
+          "aporte": -5.2033048036281836e-05
+        },
+        {
+          "variable": "breakdown_lag_1",
+          "aporte": -0.0008022934498796818
+        },
+        {
+          "variable": "month_sin",
+          "aporte": -0.001776857191739456
+        },
+        {
+          "variable": "unit_cost_usd",
+          "aporte": -0.0018242114316375456
+        },
+        {
+          "variable": "roll_std_6",
+          "aporte": -0.003008198330609896
+        }
+      ],
+      "series": 40,
+      "train_months": "2021-02 a 2025-07",
+      "validation_months": "2025-08 a 2026-01",
+      "rows_train": 2160,
+      "rows_validation": 240,
+      "charts": [
+        {
+          "source": "training",
+          "key": "comparison"
+        },
+        {
+          "source": "training",
+          "key": "series"
+        },
+        {
+          "source": "training",
+          "key": "scatter"
+        },
+        {
+          "source": "training",
+          "key": "errors"
+        },
+        {
+          "source": "training",
+          "key": "importance"
+        }
+      ]
+    },
+    {
+      "id": "optimizacion",
+      "title": "Optimizacion de compra",
+      "input": "Proyeccion, existencias, ofertas, reglas y presupuesto",
+      "output": "Una decision por pieza y ciudad, con su motivo",
+      "counts": {
+        "COMPRAR": 7,
+        "REVISAR": 7,
+        "APLAZADO": 3,
+        "NO_COMPRAR": 23
+      },
+      "budget_usd": 2500.0,
+      "deferred_usd": 1116.94,
+      "stockout_avoided_usd": 12485.8,
+      "stockout_exposed_usd": 3152.08,
+      "stockout_return": 5.1,
+      "reasons": [
+        {
+          "decision": "NO_COMPRAR",
+          "reason": "Inventario por encima del minimo: no requiere reposicion",
+          "count": 21,
+          "examples": [
+            {
+              "sku_id": "MRO-10045",
+              "city_id": "NAVA",
+              "reason": "Inventario por encima del minimo: no requiere reposicion"
+            },
+            {
+              "sku_id": "MRO-10046",
+              "city_id": "NAVA",
+              "reason": "Inventario por encima del minimo: no requiere reposicion"
+            },
+            {
+              "sku_id": "MRO-10047",
+              "city_id": "OBRE",
+              "reason": "Inventario por encima del minimo: no requiere reposicion"
+            }
+          ]
+        },
+        {
+          "decision": "REVISAR",
+          "reason": "El lote minimo del proveedor supera el maximo de bodega",
+          "count": 7,
+          "examples": [
+            {
+              "sku_id": "MRO-10045",
+              "city_id": "OBRE",
+              "reason": "El minimo de orden de Beta_Supplies es 20 unidades y el maximo permitido es 19. Comprar el minimo cuesta 236.20 USD y deja inventario para 2.5 meses: requiere decision del comprador"
+            },
+            {
+              "sku_id": "MRO-20032",
+              "city_id": "NAVA",
+              "reason": "El minimo de orden de Alpha_Inc es 100 unidades y el maximo permitido es 47. Comprar el minimo cuesta 25.00 USD y deja inventario para 5.9 meses: requiere decision del comprador"
+            },
+            {
+              "sku_id": "MRO-20032",
+              "city_id": "OBRE",
+              "reason": "El minimo de orden de Alpha_Inc es 100 unidades y el maximo permitido es 18. Comprar el minimo cuesta 40.00 USD y deja inventario para 14.3 meses: requiere decision del comprador"
+            }
+          ]
+        },
+        {
+          "decision": "COMPRAR",
+          "reason": "Las existencias no alcanzan el minimo operativo",
+          "count": 7,
+          "examples": [
+            {
+              "sku_id": "MRO-10046",
+              "city_id": "OBRE",
+              "reason": "Quedan 3 unidades y el minimo es 6. Con una demanda proyectada de 6.3 al mes se repone hasta 16 unidades, equivalente a 2.1 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 2 opciones que surten OBRE"
+            },
+            {
+              "sku_id": "MRO-10047",
+              "city_id": "NAVA",
+              "reason": "Quedan 10 unidades y el minimo es 12. Con una demanda proyectada de 15.1 al mes se repone hasta 35 unidades, equivalente a 1.7 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 3 opciones que surten NAVA"
+            },
+            {
+              "sku_id": "MRO-40021",
+              "city_id": "NAVA",
+              "reason": "Quedan 14 unidades y el minimo es 17. Con una demanda proyectada de 24.8 al mes se repone hasta 55 unidades, equivalente a 1.7 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 2 opciones que surten NAVA"
+            }
+          ]
+        },
+        {
+          "decision": "APLAZADO",
+          "reason": "No cabe en el presupuesto de la corrida",
+          "count": 3,
+          "examples": [
+            {
+              "sku_id": "MRO-30012",
+              "city_id": "NAVA",
+              "reason": "No cabe en el presupuesto de la corrida. Se necesitan 604.92 USD y el presupuesto de la corrida es 2500.00 USD, que rinde mas en otras piezas. Aplazarla expone a un quiebre valorado en 1791.20 USD"
+            },
+            {
+              "sku_id": "MRO-30012",
+              "city_id": "OBRE",
+              "reason": "No cabe en el presupuesto de la corrida. Se necesitan 350.82 USD y el presupuesto de la corrida es 2500.00 USD, que rinde mas en otras piezas. Aplazarla expone a un quiebre valorado en 1091.78 USD"
+            },
+            {
+              "sku_id": "MRO-90011",
+              "city_id": "NAVA",
+              "reason": "No cabe en el presupuesto de la corrida. Se necesitan 161.20 USD y el presupuesto de la corrida es 2500.00 USD, que rinde mas en otras piezas. Aplazarla expone a un quiebre valorado en 269.10 USD"
+            }
+          ]
+        },
+        {
+          "decision": "NO_COMPRAR",
+          "reason": "Vida util no permite consumir ni la cantidad minima de orden",
+          "count": 1,
+          "examples": [
+            {
+              "sku_id": "MRO-70004",
+              "city_id": "OBRE",
+              "reason": "Vida util no permite consumir ni la cantidad minima de orden. Con vida util de 180 dias solo se consumirian 47 unidades, y el minimo de orden es 100"
+            }
+          ]
+        },
+        {
+          "decision": "NO_COMPRAR",
+          "reason": "Reponer cuesta mas que el quiebre que evita. Reponer cuesta 455.55 USD y el quiebre que evita se valora en 289.50 USD para una pieza de criticidad C",
+          "count": 1,
+          "examples": [
+            {
+              "sku_id": "MRO-70005",
+              "city_id": "NAVA",
+              "reason": "Reponer cuesta mas que el quiebre que evita. Reponer cuesta 455.55 USD y el quiebre que evita se valora en 289.50 USD para una pieza de criticidad C"
+            }
+          ]
+        }
+      ],
+      "savings": [
+        {
+          "sku_id": "MRO-40022",
+          "city_id": "NAVA",
+          "chosen_cost_usd": 616.06,
+          "worst_cost_usd": 720.22,
+          "saving_usd": 104.16,
+          "offers": 3
+        },
+        {
+          "sku_id": "MRO-10047",
+          "city_id": "NAVA",
+          "chosen_cost_usd": 468.5,
+          "worst_cost_usd": 560.5,
+          "saving_usd": 92.0,
+          "offers": 3
+        },
+        {
+          "sku_id": "MRO-50009",
+          "city_id": "NAVA",
+          "chosen_cost_usd": 267.4,
+          "worst_cost_usd": 342.01,
+          "saving_usd": 74.61,
+          "offers": 3
+        },
+        {
+          "sku_id": "MRO-90012",
+          "city_id": "NAVA",
+          "chosen_cost_usd": 85.24,
+          "worst_cost_usd": 144.34,
+          "saving_usd": 59.1,
+          "offers": 3
+        },
+        {
+          "sku_id": "MRO-10046",
+          "city_id": "OBRE",
+          "chosen_cost_usd": 370.41,
+          "worst_cost_usd": 415.04,
+          "saving_usd": 44.63,
+          "offers": 2
+        },
+        {
+          "sku_id": "MRO-40022",
+          "city_id": "OBRE",
+          "chosen_cost_usd": 332.84,
+          "worst_cost_usd": 375.44,
+          "saving_usd": 42.6,
+          "offers": 3
+        },
+        {
+          "sku_id": "MRO-40021",
+          "city_id": "NAVA",
+          "chosen_cost_usd": 290.44,
+          "worst_cost_usd": 316.43,
+          "saving_usd": 25.99,
+          "offers": 2
+        }
+      ],
+      "investment_usd": 2430.89,
+      "units": 317,
+      "saving_usd": 443.09,
+      "max_coverage_months": 3,
+      "needs_review": 14,
+      "low_confidence": 0,
+      "charts": [
+        {
+          "source": "pipeline",
+          "key": "decisiones"
+        },
+        {
+          "source": "pipeline",
+          "key": "ahorro"
+        }
+      ]
+    }
+  ],
+  "charts": {
+    "limpieza": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\limpieza_descartes.png",
+    "dataset": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\dataset_historia.png",
+    "patrones": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\patrones_mapa.png",
+    "decisiones": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\optimizacion_decisiones.png",
+    "ahorro": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\optimizacion_ahorro.png"
+  }
+}

@@ -17,17 +17,19 @@ Funcionalidad:
     entrenamiento queda registrado en MLflow con sus parametros, sus metricas y
     sus artefactos sin escribir codigo de seguimiento.
 """
-import dotenv
+
+import contextlib
 import os
 import time
 from pathlib import Path
 
+import dotenv
 import numpy as np
 import pandas as pd
 from mlops_sdk import BaseModel
 from sklearn.ensemble import HistGradientBoostingRegressor
 
-PROJECT = "stockopt-demanda"
+PROJECT = "supplyopt-demanda"
 
 ARTIFACT_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "training"
 
@@ -122,8 +124,13 @@ def feature_columns(frame: pd.DataFrame) -> list:
         que el modelo no aprenda de la pieza concreta sino de su comportamiento.
     """
     excluded = {
-        "sku_id", "city_id", "period_month", "qty_issued", "issue_events",
-        "breakdown_events", "criticality",
+        "sku_id",
+        "city_id",
+        "period_month",
+        "qty_issued",
+        "issue_events",
+        "breakdown_events",
+        "criticality",
     }
     return [column for column in frame.columns if column not in excluded]
 
@@ -145,8 +152,10 @@ def temporal_split(frame: pd.DataFrame, validation_months: int) -> tuple:
     """
     months = sorted(frame["period_month"].unique())
     cutoff = months[-validation_months]
-    return (frame[frame["period_month"] < cutoff].copy(),
-            frame[frame["period_month"] >= cutoff].copy())
+    return (
+        frame[frame["period_month"] < cutoff].copy(),
+        frame[frame["period_month"] >= cutoff].copy(),
+    )
 
 
 def regression_metrics(actual: np.ndarray, predicted: np.ndarray) -> dict:
@@ -175,11 +184,13 @@ def regression_metrics(actual: np.ndarray, predicted: np.ndarray) -> dict:
     non_zero = actual > 0
     mape = float(np.mean(absolute[non_zero] / actual[non_zero])) if non_zero.any() else 0.0
     denominator = np.abs(actual) + np.abs(predicted)
-    smape_terms = np.where(denominator > 0, 2 * absolute / np.where(denominator > 0, denominator, 1), 0.0)
+    smape_terms = np.where(
+        denominator > 0, 2 * absolute / np.where(denominator > 0, denominator, 1), 0.0
+    )
 
     return {
         "mae": float(absolute.mean()),
-        "rmse": float(np.sqrt((error ** 2).mean())),
+        "rmse": float(np.sqrt((error**2).mean())),
         "mape": mape,
         "smape": float(smape_terms.mean()),
         "wmape": float(absolute.sum() / total) if total > 0 else 0.0,
@@ -220,19 +231,35 @@ def moving_average_baseline(validation: pd.DataFrame) -> dict:
     return regression_metrics(validation["qty_issued"], validation["roll_mean_6"])
 
 
-# Load environment from .env and prefer configured tracking URI when available
-try:
-    dotenv.load_dotenv()
-except Exception:
-    pass
+def _configure_tracking() -> None:
+    """Deja lista la variable de entorno que usa el registro de experimentos.
 
-try:
-    from app.core.config import settings
-    if getattr(settings, "MLFLOW_TRACKING_URI", None):
-        os.environ.setdefault("MLFLOW_TRACKING_URI", str(settings.MLFLOW_TRACKING_URI))
-except Exception:
-    # If importing settings fails or value missing, continue — environment may be set externally
-    pass
+    Entrada:
+        Ninguna.
+
+    Salida:
+        Ninguna. Escribe MLFLOW_TRACKING_URI en el entorno si no venia puesta.
+
+    Funcionalidad:
+        Lee el archivo .env y toma de la configuracion la direccion del servidor
+        de seguimiento. No pisa un valor que ya venga del entorno, de modo que un
+        despliegue pueda apuntar a otro servidor sin tocar el codigo. Si algo
+        falla no interrumpe el arranque: sin direccion, el SDK guarda los runs en
+        disco y el entrenamiento sigue funcionando.
+    """
+    with contextlib.suppress(Exception):
+        dotenv.load_dotenv()
+
+    try:
+        from app.core.config import settings
+
+        if getattr(settings, "MLFLOW_TRACKING_URI", None):
+            os.environ.setdefault("MLFLOW_TRACKING_URI", str(settings.MLFLOW_TRACKING_URI))
+    except Exception:
+        pass
+
+
+_configure_tracking()
 
 
 class DemandModel(BaseModel):

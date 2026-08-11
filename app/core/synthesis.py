@@ -188,16 +188,18 @@ def extend_history(demand: pd.DataFrame, extra_years: int, seed: int = SEED) -> 
         events_ratio = history["issue_events"].sum() / total if total else 0.0
         breakdown_mean = float(history["breakdown_events"].mean())
 
-        for period, quantity in zip(new_periods, simulated):
-            rows.append({
-                "sku_id": sku,
-                "city_id": city,
-                "period_month": period,
-                "qty_issued": int(quantity),
-                "issue_events": min(int(quantity), int(round(quantity * events_ratio))),
-                "breakdown_events": max(0, int(rng.poisson(max(breakdown_mean, 0.1)))),
-                "is_synthetic": 1,
-            })
+        for period, quantity in zip(new_periods, simulated, strict=False):
+            rows.append(
+                {
+                    "sku_id": sku,
+                    "city_id": city,
+                    "period_month": period,
+                    "qty_issued": int(quantity),
+                    "issue_events": min(int(quantity), round(quantity * events_ratio)),
+                    "breakdown_events": max(0, int(rng.poisson(max(breakdown_mean, 0.1)))),
+                    "is_synthetic": 1,
+                }
+            )
 
     observed = demand.copy()
     observed["is_synthetic"] = 0

@@ -17,33 +17,50 @@ from app.core.optimization import (
 
 def _offer(offer_id, supplier_id, price, moq, capacity, freight):
     return {
-        "offer_id": offer_id, "supplier_id": supplier_id, "sku_id": "SKU-1",
-        "unit_price_usd": price, "moq": moq, "capacity_per_month": capacity,
-        "freight_cost_usd": freight, "name": supplier_id, "lead_time_days": 10.0,
+        "offer_id": offer_id,
+        "supplier_id": supplier_id,
+        "sku_id": "SKU-1",
+        "unit_price_usd": price,
+        "moq": moq,
+        "capacity_per_month": capacity,
+        "freight_cost_usd": freight,
+        "name": supplier_id,
+        "lead_time_days": 10.0,
     }
 
 
 @pytest.fixture(scope="module")
 def published():
-    names = ["inventory_current.csv", "demand_forecast.csv", "parts_master.csv",
-             "supplier_offers.csv", "supplier_coverage.csv", "suppliers.csv"]
+    names = [
+        "inventory_current.csv",
+        "demand_forecast.csv",
+        "parts_master.csv",
+        "supplier_offers.csv",
+        "supplier_coverage.csv",
+        "suppliers.csv",
+    ]
     return {name: pd.read_csv(OUT_DIR / name) for name in names}
 
 
 @pytest.fixture(scope="module")
 def recommendations(published):
     return build_recommendations(
-        published["inventory_current.csv"], published["demand_forecast.csv"],
-        published["parts_master.csv"], published["supplier_offers.csv"],
-        published["supplier_coverage.csv"], published["suppliers.csv"],
+        published["inventory_current.csv"],
+        published["demand_forecast.csv"],
+        published["parts_master.csv"],
+        published["supplier_offers.csv"],
+        published["supplier_coverage.csv"],
+        published["suppliers.csv"],
     )
 
 
 def test_cheapest_supplier_is_selected():
-    offers = pd.DataFrame([
-        _offer("A", "SUP-01", 10.0, 1, 100, 5.0),
-        _offer("B", "SUP-02", 8.0, 1, 100, 5.0),
-    ])
+    offers = pd.DataFrame(
+        [
+            _offer("A", "SUP-01", 10.0, 1, 100, 5.0),
+            _offer("B", "SUP-02", 8.0, 1, 100, 5.0),
+        ]
+    )
     result = solve_single_purchase(need=10, ceiling=20, offers=offers)
     assert result["offer"]["supplier_id"] == "SUP-02"
     assert result["total_cost"] == pytest.approx(85.0)
@@ -51,10 +68,12 @@ def test_cheapest_supplier_is_selected():
 
 def test_freight_can_outweigh_a_lower_unit_price():
     """Un proveedor mas barato por unidad puede salir caro con flete alto."""
-    offers = pd.DataFrame([
-        _offer("A", "SUP-01", 10.0, 1, 100, 1.0),
-        _offer("B", "SUP-02", 9.0, 1, 100, 90.0),
-    ])
+    offers = pd.DataFrame(
+        [
+            _offer("A", "SUP-01", 10.0, 1, 100, 1.0),
+            _offer("B", "SUP-02", 9.0, 1, 100, 90.0),
+        ]
+    )
     result = solve_single_purchase(need=5, ceiling=20, offers=offers)
     assert result["offer"]["supplier_id"] == "SUP-01"
 
@@ -66,10 +85,12 @@ def test_minimum_order_quantity_is_respected():
 
 
 def test_supplier_capacity_is_respected():
-    offers = pd.DataFrame([
-        _offer("A", "SUP-01", 1.0, 1, 10, 5.0),
-        _offer("B", "SUP-02", 50.0, 1, 500, 5.0),
-    ])
+    offers = pd.DataFrame(
+        [
+            _offer("A", "SUP-01", 1.0, 1, 10, 5.0),
+            _offer("B", "SUP-02", 50.0, 1, 500, 5.0),
+        ]
+    )
     result = solve_single_purchase(need=40, ceiling=60, offers=offers)
     assert result["offer"]["supplier_id"] == "SUP-02", "el barato no tiene capacidad"
 
@@ -111,8 +132,11 @@ def test_candidate_offers_cover_every_city(published):
     for city in CITY_IDS:
         for sku in published["parts_master.csv"]["sku_id"]:
             applicable = candidate_offers(
-                sku, city, published["supplier_offers.csv"],
-                published["supplier_coverage.csv"], published["suppliers.csv"],
+                sku,
+                city,
+                published["supplier_offers.csv"],
+                published["supplier_coverage.csv"],
+                published["suppliers.csv"],
             )
             assert not applicable.empty, f"{sku} en {city} se quedo sin proveedor"
 
@@ -133,7 +157,12 @@ def test_recommendations_cover_every_series(recommendations):
 
 
 def test_every_decision_is_a_known_state(recommendations):
-    valid = {config.DECISION_BUY, config.DECISION_HOLD, config.DECISION_REVIEW}
+    valid = {
+        config.DECISION_BUY,
+        config.DECISION_HOLD,
+        config.DECISION_REVIEW,
+        config.DECISION_DEFERRED,
+    }
     assert set(recommendations["decision"]).issubset(valid)
 
 
@@ -177,21 +206,26 @@ def test_review_cases_are_flagged_and_explained(recommendations):
 
 def test_low_confidence_purchases_are_flagged(recommendations):
     risky = recommendations[
-        (recommendations["decision"] == config.DECISION_BUY)
-        & (recommendations["confidence"] < 0.5)
+        (recommendations["decision"] == config.DECISION_BUY) & (recommendations["confidence"] < 0.5)
     ]
     assert (risky["needs_review"] == 1).all()
 
 
 def test_recommendations_are_deterministic(published):
     first = build_recommendations(
-        published["inventory_current.csv"], published["demand_forecast.csv"],
-        published["parts_master.csv"], published["supplier_offers.csv"],
-        published["supplier_coverage.csv"], published["suppliers.csv"],
+        published["inventory_current.csv"],
+        published["demand_forecast.csv"],
+        published["parts_master.csv"],
+        published["supplier_offers.csv"],
+        published["supplier_coverage.csv"],
+        published["suppliers.csv"],
     )
     second = build_recommendations(
-        published["inventory_current.csv"], published["demand_forecast.csv"],
-        published["parts_master.csv"], published["supplier_offers.csv"],
-        published["supplier_coverage.csv"], published["suppliers.csv"],
+        published["inventory_current.csv"],
+        published["demand_forecast.csv"],
+        published["parts_master.csv"],
+        published["supplier_offers.csv"],
+        published["supplier_coverage.csv"],
+        published["suppliers.csv"],
     )
     assert first.equals(second)

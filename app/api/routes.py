@@ -8,7 +8,7 @@ Funcionalidad:
 
 import csv
 import io
-from typing import Optional
+import json
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -16,7 +16,9 @@ from pydantic import BaseModel
 
 from app.core import training
 from app.services import approvals as workflow
+from app.services import pipeline_report
 from app.services.approvals import audit_trail, update_state
+from app.services.data_views import is_known_table, read_table, table_catalog, table_path
 from app.services.llm_agent import explain_with_model
 from app.services.recommendations import (
     build_queue,
@@ -30,10 +32,24 @@ from app.services.recommendations import (
 router = APIRouter()
 
 EXPORT_COLUMNS = [
-    "sku_id", "city_id", "description", "criticality", "decision", "state",
-    "on_hand_qty", "inventory_min", "inventory_max", "recommended_qty",
-    "supplier_id", "supplier_name", "unit_price_usd", "total_cost_usd",
-    "lead_time_days", "confidence", "needs_review", "reason",
+    "sku_id",
+    "city_id",
+    "description",
+    "criticality",
+    "decision",
+    "state",
+    "on_hand_qty",
+    "inventory_min",
+    "inventory_max",
+    "recommended_qty",
+    "supplier_id",
+    "supplier_name",
+    "unit_price_usd",
+    "total_cost_usd",
+    "lead_time_days",
+    "confidence",
+    "needs_review",
+    "reason",
 ]
 
 
@@ -49,10 +65,10 @@ class StateChange(BaseModel):
     city_id: str
     new_state: str
     updated_by: str = "comprador"
-    rejection_reason: Optional[str] = None
-    comment: Optional[str] = None
-    purchase_order: Optional[str] = None
-    expected_delivery: Optional[str] = None
+    rejection_reason: str | None = None
+    comment: str | None = None
+    purchase_order: str | None = None
+    expected_delivery: str | None = None
 
 
 @router.get("/health")
@@ -182,7 +198,7 @@ def read_history(sku_id: str, city_id: str, months: int = 48):
 
 
 @router.get("/recommendations/audit")
-def read_audit(sku_id: Optional[str] = None, city_id: Optional[str] = None):
+def read_audit(sku_id: str | None = None, city_id: str | None = None):
     """Devuelve el historial de decisiones.
 
     Entrada:
@@ -266,8 +282,6 @@ def read_training_metrics():
         Permite que la interfaz muestre como se comporta el modelo sin tener que
         leer los archivos de artefactos por su cuenta.
     """
-    import json
-
     path = training.ARTIFACT_DIR / training.METRICS_FILE
     if not path.exists():
         raise HTTPException(
@@ -298,3 +312,144 @@ def read_training_chart(name: str):
     if not path.exists():
         raise HTTPException(status_code=503, detail="La grafica aun no se ha generado.")
     return FileResponse(path, media_type="image/png")
+
+
+@router.get("/data/tables")
+def read_table_catalog():
+    """Lista las tablas del dataset con su descripcion.
+
+    Entrada:
+        Ninguna.
+
+    Salida:
+        Diccionario con la lista de tablas, su etapa, su resumen y su tamaño.
+
+    Funcionalidad:
+        Es la unica llamada que necesita el explorador de datos para construir
+        su indice.
+    """
+    if not dataset_is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="El dataset no esta generado. Corre: python -m app.services.build_dataset",
+        )
+    return {"tables": table_catalog()}
+
+
+@router.get("/data/tables/{name:path}")
+def read_data_table(name: str, refresh: bool = False):
+    """Entrega el contenido de una tabla del dataset.
+
+    Entrada:
+        name: nombre de archivo de la tabla.
+        refresh: vuelve a leer el archivo desde disco si es verdadero.
+
+    Salida:
+        Diccionario con la descripcion de la tabla, la definicion de cada columna
+        y las filas.
+
+    Funcionalidad:
+        Solo sirve tablas declaradas en el diccionario de datos, de modo que la
+        ruta no pueda usarse para leer archivos arbitrarios del disco.
+    """
+    if not is_known_table(name):
+        raise HTTPException(status_code=404, detail=f"Tabla desconocida: {name}")
+    if not table_path(name).exists():
+        raise HTTPException(status_code=503, detail=f"La tabla {name} aun no se ha generado.")
+    return read_table(name, refresh=refresh)
+
+
+@router.get("/data/files/{name:path}")
+def download_data_table(name: str):
+    """Descarga una tabla del dataset como archivo CSV.
+
+    Entrada:
+        name: nombre de archivo de la tabla.
+
+    Salida:
+        Respuesta de descarga con el archivo tal como esta en disco.
+
+    Funcionalidad:
+        Permite llevarse la tabla a una hoja de calculo sin pasar por la API.
+        Aplica la misma lista blanca que la lectura.
+    """
+    if not is_known_table(name):
+        raise HTTPException(status_code=404, detail=f"Tabla desconocida: {name}")
+    path = table_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=503, detail=f"La tabla {name} aun no se ha generado.")
+    return FileResponse(path, media_type="text/csv", filename=path.name)
+
+
+@router.get("/pipeline/stages")
+def read_pipeline_stages():
+    """Devuelve el recorrido completo del pipeline.
+
+    Entrada:
+        Ninguna.
+
+    Salida:
+        Diccionario con el resumen de cada etapa en orden y las graficas
+        disponibles.
+
+    Funcionalidad:
+        Lee el informe ya publicado en lugar de recalcularlo, de modo que abrir
+        la pantalla no dispare la agregacion de las cuarenta series ni la
+        cotizacion de las ofertas de cada compra.
+    """
+    if not pipeline_report.report_is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Aun no se ha publicado el recorrido. Corre: "
+            "python -m app.services.build_pipeline_report",
+        )
+    return pipeline_report.load_report()
+
+
+@router.get("/pipeline/charts/{name}")
+def read_pipeline_chart(name: str):
+    """Entrega una grafica del recorrido del pipeline.
+
+    Entrada:
+        name: nombre logico de la grafica.
+
+    Salida:
+        La imagen solicitada.
+
+    Funcionalidad:
+        Solo sirve nombres declarados en la configuracion, igual que la ruta de
+        las graficas de entrenamiento.
+    """
+    path = pipeline_report.chart_path(name)
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"Grafica desconocida: {name}")
+    if not path.exists():
+        raise HTTPException(status_code=503, detail="La grafica aun no se ha generado.")
+    return FileResponse(path, media_type="image/png")
+
+
+@router.get("/pipeline/trace/{sku_id}/{city_id}")
+def read_pipeline_trace(sku_id: str, city_id: str):
+    """Sigue una pieza concreta por todas las etapas del pipeline.
+
+    Entrada:
+        sku_id: identificador de la pieza.
+        city_id: identificador de la ciudad.
+
+    Salida:
+        Diccionario con la historia de la serie, su patron, la proyeccion, las
+        ofertas que compitieron y la decision final.
+
+    Funcionalidad:
+        Responde a la pregunta de donde salio un numero concreto, que es la que
+        se hace cualquiera que revise una compra. Se resuelve en vivo porque el
+        detalle de las cuarenta series no cabe en el informe publicado.
+    """
+    if not dataset_is_available():
+        raise HTTPException(status_code=503, detail="El dataset no esta generado.")
+    trace = pipeline_report.trace_part(sku_id, city_id)
+    if trace is None:
+        raise HTTPException(
+            status_code=404, detail=f"No existe la combinacion {sku_id} / {city_id}"
+        )
+    return trace
