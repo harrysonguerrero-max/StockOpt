@@ -13,7 +13,9 @@
 import { state } from "./api.js";
 import { escape } from "./format.js";
 
-const DECISION_WORD = { COMPRAR: "Comprar", NO_COMPRAR: "No comprar", REVISAR: "Revisar" };
+const DECISION_WORD = {
+  COMPRAR: "Comprar", NO_COMPRAR: "No comprar", REVISAR: "Revisar", APLAZADO: "Aplazado",
+};
 
 export function mountFilters(hostId, prefix, onChange, { raw = false } = {}) {
   const host = document.getElementById(hostId);

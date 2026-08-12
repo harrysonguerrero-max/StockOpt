@@ -30,6 +30,9 @@ export function actionLine(item) {
   if (item.decision === "REVISAR") {
     return { text: `Decidir: lote mínimo de ${units(item.recommended_qty)}`, tone: "hold" };
   }
+  if (item.decision === "APLAZADO") {
+    return { text: `Aplazado: ${usd(item.total_cost_usd)} USD`, tone: "stop" };
+  }
   return { text: "Sin acción", tone: "none" };
 }
 
@@ -43,6 +46,13 @@ export function whyLine(item) {
   // Lo que cambia de una fila a otra no es la cobertura del lote —el objetivo
   // es el mismo para todas— sino cuanto aguanta la bodega. Repetir "el lote
   // cubre 1 mes" en cada tarjeta era texto de relleno.
+  // La reposicion procedia; lo que falta es dinero, no criterio. Por eso el dato
+  // que decide aqui no es el faltante sino el riesgo que queda sin cubrir.
+  if (item.decision === "APLAZADO") {
+    const riesgo = item.stockout_cost_usd
+      ? ` Deja ${usd(item.stockout_cost_usd)} USD de riesgo de quiebre sin cubrir.` : "";
+    return `El presupuesto de la corrida ya está comprometido.${riesgo}`;
+  }
   if (item.decision === "COMPRAR") {
     const falta = gap > 0
       ? `Faltan ${units(gap)} para el mínimo.`

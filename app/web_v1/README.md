@@ -3,6 +3,12 @@
 Copia congelada de `app/web/` tal como estaba el 2026-08-11, antes del rediseño
 de la narrativa de pantalla.
 
+> **No es la única versión anterior.** Esta solo tenía dos pestañas. La de
+> `5ef6dbd ultima_version` (2026-08-06) tenía tres —incluidos el explorador de
+> tablas y el recorrido del pipeline con su trazador por pieza— y se recupera
+> con `git show 5ef6dbd:app/web/app.js`. Esas dos vistas volvieron al producto
+> el 2026-08-12, reescritas sobre el diseño actual.
+
 **No se sirve.** `app/main.py` monta `/static` sobre `app/web/` únicamente; esta
 carpeta queda inerte y existe solo como referencia para comparar.
 

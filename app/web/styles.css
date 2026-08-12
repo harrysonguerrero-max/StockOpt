@@ -155,6 +155,7 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 .figure-link:hover { border-bottom-color: var(--secondary); }
 .figure-link--go { color: var(--success); border-bottom-color: #C7E2C9; }
 .figure-link--hold { color: var(--warning); border-bottom-color: #F0DDB4; }
+.figure-link--stop { color: var(--danger); border-bottom-color: #EFC9C9; }
 
 /* ---------- Las dos plantas ----------
    El grano de la decision es pieza x ciudad. Partir la pantalla en dos lo
@@ -242,6 +243,7 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 }
 
 .band--decide .band__rule { background: var(--warning); }
+.band--aplazado .band__rule { background: var(--danger); }
 .band--aprobar .band__rule { background: var(--success); }
 
 /* ---------- La tarjeta de un caso ---------- */
@@ -293,6 +295,7 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 .case__action { font-size: 14px; font-weight: 650; margin: 10px 0 3px; }
 .case__action--go { color: var(--success); }
 .case__action--hold { color: var(--warning); }
+.case__action--stop { color: var(--danger); }
 .case__action--none { color: var(--text-secondary); font-weight: 600; }
 .case__why { font-size: 12.5px; color: var(--text-secondary); margin: 0; max-width: 46ch; }
 
@@ -679,6 +682,7 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 .tag { display: inline-block; font-size: 11px; font-weight: 650; padding: 3px 8px; border-radius: 2px; white-space: nowrap; }
 .tag--COMPRAR { background: #E7F2E8; color: var(--success); }
 .tag--REVISAR { background: #FBF0DC; color: var(--warning); }
+.tag--APLAZADO { background: #FBEDED; color: var(--danger); }
 .tag--NO_COMPRAR { background: #EEF1F5; color: var(--text-secondary); }
 
 .flagreview {
@@ -720,53 +724,292 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 .tablefoot b { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--text-primary); }
 .tablefoot span { white-space: nowrap; }
 
-/* ---------- Datos en crudo ---------- */
-
-.queue--raw { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
-
-.queue--raw td {
-  padding: 6px 12px;
-  white-space: nowrap;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* La pieza se queda a la izquierda: con treinta y siete columnas se pierde de
-   vista de que fila se esta leyendo en cuanto se desplaza. */
-.queue--raw .stick {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: var(--surface);
-  border-right: 1px solid var(--line-strong);
-}
-
-.queue--raw th.stick { z-index: 3; }
-.queue--raw tbody tr:hover .stick { background: #FAFCFE; }
-
-.rawlink {
-  font: inherit;
-  font-weight: 700;
-  color: var(--primary);
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: var(--line-strong);
-  text-underline-offset: 3px;
-}
-
-.rawlink:hover { text-decoration-color: var(--primary); }
+.empty { padding: 34px; text-align: center; color: var(--text-secondary); }
 .rawnull { color: var(--line-strong); }
 
-/* Unico realce sobre el valor literal: el texto sigue siendo el del dato. */
-.v-COMPRAR { color: var(--success); font-weight: 700; }
-.v-REVISAR { color: var(--warning); font-weight: 700; }
-.v-flag { color: var(--warning); font-weight: 700; }
+/* ---------- El recorrido del pipeline ----------
+   Cinco etapas encadenadas, y entre cada par lo que la anterior le entrega a la
+   siguiente. Ver que se transporta es lo que convierte una lista de pasos en un
+   recorrido. */
 
-.empty { padding: 34px; text-align: center; color: var(--text-secondary); }
+.pipe { margin-top: 20px; }
+
+.pipe__track {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+}
+
+.pipe__step { flex: 1 1 0; min-width: 152px; display: flex; }
+
+.pipe__btn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  padding: 13px 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--line-strong);
+  cursor: pointer;
+}
+
+.pipe__btn:hover { background: #FAFCFE; }
+.pipe__btn--on { border-top-color: var(--primary); background: var(--primary-light); }
+
+.pipe__num {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.pipe__btn--on .pipe__num { color: var(--primary); }
+.pipe__name { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+.pipe__fig { font-family: var(--mono); font-size: 11.5px; color: var(--text-secondary); }
+
+.pipe__link {
+  flex: 0 0 74px;
+  display: grid;
+  place-items: center;
+  font-size: 9.5px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 0 4px;
+  position: relative;
+}
+
+.pipe__link::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.pipe__link span {
+  position: relative;
+  background: var(--background);
+  padding: 2px 5px;
+  line-height: 1.25;
+}
+
+/* ---------- La etapa seleccionada ---------- */
+
+.stage { background: var(--surface); border: 1px solid var(--line); border-top: 0; padding: 22px 24px 24px; }
+
+.stage__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 40px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.stage__head h3 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.stage__io { display: flex; gap: 34px; flex-wrap: wrap; }
+.stage__io p { margin: 0; font-size: 12.5px; max-width: 34ch; }
+
+.figs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin: 18px 0;
+}
+
+.fig { background: var(--surface); padding: 12px 14px; }
+.fig__n { display: block; font-family: var(--mono); font-size: 21px; font-weight: 700; color: var(--primary); margin: 3px 0 1px; }
+.fig__n--go { color: var(--success); }
+.fig__n--hold { color: var(--warning); }
+.fig__n--stop { color: var(--danger); }
+
+.stage__detail { margin-top: 20px; display: grid; gap: 18px; }
+.subpanel h3 { margin: 0 0 8px; font-size: 13px; font-weight: 650; }
+
+.mini { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mini th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--line-strong);
+  white-space: nowrap;
+}
+.mini td { padding: 6px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.mini td.num, .mini th.num { text-align: right; }
+.mini .num { font-family: var(--mono); }
+.gain { color: var(--success); font-weight: 650; }
+
+.badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.badge--descarte { background: #FBEDED; color: var(--danger); }
+.badge--ajuste { background: var(--primary-light); color: var(--primary); }
+
+/* ---------- Seguir una pieza ---------- */
+
+.tracer { margin-top: 32px; }
+
+.tracer__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 14px;
+}
+
+.tracer__head h3 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.tracer__pick { display: flex; gap: 12px; flex-wrap: wrap; }
+.tracer__pick select { min-width: 190px; }
+
+.trace { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+
+.trace__step {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--secondary);
+  padding: 14px 16px 16px;
+}
+
+.trace__step--wide { grid-column: 1 / -1; }
+.trace__step header { display: flex; align-items: baseline; gap: 9px; margin-bottom: 10px; }
+.trace__step h3 { margin: 0; font-size: 13.5px; font-weight: 650; }
+
+.trace__num {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--surface);
+  background: var(--secondary);
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.trace__decision { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+
+.kv--wide { grid-template-columns: minmax(0, 1fr) auto; gap: 5px 14px; }
+.kv--wide dd { text-align: right; }
+
+.sparkline { width: 100%; height: 64px; display: block; margin-bottom: 10px; }
+.spark__line { fill: none; stroke: var(--secondary); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.spark__sim { fill: #EDF1F6; }
+
+/* ---------- Explorador de tablas ---------- */
+
+.explorer { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 20px; align-items: start; }
+
+.explorer__index { background: var(--surface); border: 1px solid var(--line); padding: 14px 12px; }
+.tablelist { list-style: none; margin: 8px 0 0; padding: 0; }
+.tablelist__group { margin-bottom: 14px; }
+.tablelist__group ul { list-style: none; margin: 5px 0 0; padding: 0; }
+
+.tablelist__btn {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  padding: 6px 8px;
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.tablelist__btn:hover { background: var(--background); }
+.tablelist__btn--on { background: var(--primary-light); border-left-color: var(--primary); font-weight: 650; }
+.tablelist__btn:disabled { color: var(--line-strong); cursor: not-allowed; }
+
+.explorer__panel { background: var(--surface); border: 1px solid var(--line); }
+
+.explorer__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.explorer__head h3 { margin: 0 0 2px; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+.explorer__actions { display: flex; gap: 10px; align-items: flex-end; }
+.explorer__actions .field input { min-width: 170px; }
+
+.tablewrap--grid { border: 0; overflow: auto; max-height: 58vh; }
+
+.grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 8px 11px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-strong);
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: help;
+}
+
+.grid__unit { display: block; font-weight: 400; color: var(--text-secondary); font-size: 9.5px; }
+.grid td { padding: 5px 11px; border-bottom: 1px solid var(--line); white-space: nowrap; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+.grid td.num { text-align: right; }
+.grid tbody tr:hover td { background: #FAFCFE; }
+
+.explorer__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.pager { display: flex; align-items: center; gap: 10px; }
+
+@media (max-width: 900px) {
+  .explorer { grid-template-columns: 1fr; }
+  .pipe__link { display: none; }
+}
 
 /* ---------- Vista del modelo ---------- */
 

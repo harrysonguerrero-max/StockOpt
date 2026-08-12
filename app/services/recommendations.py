@@ -335,6 +335,20 @@ def demand_series(sku_id: str, city_id: str, months: int = 48,
     horizon = projection.iloc[0].to_dict() if not projection.empty else {}
 
     def number(key, digits=2):
+        """Redondea un campo de la proyeccion respetando la ausencia de valor.
+
+        Entrada:
+            key: nombre del campo en la fila de proyeccion.
+            digits: decimales a conservar.
+
+        Salida:
+            El valor redondeado, o None si la proyeccion no lo trae.
+
+        Funcionalidad:
+            Distingue el cero del dato ausente. Convertir un nulo en cero haria
+            que la interfaz mostrara una proyeccion de cero unidades donde en
+            realidad no hay proyeccion, que son cosas distintas.
+        """
         value = horizon.get(key)
         return None if value is None or pd.isna(value) else round(float(value), digits)
 

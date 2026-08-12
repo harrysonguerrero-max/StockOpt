@@ -18,7 +18,7 @@ import { byUrgency, gauge } from "./ui.js";
 
 const el = (id) => document.getElementById(id);
 
-const DECISION_ORDER = { REVISAR: 0, COMPRAR: 1, NO_COMPRAR: 2 };
+const DECISION_ORDER = { REVISAR: 0, APLAZADO: 1, COMPRAR: 2, NO_COMPRAR: 3 };
 const STATE_ORDER = {
   "Pendiente aprobacion": 0, "Aprobado": 1, "Contactado proveedor": 2,
   "Orden confirmada": 3, "Rechazado": 4,
@@ -168,16 +168,20 @@ export function renderTable() {
 function paintFoot(items, active) {
   const buy = items.filter((i) => i.decision === "COMPRAR");
   const review = items.filter((i) => i.decision === "REVISAR");
+  const deferred = items.filter((i) => i.decision === "APLAZADO");
   const invest = buy.reduce((total, i) => total + (i.total_cost_usd || 0), 0);
+  const held = deferred.reduce((total, i) => total + (i.total_cost_usd || 0), 0);
   const qty = buy.reduce((total, i) => total + (i.recommended_qty || 0), 0);
 
   el("foot-tabla").innerHTML = `
     <span><b>${items.length}</b> ${active ? `de ${state.items.length} filas` : "filas"}</span>
     <span><b>${buy.length}</b> por comprar</span>
     <span><b>${review.length}</b> por decidir</span>
-    <span><b>${items.length - buy.length - review.length}</b> sin acción</span>
+    <span><b>${deferred.length}</b> aplazadas</span>
+    <span><b>${items.length - buy.length - review.length - deferred.length}</b> sin acción</span>
     <span><b>${usd(invest)}</b> USD en las compras</span>
-    <span><b>${units(qty)}</b> unidades</span>`;
+    <span><b>${units(qty)}</b> unidades</span>
+    ${held ? `<span><b>${usd(held)}</b> USD sin financiar</span>` : ""}`;
 }
 
 /* ---------- Descarga del recorte ---------- */

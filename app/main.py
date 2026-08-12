@@ -31,6 +31,32 @@ if settings.BACKEND_CORS_ORIGINS:
 
 app.include_router(router, prefix=settings.API_V1_STR)
 
+
+@app.middleware("http")
+async def no_cachear_la_interfaz(request, call_next):
+    """Evita que el navegador sirva una version antigua de la interfaz.
+
+    Entrada:
+        request: peticion entrante.
+        call_next: siguiente manejador de la cadena.
+
+    Salida:
+        La respuesta, con la cabecera de cache anulada cuando se trata de la
+        interfaz.
+
+    Funcionalidad:
+        La interfaz es estatica y se regenera al editar los archivos, sin paso
+        de compilacion que ponga una huella en el nombre. Sin esto el navegador
+        conserva el HTML y los modulos anteriores y la pantalla sigue mostrando
+        la version vieja despues de un cambio, que es indistinguible de que el
+        cambio no se haya aplicado.
+    """
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, must-revalidate"
+    return response
+
+
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 

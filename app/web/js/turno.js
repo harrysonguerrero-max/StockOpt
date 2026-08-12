@@ -27,6 +27,14 @@ const BANDS = [
     match: (i) => i.decision === "REVISAR" && i.state === PENDING,
   },
   {
+    // La reposicion procedia y la bloqueo el presupuesto, no el criterio: es una
+    // decision abierta distinta de las otras y necesita su propia banda.
+    id: "aplazado",
+    title: "Aplazado por falta de presupuesto",
+    open: true,
+    match: (i) => i.decision === "APLAZADO" && i.state === PENDING,
+  },
+  {
     id: "aprobar",
     title: "Listo para aprobar",
     open: true,
@@ -61,23 +69,36 @@ function paintOpening() {
   const s = state.summary;
   if (!s) return;
 
-  const abiertas = s.to_buy + s.to_review;
+  const deferred = s.deferred || 0;
+  const abiertas = s.to_buy + s.to_review + deferred;
   const line = document.getElementById("opening-line");
 
   line.innerHTML = abiertas === 0
     ? "Hoy no hay ninguna decisión abierta."
     : `Hoy hay <button class="figure-link" data-band="all">${abiertas} decisiones</button> abiertas: `
       + `<button class="figure-link figure-link--go" data-band="aprobar">${s.to_buy} compras</button> `
-      + `por ${usdRound(s.investment_usd)} USD y `
+      + `por ${usdRound(s.investment_usd)} USD, `
       + `<button class="figure-link figure-link--hold" data-band="decide">${s.to_review}</button> `
-      + `que el sistema no pudo resolver solo.`;
+      + `que el sistema no pudo resolver solo`
+      + (deferred
+        ? ` y <button class="figure-link figure-link--stop" data-band="aplazado">${deferred}</button> `
+          + "aplazadas por presupuesto."
+        : ".");
 
   line.querySelectorAll(".figure-link").forEach((button) => {
     button.addEventListener("click", () => focusBand(button.dataset.band));
   });
 
+  // El presupuesto es el limite que explica por que hay reposiciones que
+  // procedian y no se compraron. Decirlo aqui evita que parezca un olvido.
+  const budget = s.budget_usd
+    ? `El presupuesto de la corrida son ${usdRound(s.budget_usd)} USD; lo aplazado suma `
+      + `${usdRound(s.deferred_usd)} USD y deja ${usdRound(s.stockout_exposed_usd)} USD `
+      + "de riesgo de quiebre sin cubrir. "
+    : "";
+
   document.getElementById("opening-note").innerHTML =
-    `Las otras ${s.no_action} piezas cubren su mínimo. `
+    `${budget}Las otras ${s.no_action} piezas cubren su mínimo. `
     + `Vida útil, existencias, lote mínimo y flete los genera el build con semilla fija: `
     + `van marcados <span class="synthetic" title="Campo generado por el build, no viene de un sistema real">gen</span> donde aparecen.`;
 }
@@ -87,6 +108,7 @@ function focusBand(id) {
   openBands.clear();
   if (id === "all") {
     openBands.add("decide");
+    openBands.add("aplazado");
     openBands.add("aprobar");
   } else {
     openBands.add(id);

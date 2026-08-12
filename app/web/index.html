@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StockOpt · Abastecimiento de refacciones</title>
+<title>SupplyOpt · Abastecimiento de refacciones</title>
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -11,13 +11,12 @@
 <header class="topbar">
   <div class="topbar__brand">
     <span class="topbar__mark" aria-hidden="true"></span>
-    <h1>StockOpt</h1>
+    <h1>SupplyOpt</h1>
   </div>
   <nav class="topbar__nav" aria-label="Secciones">
     <button class="navlink navlink--on" data-view="turno" type="button">El turno</button>
     <button class="navlink" data-view="tabla" type="button">Todas las piezas</button>
-    <button class="navlink" data-view="crudo" type="button">Datos en crudo</button>
-    <button class="navlink" data-view="modelo" type="button">Modelo</button>
+    <button class="navlink" data-view="modelo" type="button">Modelo y pipeline</button>
   </nav>
   <div class="topbar__nav">
     <a class="navlink" href="/api/v1/recommendations/export">Descargar CSV</a>
@@ -61,45 +60,107 @@
 
 <!-- El registro completo sin capa de presentacion: el sitio donde se comprueba
      contra que se hizo la interpretacion de las otras vistas. -->
-<main id="view-crudo" hidden>
-  <div class="subhead">
-    <div>
-      <h2 class="title">Datos en crudo</h2>
-      <p class="meta" id="crudo-count"></p>
-      <p class="meta">Los campos tal como salen del pipeline, sin traducir ni
-        redondear. Pulsa una cabecera para ordenar y el código de pieza para
-        abrir su caso.</p>
-    </div>
-    <button class="btn btn--quiet" id="export-crudo" type="button">Descargar lo filtrado</button>
-  </div>
-
-  <section class="filters" id="filters-crudo" aria-label="Filtros"></section>
-
-  <div class="tablewrap tablewrap--raw">
-    <table class="queue queue--raw">
-      <thead><tr id="head-crudo"></tr></thead>
-      <tbody id="rows-crudo"></tbody>
-    </table>
-  </div>
-  <p class="empty" id="empty-crudo" hidden></p>
-</main>
-
-<!-- El modelo: la evidencia del paso 2 de un caso, no una seccion paralela. -->
 <main id="view-modelo" hidden>
   <div class="subhead">
     <div>
-      <h2 class="title">Modelo de demanda</h2>
-      <p class="meta" id="m-verdict"></p>
+      <h2 class="title">Modelo y pipeline</h2>
+      <p class="meta">Las cinco etapas que convierten las fuentes crudas en una
+        decisión de compra. Cada una declara qué recibe, qué entrega y qué hizo.</p>
     </div>
+    <button class="btn btn--quiet" id="go-datos" type="button">Ver los datos en crudo →</button>
   </div>
-  <section class="metricline" id="m-line"></section>
-  <div class="charts" id="charts"></div>
-  <div class="fold" data-open="false" id="m-fold" hidden>
-    <button class="fold__head" type="button">
-      <span class="fold__caret">▶</span> Diagnóstico completo
-    </button>
-    <div class="fold__body"><div class="charts" id="charts-extra"></div></div>
+
+  <section class="pipe" aria-label="Etapas del pipeline">
+    <ol class="pipe__track" id="pipe-track"></ol>
+  </section>
+
+  <section class="stage" aria-live="polite">
+    <header class="stage__head">
+      <h3 id="stage-title">—</h3>
+      <div class="stage__io">
+        <p><span class="label">Entra</span><span id="stage-in"></span></p>
+        <p><span class="label">Sale</span><span id="stage-out"></span></p>
+      </div>
+    </header>
+    <div class="figs" id="stage-figures"></div>
+    <div class="note note--wide" id="stage-note"></div>
+    <div class="stage__detail" id="stage-detail"></div>
+    <div class="charts" id="stage-charts"></div>
+  </section>
+
+  <section class="tracer">
+    <header class="tracer__head">
+      <div>
+        <h3>Seguir una pieza por el pipeline</h3>
+        <p class="meta">De su historia de consumo a la decisión de compra, paso a paso.</p>
+      </div>
+      <div class="tracer__pick">
+        <label class="field">
+          <span class="label">Pieza</span>
+          <select id="tr-sku"></select>
+        </label>
+        <label class="field">
+          <span class="label">Planta</span>
+          <select id="tr-city"></select>
+        </label>
+      </div>
+    </header>
+    <div class="trace" id="trace"></div>
+  </section>
+</main>
+
+<!-- Las tablas del dataset tal como estan en disco: el sitio donde se comprueba
+     contra que se hizo la interpretacion de las otras vistas. -->
+<main id="view-datos" hidden>
+  <div class="subhead">
+    <div>
+      <h2 class="title">Datos en crudo</h2>
+      <p class="meta">Las tablas del dataset sin traducir ni redondear, con la
+        definición de cada columna y las notas de lo que se hizo con ella.</p>
+    </div>
+    <button class="btn btn--quiet" id="back-modelo" type="button">← Volver al pipeline</button>
   </div>
+
+  <section class="explorer">
+    <aside class="explorer__index" aria-label="Tablas del dataset">
+      <p class="label">Tablas del dataset</p>
+      <ul class="tablelist" id="table-list"></ul>
+    </aside>
+
+    <div class="explorer__panel">
+      <header class="explorer__head">
+        <div>
+          <h3 id="t-title">—</h3>
+          <p class="meta"><span class="mono" id="t-file"></span> · <span id="t-summary"></span></p>
+        </div>
+        <div class="explorer__actions">
+          <label class="field">
+            <span class="label">Filtrar filas</span>
+            <input type="search" id="t-search" placeholder="Cualquier valor" autocomplete="off">
+          </label>
+          <a class="btn btn--quiet" id="t-download" href="#">Descargar CSV</a>
+        </div>
+      </header>
+
+      <div id="t-notes"></div>
+
+      <div class="tablewrap tablewrap--grid">
+        <table class="grid">
+          <thead id="t-head"></thead>
+          <tbody id="t-body"></tbody>
+        </table>
+      </div>
+
+      <footer class="explorer__foot">
+        <span class="meta" id="t-count"></span>
+        <div class="pager">
+          <button class="btn btn--quiet" id="t-prev" type="button">Anterior</button>
+          <span class="meta mono" id="t-page"></span>
+          <button class="btn btn--quiet" id="t-next" type="button">Siguiente</button>
+        </div>
+      </footer>
+    </div>
+  </section>
 </main>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

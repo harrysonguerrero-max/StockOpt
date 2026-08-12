@@ -119,8 +119,12 @@ cada una filtra al pulsarla. Debajo, dos columnas, una por planta. Que la
 decisión sea por pieza y por ciudad no hace falta escribirlo: es la estructura
 de la página.
 
-Dentro de cada planta, tres bandas ordenadas por quién debe actuar: *el sistema
-no puede decidir esto*, *listo para aprobar* y *sin acción*, esta última plegada.
+Dentro de cada planta, bandas ordenadas por quién debe actuar: *el sistema no
+puede decidir esto*, *aplazado por falta de presupuesto*, *listo para aprobar*,
+*en curso* y *sin acción*, estas dos últimas plegadas. La banda de aplazados
+existe porque esas reposiciones sí procedían y las bloqueó el dinero, no el
+criterio: es una decisión abierta distinta de las demás y la frase de portada
+dice cuánto riesgo de quiebre deja sin cubrir.
 Cada caso es una tarjeta que se lee sola: qué pieza, cómo está el stock —con el
 medidor de existencias frente al mínimo—, qué hay que hacer, por qué, y a quién
 comprarle.
@@ -155,26 +159,31 @@ que significa —el medidor en vez de tres números, la confianza en tramos, el
 estado en la palabra que usa una persona—, cualquiera de ellas ordenable y con
 la cabecera fija al desplazar. El pie recalcula con el filtro puesto, que es lo
 que la convierte en una consulta: al dejar solo criticidad A responde cuántas
-compras son y cuánto cuestan.
+compras son y cuánto cuestan. Descarga el recorte que tiene en pantalla, a
+diferencia del enlace de la barra superior, que baja las cuarenta.
 
-**Datos en crudo.** Las mismas cuarenta filas con los treinta y siete campos del
-registro, tal como salen del pipeline: la cabecera es el nombre del campo y la
-celda es su valor, sin traducir ni redondear. `NO_COMPRAR` se lee `NO_COMPRAR`,
-la confianza es `0.49` y el plazo `14.5`. Los nulos aparecen como `·` para
-distinguirlos de un cero.
+**Modelo y pipeline.** Las cinco etapas que convierten las fuentes crudas en una
+decisión —limpieza, dataset, patrones, modelo, optimización— encadenadas, y
+entre cada par lo que la anterior le entrega a la siguiente. Cada etapa declara
+qué recibe, qué entrega, sus cifras, sus gráficas y el criterio que aplicó: por
+qué un mes con un solo día registrado se habría leído como caída de demanda, por
+qué la mitad del histórico es simulado, o por qué las filas en revisión no son
+un fallo del solver.
 
-Las dos existen a propósito. El turno y la tabla leída interpretan el dato
-—eligen qué enseñar, en qué unidad y con qué palabra—, y precisamente por eso
-hace falta un sitio donde comprobar contra qué se hizo esa interpretación. Al
-crudo solo se le añade lo mecánico: cabecera fija, columna de la pieza fija al
-desplazar a lo ancho, ordenar por cualquier campo —con los nulos siempre al
-final, en los dos sentidos— y los filtros. El código de pieza abre el caso; el
-resto de la fila se deja seleccionar y copiar.
+Debajo, **seguir una pieza por el pipeline**: las mismas etapas recorridas para
+una sola serie, de su historia de consumo a la decisión final, pasando por la
+clasificación del patrón, lo que sale del modelo, cómo se compone el inventario
+mínimo y las ofertas que compitieron. Responde de dónde salió un número
+concreto, que es lo que pregunta cualquiera que revise una compra.
 
-Cada tabla mantiene sus propios filtros: acotar el crudo para inspeccionar un
-caso no deja la otra pantalla acotada al volver. Y cada una descarga el recorte
-que tiene en pantalla, con sus columnas, a diferencia del enlace de la barra
-superior, que baja las cuarenta con las que elige el servidor.
+**Datos en crudo.** Se llega desde el pipeline, que es donde surge la pregunta.
+Un índice con las once tablas del dataset agrupadas por la etapa que las
+produce, y a la derecha la elegida tal como está en disco: sus filas sin tocar,
+paginadas y filtrables, la definición de cada columna —tipo, unidad y de dónde
+sale, al pasar por encima— y las notas de lo que se hizo con ella. Ni traduce ni
+redondea: si la columna dice `14.5`, la celda pone `14.5`. Los nulos aparecen
+como `·` para distinguirlos de un cero. Cada tabla se descarga como el CSV que
+es.
 
 **Modelo.** Las dos gráficas que responden si el modelo aporta algo; el resto
 del diagnóstico, detrás de un plegable. Se llega desde el paso 2 de un caso.
