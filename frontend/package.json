@@ -1,0 +1,19 @@
+{
+  "name": "supplyopt-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Interfaz de SupplyOpt. HTML y modulos ES nativos; Vite solo empaqueta y versiona los archivos.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:contenedor": "vite build --mode contenedor",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^7.1.5"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4"
+  }
+}

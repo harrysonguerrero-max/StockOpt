@@ -1,9 +1,13 @@
 """Arranque de la aplicacion web de SupplyOpt.
 
 Funcionalidad:
-    Monta la API de recomendaciones y sirve la interfaz de compras como sitio
-    estatico, de modo que todo el MVP corra en un unico proceso y una unica
-    imagen de contenedor.
+    Monta la API de recomendaciones y, si esta compilada, tambien la interfaz.
+
+    La interfaz vive en `frontend/` y se compila con Vite a `frontend/dist`.
+    Sirviendola desde aqui, todo el MVP corre en un unico proceso, que es lo mas
+    comodo en local y en `docker compose`. En el despliegue de AWS no ocurre:
+    Amplify publica `dist` y este contenedor queda como API sola, asi que el
+    montaje es condicional y su ausencia no es un error.
 """
 
 from pathlib import Path
@@ -16,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import router
 from app.core.config import settings
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
+WEB_DIR = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")
 
@@ -45,20 +49,22 @@ async def no_cachear_la_interfaz(request, call_next):
         interfaz.
 
     Funcionalidad:
-        La interfaz es estatica y se regenera al editar los archivos, sin paso
-        de compilacion que ponga una huella en el nombre. Sin esto el navegador
-        conserva el HTML y los modulos anteriores y la pantalla sigue mostrando
-        la version vieja despues de un cambio, que es indistinguible de que el
-        cambio no se haya aplicado.
+        Los archivos compilados llevan huella en el nombre y pueden cachearse
+        sin riesgo, pero `index.html` no: es quien apunta a esa huella. Si el
+        navegador lo conserva, la pantalla sigue cargando la version anterior
+        despues de un despliegue, que es indistinguible de que el despliegue no
+        haya ocurrido.
     """
     response = await call_next(request)
-    if request.url.path == "/" or request.url.path.startswith("/static/"):
+    if request.url.path == "/":
         response.headers["Cache-Control"] = "no-store, must-revalidate"
     return response
 
 
-if WEB_DIR.exists():
-    app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+ASSETS_DIR = WEB_DIR / "assets"
+
+if ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
 
 @app.get("/", include_in_schema=False)

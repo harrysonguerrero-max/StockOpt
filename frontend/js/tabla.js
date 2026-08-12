@@ -14,7 +14,8 @@
 import { state } from "./api.js";
 import { decimal, leadTime, escape, pattern, stateShort, units, usd } from "./format.js";
 import { decisionWord, mountFilters } from "./filtros.js";
-import { byUrgency, gauge } from "./ui.js";
+import { byUrgency, gauge, semaphore } from "./ui.js";
+import { glyph } from "./glyphs.js";
 
 const el = (id) => document.getElementById(id);
 
@@ -27,9 +28,15 @@ const STATE_ORDER = {
 const COLUMNS = [
   {
     id: "pieza", label: "Pieza", by: (i) => i.sku_id,
-    cell: (i) => `<span class="case__sku">${escape(i.sku_id)}</span>
-      <span class="crit crit--${i.criticality}" title="Criticidad ${i.criticality}">${i.criticality}</span>
-      <div class="meta">${escape(i.description)}</div>`,
+    cell: (i) => `<span class="cell-part">
+        <span class="cell-part__glyph" title="${escape(i.category || "")}">${
+          glyph(i.category, { size: 26 })}</span>
+        <span>
+          <span class="case__sku">${escape(i.sku_id)}</span>
+          <span class="crit crit--${i.criticality}" title="Criticidad ${i.criticality}">${i.criticality}</span>
+          <span class="meta cell-part__name">${escape(i.description)}</span>
+        </span>
+      </span>`,
   },
   {
     id: "planta", label: "Planta", by: (i) => i.city_id,
@@ -50,7 +57,8 @@ const COLUMNS = [
   },
   {
     id: "decision", label: "Decisión", by: (i) => DECISION_ORDER[i.decision] ?? 9,
-    cell: (i) => `<span class="tag tag--${i.decision}">${decisionWord(i.decision)}</span>
+    cell: (i) => `<span class="tag tag--${i.decision}">
+        <i class="tag__dot tag__dot--${semaphore(i).level}"></i>${decisionWord(i.decision)}</span>
       ${i.needs_review === 1 ? '<span class="flagreview">pide revisión</span>' : ""}`,
   },
   {
@@ -82,7 +90,48 @@ const COLUMNS = [
 
 const sort = { key: "decision", dir: 1 };
 let filters = null;
+let category = null;
 let onOpenCase = () => {};
+
+/* Se entra por familia y no por codigo. Veinte piezas caben en una lista, pero
+   la pregunta real casi nunca es "que pasa con MRO-30012" sino "como estan las
+   correas". Nueve familias es un primer corte que se abarca de un vistazo, y el
+   dibujo llega antes que el nombre. */
+function paintCategories() {
+  const host = el("cats");
+  const groups = new Map();
+  state.items.forEach((item) => {
+    const key = item.category || "Sin familia";
+    const g = groups.get(key) || { n: 0, open: 0 };
+    g.n += 1;
+    if (["REVISAR", "APLAZADO"].includes(item.decision)) g.open += 1;
+    groups.set(key, g);
+  });
+
+  const chip = (key, label, mark, data) => `
+    <button type="button" class="cat${category === key ? " cat--on" : ""}"
+            data-cat="${key === null ? "" : escape(key)}">
+      <span class="cat__glyph">${mark}</span>
+      <span class="cat__name">${escape(label)}</span>
+      <span class="cat__n">${data.n}${
+        data.open ? ` · <b class="cat__open">${data.open}</b>` : ""}</span>
+    </button>`;
+
+  const total = { n: state.items.length,
+    open: state.items.filter((i) => ["REVISAR", "APLAZADO"].includes(i.decision)).length };
+
+  host.innerHTML = chip(null, "Todas", glyph(null, { size: 26 }), total)
+    + [...groups.entries()].sort().map(([key, data]) =>
+      chip(key, key, glyph(key, { size: 26 }), data)).join("");
+
+  host.querySelectorAll("[data-cat]").forEach((button) => {
+    button.addEventListener("click", () => {
+      category = button.dataset.cat || null;
+      paintCategories();
+      renderTable();
+    });
+  });
+}
 
 export function setTableListener(callback) { onOpenCase = callback; }
 
@@ -92,13 +141,17 @@ export function initTable() {
   paintHead();
 }
 
-export function fillTableFilters() { filters.fill(); }
+export function fillTableFilters() {
+  filters.fill();
+  paintCategories();
+}
 
 function visibleItems() {
   const column = COLUMNS.find((c) => c.id === sort.key);
+  const inCategory = (i) => !category || (i.category || "Sin familia") === category;
   // La urgencia rompe los empates en cualquier orden: dentro del mismo
   // proveedor o la misma decision, delante lo que mas aprieta.
-  return filters.apply().sort((a, b) => {
+  return filters.apply().filter(inCategory).sort((a, b) => {
     const left = column.by(a);
     const right = column.by(b);
     const cmp = typeof left === "string" ? left.localeCompare(right) : left - right;
@@ -135,6 +188,56 @@ function trustBars(value) {
     <i></i><i></i><i></i></span>`;
 }
 
+/* Sin familia elegida la tabla no vuelca las cuarenta filas: enseña las nueve
+   familias con su recuento. La pregunta que trae a alguien aqui casi nunca es
+   "que pasa con MRO-30012" sino "como estan las correas", y cuarenta filas de
+   golpe obligan a buscar antes de poder mirar. */
+function renderGroups(rows) {
+  const body = el("rows-tabla");
+  const groups = new Map();
+
+  rows.forEach((item) => {
+    const key = item.category || "Sin familia";
+    const g = groups.get(key) || { rows: [], open: 0, cost: 0 };
+    g.rows.push(item);
+    if (["REVISAR", "APLAZADO"].includes(item.decision)) g.open += 1;
+    if (item.decision === "COMPRAR") g.cost += item.total_cost_usd || 0;
+    groups.set(key, g);
+  });
+
+  body.innerHTML = [...groups.entries()].sort().map(([key, g]) => `
+    <tr class="grouprow" data-open-cat="${escape(key)}" tabindex="0">
+      <td class="grouprow__head">
+        <span class="cell-part">
+          <span class="cell-part__glyph">${glyph(key, { size: 30 })}</span>
+          <span>
+            <span class="grouprow__name">${escape(key)}</span>
+            <span class="meta">${g.rows.length} combinaciones de pieza y planta</span>
+          </span>
+        </span>
+      </td>
+      <td colspan="7" class="grouprow__state">
+        ${g.open
+          ? `<span class="tag"><i class="tag__dot tag__dot--hold"></i>${g.open} necesitan decisión</span>`
+          : '<span class="tag tag--NO_COMPRAR"><i class="tag__dot tag__dot--go"></i>nada abierto</span>'}
+        ${g.cost ? `<span class="meta mono">${usd(g.cost)} USD en compras</span>` : ""}
+      </td>
+      <td class="grouprow__go">Ver las piezas →</td>
+    </tr>`).join("");
+
+  body.querySelectorAll("[data-open-cat]").forEach((row) => {
+    const open = () => {
+      category = row.dataset.openCat;
+      paintCategories();
+      renderTable();
+    };
+    row.addEventListener("click", open);
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); open(); }
+    });
+  });
+}
+
 export function renderTable() {
   const body = el("rows-tabla");
   const items = visibleItems();
@@ -144,6 +247,12 @@ export function renderTable() {
   const empty = el("empty-tabla");
   empty.hidden = items.length > 0;
   empty.textContent = `Ninguna de las ${state.items.length} filas cumple estos filtros.`;
+
+  if (!category && !active) {
+    renderGroups(items);
+    paintFoot(items, active);
+    return;
+  }
 
   items.forEach((item) => {
     const row = document.createElement("tr");

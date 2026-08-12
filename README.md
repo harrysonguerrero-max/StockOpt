@@ -59,13 +59,31 @@ python -m app.services.build_forecast         # 4. proyección e inventario mín
 python -m app.services.build_recommendations  # 5. decisiones de compra
 ```
 
-Después, la interfaz:
+Después, la interfaz. Vive en `frontend/` y se compila con Vite; no impone
+framework —sigue siendo HTML y módulos ES nativos— pero pone huella en el nombre
+de cada archivo, que es lo que evita que una CDN o un navegador sirvan una
+versión anterior tras un despliegue.
+
+```bash
+cd frontend && npm install && npm run build && cd ..
+```
 
 ```bash
 python -m uvicorn app.main:app --port 8000
 ```
 
-Abre `http://localhost:8000`. Para ver el dataset por consola sin levantar nada:
+Abre `http://localhost:8000`: si `frontend/dist` existe, el mismo proceso sirve
+la API y la interfaz. Para trabajar sobre la interfaz con recarga en caliente,
+deja el comando anterior corriendo y en otra terminal:
+
+```bash
+cd frontend && npm run dev
+```
+
+Eso levanta Vite en `http://localhost:5173` y atraviesa `/api` por proxy hacia
+el 8000, de modo que el navegador ve un solo origen y no hay CORS en local.
+
+Para ver el dataset por consola sin levantar nada:
 
 ```bash
 python -m app.services.show_dataset

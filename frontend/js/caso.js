@@ -219,7 +219,7 @@ function fork(item) {
     <p class="step__read" style="margin-bottom:14px">
       El sistema no puede resolverlo: el lote mínimo de
       ${escape(item.supplier_name)} es <b>${units(item.recommended_qty)}</b>
-      y en bodega caben <b>${units(item.inventory_max)}</b>.
+      y el máximo permitido es <b>${units(item.max_allowed_qty)}</b>.
     </p>
     <div class="fork">
       <div class="fork__opt fork__opt--warn">
@@ -227,7 +227,7 @@ function fork(item) {
         <span class="fork__figure">${usd(item.total_cost_usd)} USD</span>
         <ul class="fork__list">
           <li>Deja ${months(item.coverage_months)} de inventario</li>
-          <li>Sobran ${units(Math.max(0, item.recommended_qty - item.inventory_max))} sobre la capacidad</li>
+          <li>Sobran ${units(Math.max(0, item.recommended_qty - item.max_allowed_qty))} sobre el máximo permitido</li>
           <li>${caduca
             ? `Caduca antes de consumirse (vida útil ${months(shelfMonths)})`
             : `Vida útil de ${months(shelfMonths)}: no caduca`}</li>

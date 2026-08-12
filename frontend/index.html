@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SupplyOpt · Abastecimiento de refacciones</title>
-<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="./styles.css">
 </head>
 <body>
 
@@ -19,19 +19,28 @@
     <button class="navlink" data-view="modelo" type="button">Modelo y pipeline</button>
   </nav>
   <div class="topbar__nav">
-    <a class="navlink" href="/api/v1/recommendations/export">Descargar CSV</a>
+    <a class="navlink" id="export-all" href="#">Descargar CSV</a>
     <button class="navlink" id="refresh" type="button">Recargar</button>
   </div>
 </header>
 
-<!-- El turno: una frase y dos plantas. Ninguna tabla hasta que se pida. -->
+<!-- El turno: la desviacion, donde esta, y solo entonces la lista. -->
 <main id="view-turno">
   <section class="opening">
     <p class="opening__lead">Abastecimiento de refacciones · Nava y Ciudad Obregón</p>
     <h2 class="display" id="opening-line">Cargando el turno…</h2>
-    <p class="opening__note" id="opening-note"></p>
+    <div class="opening__note" id="opening-note"></div>
   </section>
-  <section class="plants" id="plants" aria-label="Plantas"></section>
+
+  <section class="atlas" aria-label="Casos por ubicación">
+    <div class="atlas__map" id="map"></div>
+    <div class="atlas__side">
+      <div id="plant-card"></div>
+      <p class="meta atlas__filter" id="map-filter"></p>
+    </div>
+  </section>
+
+  <section id="bands" aria-label="Casos"></section>
 </main>
 
 <!-- La tabla completa sigue existiendo, pero como destino y no como portada. -->
@@ -45,6 +54,7 @@
     <button class="btn btn--quiet" id="export-tabla" type="button">Descargar lo filtrado</button>
   </div>
 
+  <section class="cats" id="cats" aria-label="Familias de refacción"></section>
   <section class="filters" id="filters-tabla" aria-label="Filtros"></section>
 
   <div class="tablewrap">
@@ -166,6 +176,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <div id="panel-host"></div>
 
-<script type="module" src="/static/js/main.js"></script>
+<script type="module" src="./js/main.js"></script>
 </body>
 </html>

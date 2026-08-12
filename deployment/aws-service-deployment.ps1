@@ -453,28 +453,6 @@ try {
         --encryption-configuration encryptionType=AES256 `
         --tags Key=Name,Value="$appName-ecr" Key=Project,Value="$appName"
 
-    # ================= CREATE CODEBUILD PROJECT =================
-
-    Write-Host "Creating CodeBuild project..."
-
-    $source = @{type="S3"; location="${bucketName}/${backendZipName}"} | ConvertTo-Json -Compress
-
-    $sourceJson = $source | ConvertTo-Json -Compress
-
-    aws codebuild create-project `
-        --name "$codebuildProjectName" `
-        --region $region `
-        --source $sourceJson `
-        --artifacts '{\"type\":\"NO_ARTIFACTS\"}' `
-        --environment '{\"type\":\"LINUX_CONTAINER\",\"image\":\"aws/codebuild/amazonlinux-x86_64-standard:5.0\",\"computeType\":\"BUILD_GENERAL1_SMALL\",\"privilegedMode\":false,\"imagePullCredentialsType\":\"CODEBUILD\"}' `
-        --service-role "arn:aws:iam::${accountId}:role/service-role/${codebuildServiceRoleName}" `
-        --timeout-in-minutes 15 `
-        --queued-timeout-in-minutes 480 `
-        --logs-config '{\"cloudWatchLogs\":{\"status\":\"ENABLED\"},\"s3Logs\":{\"status\":\"DISABLED\"}}' `
-        --output text
-
-    if ($LASTEXITCODE -ne 0) { throw "CodeBuild project creation failed." }
-
     Write-Host "Before deploying the app, make sure to configure your frontend to point to the API Gateway endpoint: $apiEndpoint"
 
     Write-Host "And your FastAPI CORS settings to allow requests from: $amplifyUrl"
@@ -533,7 +511,8 @@ try {
 
 
     # Crear ZIP
-    wsl -d Ubuntu --cd "$projectPath" --exec bash -lc "zip -r '$backendZipName' . -x '.venv/*' -x '.venv/**' -x '*/.venv/*' -x '*/.venv/**' -x '__pycache__/*' -x '*/__pycache__/*' -x '*.pyc' x '.git/*' -x '$backendZipName' -x 'frontend/*' -x 'frontend/**' -x '*/frontend/*' -x '*/frontend/**'"
+    # El guion de '-x .git/*' faltaba y 'x' se estaba tratando como archivo.
+    wsl -d Ubuntu --cd "$projectPath" --exec bash -lc "zip -r '$backendZipName' . -x '.venv/*' -x '.venv/**' -x '*/.venv/*' -x '*/.venv/**' -x '__pycache__/*' -x '*/__pycache__/*' -x '*.pyc' -x '.git/*' -x '$backendZipName' -x 'frontend/*' -x 'frontend/**' -x '*/frontend/*' -x '*/frontend/**'"
 
 
     # Verificar ZIP
@@ -554,6 +533,34 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "S3 upload failed." }
 
     Write-Host "File $backendZipName uploaded to S3."
+
+    # ================= CREATE CODEBUILD PROJECT =================
+    #
+    # Se crea aqui, y no antes, porque el proyecto declara como fuente el objeto
+    # de S3: describirlo cuando el zip todavia no esta subido deja el proyecto
+    # apuntando a algo inexistente. Ahora el objeto ya esta en el bucket cuando
+    # se declara, y start-build ocurre inmediatamente despues.
+
+    Write-Host "Creating CodeBuild project..."
+
+    # Una sola conversion. Convertir dos veces envolvia el JSON como cadena y
+    # CodeBuild recibia "{\"type\":\"S3\"...}" en lugar de un objeto.
+    $sourceJson = @{type = "S3"; location = "${bucketName}/${backendZipName}"} |
+        ConvertTo-Json -Compress
+
+    aws codebuild create-project `
+        --name "$codebuildProjectName" `
+        --region $region `
+        --source $sourceJson `
+        --artifacts '{\"type\":\"NO_ARTIFACTS\"}' `
+        --environment '{\"type\":\"LINUX_CONTAINER\",\"image\":\"aws/codebuild/amazonlinux-x86_64-standard:5.0\",\"computeType\":\"BUILD_GENERAL1_SMALL\",\"privilegedMode\":false,\"imagePullCredentialsType\":\"CODEBUILD\"}' `
+        --service-role "arn:aws:iam::${accountId}:role/service-role/${codebuildServiceRoleName}" `
+        --timeout-in-minutes 15 `
+        --queued-timeout-in-minutes 480 `
+        --logs-config '{\"cloudWatchLogs\":{\"status\":\"ENABLED\"},\"s3Logs\":{\"status\":\"DISABLED\"}}' `
+        --output text
+
+    if ($LASTEXITCODE -ne 0) { throw "CodeBuild project creation failed." }
 
     # ========================
     # Iniciar CodeBuild

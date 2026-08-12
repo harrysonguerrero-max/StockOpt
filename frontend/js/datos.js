@@ -10,7 +10,7 @@
  * la celda pone 14.5.
  */
 
-import { api, toast } from "./api.js";
+import { api, apiUrl, toast } from "./api.js";
 import { escape } from "./format.js";
 
 const el = (id) => document.getElementById(id);
@@ -54,7 +54,7 @@ async function openTable(name) {
     el("t-title").textContent = explorer.table.title;
     el("t-file").textContent = explorer.table.name;
     el("t-summary").textContent = explorer.table.summary;
-    el("t-download").href = `/api/v1/data/files/${name}`;
+    el("t-download").href = apiUrl(`/data/files/${name}`);
     el("t-notes").innerHTML = (explorer.table.notes || [])
       .map((note) => `<p class="note">${escape(note)}</p>`).join("");
     paintIndex();

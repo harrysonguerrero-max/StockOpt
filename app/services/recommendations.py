@@ -36,6 +36,7 @@ from app.services.approvals import (
 
 SOURCES = [
     "purchase_recommendations.csv",
+    "parts_master.csv",
     "demand_patterns.csv",
     "suppliers.csv",
     "cities.csv",
@@ -167,6 +168,11 @@ def build_queue(refresh: bool = False) -> list:
         compras y las revisiones pendientes por delante de lo que ya no requiere
         accion.
 
+        Adjunta tambien la familia de la pieza desde el maestro, porque la
+        recomendacion no la lleva y la interfaz la necesita para dibujar cada
+        refaccion: un rodamiento y una correa no se reconocen por el codigo, se
+        reconocen por su forma.
+
         La redaccion con modelo de lenguaje no ocurre aqui a proposito. Generar
         las cuarenta explicaciones al construir la pantalla suponia cuarenta
         llamadas HTTP en serie por cada carga y por cada aprobacion. La tabla se
@@ -179,7 +185,10 @@ def build_queue(refresh: bool = False) -> list:
     suppliers = sources["suppliers.csv"]
     cities = sources["cities.csv"]
 
-    merged = recommendations.merge(patterns, on=["sku_id", "city_id"], how="left")
+    families = sources["parts_master.csv"][["sku_id", "category", "uom"]]
+
+    merged = recommendations.merge(families, on="sku_id", how="left")
+    merged = merged.merge(patterns, on=["sku_id", "city_id"], how="left")
     merged = merged.merge(
         cities[["city_id", "city_name", "warehouse_id"]], on="city_id", how="left"
     )

@@ -11,7 +11,7 @@
  * filas en revision no son un fallo del solver. Eso no se reescribe.
  */
 
-import { api, state } from "./api.js";
+import { api, apiUrl, state } from "./api.js";
 import { escape } from "./format.js";
 
 const count = (value) => Number(value || 0).toLocaleString("es-MX");
@@ -256,7 +256,7 @@ function selectStage(id) {
     const [title, note] = CHART_INFO[chart.key] || [chart.key, ""];
     return `<section class="card"><h3>${escape(title)}</h3>
       <p class="meta">${escape(note)}</p>
-      <img src="/api/v1/${chart.source}/charts/${chart.key}" alt="${escape(title)}" loading="lazy">
+      <img src="${apiUrl(`/${chart.source}/charts/${chart.key}`)}" alt="${escape(title)}" loading="lazy">
     </section>`;
   }).join("");
 
@@ -282,25 +282,62 @@ export async function loadPipeline() {
  * numero concreto, que es lo que pregunta cualquiera que revise una compra.
  */
 
+/* Consumo mensual de una serie.
+ *
+ * Dos decisiones sobre la escala. La primera: el eje deja holgura por encima del
+ * maximo en vez de ajustarse a el, porque una serie que roza el techo del marco
+ * parece descontrolada aunque varie poco. La segunda: sobre el trazo real, mas
+ * claro, va la media movil de tres meses en trazo firme.
+ *
+ * Ninguna de las dos toca el dato: el maximo y el minimo siguen dibujados donde
+ * corresponde. Lo que cambia es que la tendencia se lee por encima del ruido, en
+ * lugar de quedar enterrada bajo el.
+ */
 function sparkline(history) {
   const values = history.map((point) => point.qty_issued);
-  const top = Math.max(...values, 1);
+  const top = Math.max(...values, 1) * 1.25;
   const width = 640;
-  const height = 64;
+  const height = 72;
   const step = width / Math.max(values.length - 1, 1);
 
-  const path = values.map((value, index) =>
-    `${index ? "L" : "M"}${(index * step).toFixed(1)},${(height - (value / top) * height).toFixed(1)}`
-  ).join(" ");
+  const at = (value, index) =>
+    `${(index * step).toFixed(1)},${(height - (value / top) * height).toFixed(1)}`;
+  const line = (series) =>
+    series.map((value, index) => `${index ? "L" : "M"}${at(value, index)}`).join(" ");
+
+  const window = 3;
+  const smooth = values.map((_, index) => {
+    const from = Math.max(0, index - window + 1);
+    const slice = values.slice(from, index + 1);
+    return slice.reduce((total, v) => total + v, 0) / slice.length;
+  });
 
   const boundary = history.findIndex((point) => !point.is_synthetic);
   const shade = boundary > 0
     ? `<rect x="0" y="0" width="${(boundary * step).toFixed(1)}" height="${height}" class="spark__sim"/>`
     : "";
 
-  return `<svg class="sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"
+  /* El consumo de cada mes va en barra y la tendencia en linea. Dos lineas
+     superpuestas competian entre si y la mas clara parecia un fantasma; una
+     barra y una linea no se confunden nunca, porque dicen cosas distintas: la
+     barra es lo que paso ese mes, la linea es hacia donde va. */
+  const bars = values.map((value, index) => {
+    const x = index * step;
+    const y = height - (value / top) * height;
+    return `<rect x="${(x - step * 0.32).toFixed(1)}" y="${y.toFixed(1)}"
+      width="${Math.max(1.5, step * 0.64).toFixed(1)}" height="${(height - y).toFixed(1)}"
+      class="spark__bar"/>`;
+  }).join("");
+
+  return `<svg class="sparkline" viewBox="0 0 ${width} ${height}"
     role="img" aria-label="Consumo mensual de la serie">${shade}
-    <path d="${path}" class="spark__line"/></svg>`;
+    ${bars}
+    <path d="${line(smooth)}" class="spark__line"/></svg>
+    <span class="spark__key">
+      <span><i class="k-bar"></i>consumo del mes</span>
+      <span><i class="k-real"></i>tendencia a 3 meses</span>
+      ${boundary > 0 ? '<span><i class="k-sint"></i>tramo simulado</span>' : ""}
+    </span>`;
 }
 
 const traceStep = (step, title, inner, wide) => `
@@ -321,7 +358,6 @@ function renderTrace(trace) {
 
   return traceStep("1", "Historia de consumo", `
     ${sparkline(trace.history)}
-    <p class="meta spark__key"><span><i class="k-sint"></i>tramo simulado</span></p>
     ${pairs([
       ["Meses", `${trace.history.length} (${observed} observados, ${synthetic} simulados)`],
       ["Consumo medio", `${(pattern.mean_monthly || 0).toFixed(1)} unidades/mes`],

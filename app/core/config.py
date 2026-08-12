@@ -29,6 +29,7 @@ class Settings(BaseSettings):
         "http://localhost",
         "http://localhost:8000",
         "http://localhost:3000",
+        "http://localhost:5173",
     ]
     MLFLOW_TRACKING_URI: str | None = "http://localhost:5000"
     GEMINI_API_KEY: str | None = None

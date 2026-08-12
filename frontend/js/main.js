@@ -1,6 +1,6 @@
 /* Arranque y navegacion entre las vistas. */
 
-import { loadQueue, state, toast } from "./api.js";
+import { apiUrl, loadQueue, state, toast } from "./api.js";
 import { openCase, closeCase, setCaseListener } from "./caso.js";
 import { initDatos, loadCatalog } from "./datos.js";
 import { initPipeline, loadPipeline, refreshTracer } from "./pipeline.js";
@@ -29,7 +29,7 @@ async function refresh(fromServer = false) {
   try {
     await loadQueue(fromServer);
     fillTableFilters();
-    renderTurno(openCase);
+    renderTurno(openCase, () => refresh(false));
     renderTable();
     refreshTracer();
   } catch (error) {
@@ -41,6 +41,9 @@ async function refresh(fromServer = false) {
 document.querySelectorAll(".navlink[data-view]").forEach((link) => {
   link.addEventListener("click", () => show(link.dataset.view));
 });
+
+// La descarga apunta a la API, que en Amplify vive en otro dominio.
+document.getElementById("export-all").href = apiUrl("/recommendations/export");
 
 document.getElementById("go-datos").addEventListener("click", () => show("datos"));
 document.getElementById("back-modelo").addEventListener("click", () => show("modelo"));

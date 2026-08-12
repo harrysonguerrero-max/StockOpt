@@ -4,7 +4,15 @@
  * recargas por aqui, de modo que ninguna guarda su propia copia de los datos.
  */
 
-const BASE = "/api/v1";
+/* Vacia en desarrollo y dentro del contenedor, donde la interfaz y la API
+ * comparten origen. En Amplify la rellena `VITE_API_BASE` con el endpoint de
+ * API Gateway, porque alli viven en dominios distintos. */
+const HOST = import.meta.env.VITE_API_BASE || "";
+const BASE = `${HOST}/api/v1`;
+
+/** Ruta absoluta a un recurso de la API que se consume como URL, no por fetch:
+ *  las graficas del entrenamiento y del pipeline, y la descarga de tablas. */
+export const apiUrl = (path) => `${BASE}${path}`;
 
 export const state = {
   items: [],

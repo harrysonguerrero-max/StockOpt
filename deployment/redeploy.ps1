@@ -4,7 +4,9 @@ $appName = "stockopt"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectPath = Split-Path -Parent $scriptDir # Lulu
 $frontendDir = Join-Path $projectPath "frontend"
-$distDir = Join-Path $projectPath "dist"
+# Vite escribe en frontend/dist. Apuntar a la raiz del proyecto dejaba el zip
+# vacio o fallaba, porque ahi no hay ningun dist.
+$distDir = Join-Path $frontendDir "dist"
 $frontendZipName = "stockopt-frontend.zip"
 $backendZipName = "stockopt-backend.zip"
 $bucketName = "stockopt-bucket"
@@ -67,7 +69,7 @@ Write-Host "Creating file $backendZipName..."
 wsl -d Ubuntu --cd "$projectPath" --exec bash -lc "rm -f '$backendZipName'"
 
 # Crear ZIP
-wsl -d Ubuntu --cd "$projectPath" --exec bash -lc "zip -r '$backendZipName' . -x '.venv/*' -x '.venv/**' -x '*/.venv/*' -x '*/.venv/**' -x '__pycache__/*' -x '*/__pycache__/*' -x '*.pyc' x '.git/*' -x '$backendZipName' -x 'frontend/*' -x 'frontend/**' -x '*/frontend/*' -x '*/frontend/**'"
+wsl -d Ubuntu --cd "$projectPath" --exec bash -lc "zip -r '$backendZipName' . -x '.venv/*' -x '.venv/**' -x '*/.venv/*' -x '*/.venv/**' -x '__pycache__/*' -x '*/__pycache__/*' -x '*.pyc' -x '.git/*' -x '$backendZipName' -x 'frontend/*' -x 'frontend/**' -x '*/frontend/*' -x '*/frontend/**'"
 
 
 # Verificar ZIP

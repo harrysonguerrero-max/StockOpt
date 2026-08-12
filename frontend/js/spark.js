@@ -7,6 +7,14 @@
  * Los meses que genero el build para dar profundidad al entrenamiento van en
  * linea discontinua. Dibujarlos igual que los reales seria presentar como
  * observacion algo que es un supuesto.
+ *
+ * La incertidumbre se dibuja como un cono que nace en la ultima observacion
+ * real, con anchura cero, y se abre hasta el rango del mes proyectado. Antes era
+ * una barra vertical de altura constante, que sugeria que el error ya existe
+ * sobre el dato observado. No es asi: sobre lo observado no hay error, y la
+ * incertidumbre aparece y crece a medida que uno se aleja del ultimo dato. El
+ * cono dice eso y ademas se lee mas cerrado, sin estrechar el intervalo, que
+ * seria afirmar una precision que el modelo no tiene.
  */
 
 const W = 600;
@@ -54,8 +62,8 @@ export function spark(history, forecast) {
   <line x1="${PAD.left}" y1="${y(0)}" x2="${W - PAD.right}" y2="${y(0)}"
         stroke="#E3E8EF" stroke-width="1"/>
 
-  <rect x="${fx - 7}" y="${y(q75)}" width="14" height="${Math.max(2, y(q25) - y(q75))}"
-        fill="#D9EAF4"/>
+  <path d="M${lastReal[0]} ${lastReal[1]} L${fx} ${y(q75)} L${fx} ${y(q25)} Z"
+        fill="#D9EAF4" opacity=".85"/>
 
   ${syntheticPart.length > 1
     ? `<path d="${path(syntheticPart)}" fill="none" stroke="#CBD5E1"

@@ -1,6 +1,34 @@
 /* Paleta y tipografia — los colores son los del Spec, seccion 12.
    Azul y neutros construyen la pantalla; verde, ambar y rojo aparecen
-   unicamente como estado operativo, nunca como decoracion. */
+   unicamente como estado operativo, nunca como decoracion.
+
+   Las tipografias se sirven desde el propio despliegue, no desde una CDN: la
+   aplicacion corre en contenedor y no se le supone salida a internet. Licencia
+   y procedencia en fonts/LICENSE.md. */
+
+@font-face {
+  font-family: "Archivo";
+  src: url("./fonts/archivo.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Plex Mono";
+  src: url("./fonts/plexmono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Plex Mono";
+  src: url("./fonts/plexmono-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+  font-style: normal;
+}
 
 :root {
   --primary: #003B70;
@@ -19,8 +47,12 @@
   --line: #E3E8EF;
   --line-strong: #CBD5E1;
 
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  /* Archivo es una grotesca con raices en la señaletica: sostiene el titular y
+     las etiquetas de planta. Plex Mono lleva todo dato numerico y toda lectura
+     de instrumento, porque el ancho fijo es lo que deja comparar una columna de
+     cifras de un vistazo. */
+  --sans: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "Plex Mono", ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
 
   --shell: 1360px;
 }
@@ -64,37 +96,65 @@ body {
 
 /* ---------- Barra superior ---------- */
 
+/* La banda azul maciza era la firma mas clara de tablero generico. El azul pasa
+   a ser una regla bajo la barra: sigue siendo el color corporativo, pero como
+   trazo y no como fondo. */
 .topbar {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px 30px;
   flex-wrap: wrap;
-  padding: 13px 26px;
-  background: var(--primary);
-  color: #fff;
+  padding: 20px 26px 0;
+  background: var(--surface);
+  border-bottom: 2px solid var(--primary);
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
-.topbar__brand { display: flex; align-items: center; gap: 13px; }
-.topbar__mark { width: 5px; height: 30px; background: var(--primary-light); display: block; }
-.topbar h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
-.topbar__nav { display: flex; align-items: center; gap: 4px; }
+.topbar__brand { display: flex; align-items: baseline; gap: 11px; padding-bottom: 12px; }
 
+/* La marca lleva su propio remate: un cuadrado macizo del azul corporativo a la
+   altura de la x. Es lo unico decorativo de la pantalla y por eso se permite. */
+.topbar__mark { width: 9px; height: 9px; background: var(--primary); display: block; flex: none; }
+
+.topbar h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--text-primary);
+}
+
+.topbar__nav { display: flex; align-items: stretch; gap: 2px; }
+
+/* Pestañas subrayadas en vez de pildoras: la pildora redondeada sobre fondo de
+   color es el gesto por defecto, y aqui el subrayado ademas alinea con la regla
+   azul de la barra. */
 .navlink {
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 6px 12px;
-  border: 1px solid transparent;
-  border-radius: 3px;
+  padding: 8px 14px 13px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
   background: transparent;
-  color: #B9D4E8;
+  color: var(--text-secondary);
   cursor: pointer;
   text-decoration: none;
+  white-space: nowrap;
 }
 
-.navlink:hover { background: rgba(255,255,255,0.12); color: #fff; }
-.navlink--on { background: var(--surface); color: var(--primary); }
+.navlink:hover { color: var(--text-primary); }
+.navlink--on { color: var(--primary); border-bottom-color: var(--primary); }
+
+.topbar__nav:last-child .navlink {
+  font-size: 12px;
+  font-weight: 500;
+  padding-bottom: 13px;
+}
 
 /* ---------- Botones ---------- */
 
@@ -130,16 +190,30 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
    Las cifras viven dentro del texto y cada una filtra al pulsarla. Antes eran
    cinco recuadros identicos que parecian filtros y no lo eran. */
 
-.opening { padding: 40px 0 30px; }
+/* Centrada: es una sola frase y es lo primero que se lee. Alineada a la
+   izquierda competia con el borde de la pagina y no parecia un titular. */
+.opening { padding: 54px 0 34px; max-width: 68ch; margin: 0 auto; text-align: center; }
 
-.opening__lead { color: var(--text-secondary); font-size: 13px; margin: 0 0 10px; }
-
-.opening__note {
-  margin: 14px 0 0;
-  font-size: 13px;
+.opening__lead {
   color: var(--text-secondary);
-  max-width: 62ch;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin: 0 0 18px;
+  font-family: var(--mono);
 }
+
+.opening .display { max-width: none; margin: 0 auto; }
+.opening__note { margin-left: auto; margin-right: auto; max-width: 62ch; }
+
+/* La desviacion se marca en el titular, no en una caja aparte: es lo unico que
+   cambia si el comprador tiene que hacer algo hoy. */
+.display--alert { color: var(--danger); }
+
+.opening__note { margin: 16px 0 0; font-size: 14px; color: var(--text-secondary); }
+.lede { display: block; margin-top: 7px; line-height: 1.55; }
+.lede b { color: var(--text-primary); font-family: var(--mono); font-weight: 600; }
 
 .figure-link {
   font: inherit;
@@ -157,120 +231,249 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 .figure-link--hold { color: var(--warning); border-bottom-color: #F0DDB4; }
 .figure-link--stop { color: var(--danger); border-bottom-color: #EFC9C9; }
 
-/* ---------- Las dos plantas ----------
-   El grano de la decision es pieza x ciudad. Partir la pantalla en dos lo
-   dice sin necesidad de escribirlo en ningun sitio. */
+/* ---------- El mapa ----------
+   Dos columnas decian el grano de la decision pero no que Nava y Obregon estan
+   a mil kilometros, con bodega propia y proveedores distintos. La burbuja lo
+   dice sin escribirlo. */
 
-.plants {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px;
-  align-items: start;
-}
-
-.plant {
-  background: var(--surface);
+/* El mapa es el protagonista y la ficha va encima, no al lado: dos bloques
+   contiguos se leian como dos cosas, y son la misma. `isolation` crea un
+   contexto de apilamiento propio para que los paneles de Leaflet —que usan
+   z-index altos— no se cuelen por encima del panel lateral. */
+.atlas {
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+  margin: 8px 0 38px;
   border: 1px solid var(--line);
-  border-top: 3px solid var(--primary);
 }
 
-.plant__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 15px 18px 13px;
-  border-bottom: 1px solid var(--line);
-  width: 100%;
-  background: none;
-  border-left: 0;
-  border-right: 0;
-  border-top: 0;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+.atlas__map { height: 520px; min-height: 520px; background: var(--surface); }
+
+.atlas__side {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 300px;
+  max-width: calc(100% - 32px);
+  z-index: 500;
+  pointer-events: none;
 }
 
-.plant__head:hover { background: #FAFCFE; }
-.plant__name { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.plant__warehouse { font-family: var(--mono); font-size: 11.5px; color: var(--text-secondary); }
-.plant__count { font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; }
-.plant__count b { color: var(--text-primary); font-size: 15px; font-family: var(--mono); }
+.atlas__side > * { pointer-events: auto; }
+
+.atlas__filter {
+  margin: 10px 0 0;
+  text-align: right;
+  background: rgba(255,255,255,0.92);
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+}
+
+.leaflet-container { height: 100%; width: 100%; font: inherit; background: var(--surface); }
+.leaflet-container a { color: var(--secondary); }
+.bubble { cursor: pointer; transition: fill-opacity 0.15s ease; }
+.bubble:hover { fill-opacity: .45; }
+
+.bubble-label { text-align: center; pointer-events: none; line-height: 1.15; }
+.bubble-label__n { display: block; font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.bubble-label__name { display: block; font-size: 11px; font-weight: 600; color: var(--text-primary); }
+
+/* Ficha de la planta: lo que se pregunta al pinchar una burbuja. */
+.pcard {
+  border: 1px solid var(--line-strong);
+  background: rgba(255,255,255,0.96);
+  padding: 16px 18px 14px;
+  box-shadow: 0 10px 30px rgba(31,41,51,0.14);
+}
+.pcard__head h3 { margin: 0 0 2px; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+.pcard__stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin-top: 16px; }
+.pstat__n { display: block; font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--primary); margin: 2px 0 1px; }
+.pcard__bar { height: 7px; background: #EDF1F6; border: 1px solid var(--line-strong); margin-top: 16px; }
+.pcard__fill { display: block; height: 100%; }
+.pcard__fill--go { background: var(--success); }
+.pcard__fill--hold { background: var(--warning); }
+.pcard__fill--stop { background: var(--danger); }
 
 /* ---------- Bandas ----------
    Tres franjas ordenadas por quien debe actuar. La primera dice de forma
    explicita que ahi hace falta una persona, y eso es lo que resuelve el
    "no se por donde empezar". */
 
-.band { border-bottom: 1px solid var(--line); }
-.band:last-child { border-bottom: 0; }
+.band { margin-bottom: 3px; }
 
+/* La cabecera se queda pegada arriba al desplazar. Antes, al desplegar una
+   banda las demas se iban tan abajo que dejaban de existir; ahora sus cabeceras
+   se apilan bajo la barra y siempre se ve donde esta cada cosa. */
 .band__head {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 12px;
   width: 100%;
-  padding: 11px 18px;
-  background: none;
+  padding: 14px 18px;
   border: 0;
   font: inherit;
-  font-size: 12.5px;
-  font-weight: 650;
-  color: var(--text-primary);
   text-align: left;
   cursor: pointer;
+  position: sticky;
+  top: 58px;
+  z-index: 4;
+  background: var(--background);
+  color: var(--text-primary);
+  border-left: 6px solid var(--line-strong);
 }
 
-.band__head:hover { background: #FAFCFE; }
-.band--muted .band__head { color: var(--text-secondary); font-weight: 600; }
+.band__title { font-size: 15px; font-weight: 650; letter-spacing: -0.015em; }
+
+/* El semaforo va en macizo, no en tinte: el color plano de la izquierda y el
+   contador en su color son lo que se ve antes de leer nada. */
+.band--decide .band__head { background: #FBF0DC; border-left-color: var(--warning); color: #7A4E00; }
+.band--aplazado .band__head { background: #F9DEDE; border-left-color: var(--danger); color: #8A1F1F; }
+.band--auto .band__head { background: #E2F0E3; border-left-color: var(--success); color: #1B5E20; }
+.band--curso .band__head { background: var(--primary-light); border-left-color: var(--secondary); color: var(--primary); }
+.band--muted .band__head { background: var(--surface); border-left-color: var(--line); color: var(--text-secondary); }
+.band--muted .band__title { font-weight: 600; font-size: 13.5px; }
+
+.band__head:hover { filter: brightness(0.97); }
 
 .band__caret {
-  font-size: 9px;
-  color: var(--text-secondary);
-  transition: transform 0.12s ease;
+  font-size: 10px;
+  transition: transform 0.14s ease;
   display: inline-block;
+  opacity: .7;
 }
 
 .band[data-open="true"] .band__caret { transform: rotate(90deg); }
-.band__n { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--text-secondary); }
-.band__body { display: none; padding: 2px 12px 14px; }
-.band[data-open="true"] .band__body { display: block; }
 
-.band__rule {
-  height: 2px;
-  background: var(--line);
-  margin: 0 18px;
+.band__n {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1;
 }
 
-.band--decide .band__rule { background: var(--warning); }
-.band--aplazado .band__rule { background: var(--danger); }
-.band--aprobar .band__rule { background: var(--success); }
+.band--muted .band__n { font-size: 15px; }
+.band__body { display: none; padding: 14px 0 26px; }
+
+.band[data-open="true"] .band__body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 14px;
+}
 
 /* ---------- La tarjeta de un caso ---------- */
 
+/* La tarjeta ya no es un recuadro con borde: es una columna de contenido con
+   una marca de estado arriba. Veintiun rectangulos identicos era la firma mas
+   clara de plantilla, y una franja que se usa en todo no significa nada. */
 .case {
   display: block;
+  position: relative;
   width: 100%;
   text-align: left;
   font: inherit;
   color: inherit;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
-  padding: 13px 15px;
-  margin-bottom: 8px;
+  padding: 15px 16px 14px;
   cursor: pointer;
+  border: 1px solid transparent;
+  border-top: 0;
 }
 
-.case:last-child { margin-bottom: 0; }
-.case:hover { border-color: var(--line-strong); background: #FAFCFE; }
-.case--critico { border-left-color: var(--danger); }
-.case--ajustado { border-left-color: var(--warning); }
-.case--holgado { border-left-color: var(--success); }
+.case:hover { border-color: var(--line); background: #FAFCFE; }
+.case:focus-visible { border-color: var(--secondary); }
 
-.case__top { display: flex; align-items: baseline; gap: 8px; }
-.case__sku { font-family: var(--mono); font-size: 12.5px; font-weight: 650; }
-.case__name { font-size: 12px; color: var(--text-secondary); margin: 1px 0 9px; }
+.case__mark { display: block; height: 4px; margin: 0 -16px 13px; background: var(--line-strong); }
+.case--go .case__mark { background: var(--success); }
+.case--hold .case__mark { background: var(--warning); }
+.case--stop .case__mark { background: var(--danger); }
+.case--off .case__mark { background: var(--line); }
+
+.case--hold, .case--stop { border-color: var(--line); }
+.case--hold:hover { border-color: var(--warning); }
+.case--stop:hover { border-color: var(--danger); }
+
+.case__light {
+  padding: 3px 7px;
+  color: var(--surface);
+}
+
+.case__light--go { background: var(--success); }
+.case__light--hold { background: var(--warning); }
+.case__light--stop { background: var(--danger); }
+.case__light--off { background: transparent; color: var(--text-secondary); padding-left: 0; padding-right: 0; }
+
+.case__part { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.case__glyph { flex: none; color: var(--text-secondary); line-height: 0; padding-top: 1px; }
+.case--go .case__glyph { color: var(--primary); }
+.case__top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.case__sku { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.case__name { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+.case__light {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.case__light--go { color: var(--success); }
+.case__light--hold { color: var(--warning); }
+.case__light--stop { color: var(--danger); }
+.case__light--off { color: var(--text-secondary); }
+
+/* Lo que el sistema haria, en los casos que no puede cerrar solo. */
+.advice {
+  display: block;
+  font-size: 12.5px;
+  margin-top: 11px;
+  padding-left: 11px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--text-secondary);
+}
+
+.advice b { color: var(--text-primary); }
+.advice--buy { border-left-color: var(--success); }
+.advice--hold { border-left-color: var(--text-secondary); }
+.advice i { display: block; font-style: normal; font-size: 11px; margin-top: 3px; opacity: .8; }
+
+/* Barra de decision de la tarjeta. Aprobar se resuelve aqui; rechazar lleva al
+   panel, porque exige un motivo y el motivo se registra. */
+.case__decide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.case__decide .btn { padding: 7px 13px; font-size: 12px; }
+
+/* La pista de que hay mas detras. Quieta y tenue hasta que el puntero entra en
+   la tarjeta; entonces avanza. Sin ella nada indicaba que la tarjeta se abre. */
+.case__more {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  opacity: .55;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.case__more i { font-style: normal; display: inline-block; transition: transform 0.18s ease; }
+.case:hover .case__more { opacity: 1; color: var(--primary); }
+.case:hover .case__more i { transform: translateX(4px); }
+.case:focus-visible .case__more { opacity: 1; color: var(--primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .case__more, .case__more i { transition: none; }
+}
 
 .crit {
   font-family: var(--mono);
@@ -292,12 +495,12 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
   white-space: nowrap;
 }
 
-.case__action { font-size: 14px; font-weight: 650; margin: 10px 0 3px; }
+.case__action { display: block; font-size: 14.5px; font-weight: 650; margin: 12px 0 3px; letter-spacing: -0.01em; }
 .case__action--go { color: var(--success); }
 .case__action--hold { color: var(--warning); }
 .case__action--stop { color: var(--danger); }
 .case__action--none { color: var(--text-secondary); font-weight: 600; }
-.case__why { font-size: 12.5px; color: var(--text-secondary); margin: 0; max-width: 46ch; }
+.case__why { display: block; font-size: 12.5px; color: var(--text-secondary); max-width: 46ch; }
 
 .case__foot {
   display: flex;
@@ -352,11 +555,12 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
    Pantalla propia y no fila desplegada. El detalle antes vivia dentro de la
    tabla, con treinta y nueve filas alrededor tirando de la atencion. */
 
+/* Por encima de todo, incluidos los paneles de Leaflet. */
 .scrim {
   position: fixed;
   inset: 0;
-  background: rgba(31,41,51,0.42);
-  z-index: 30;
+  background: rgba(15,26,40,0.5);
+  z-index: 2000;
 }
 
 .panel {
@@ -368,7 +572,7 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
   background: var(--surface);
   border-left: 1px solid var(--line-strong);
   box-shadow: -12px 0 40px rgba(31,41,51,0.16);
-  z-index: 31;
+  z-index: 2001;
   overflow-y: auto;
 }
 
@@ -679,11 +883,55 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
   white-space: nowrap;
 }
 
-.tag { display: inline-block; font-size: 11px; font-weight: 650; padding: 3px 8px; border-radius: 2px; white-space: nowrap; }
-.tag--COMPRAR { background: #E7F2E8; color: var(--success); }
-.tag--REVISAR { background: #FBF0DC; color: var(--warning); }
-.tag--APLAZADO { background: #FBEDED; color: var(--danger); }
-.tag--NO_COMPRAR { background: #EEF1F5; color: var(--text-secondary); }
+.tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.tag__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: block; }
+.tag__dot--go { background: var(--success); }
+.tag__dot--hold { background: var(--warning); }
+.tag__dot--stop { background: var(--danger); }
+.tag__dot--off { background: var(--line-strong); }
+.tag--NO_COMPRAR { color: var(--text-secondary); }
+
+/* ---------- Prefiltrado por familia ----------
+   De lo general a lo particular: la pregunta suele ser "como estan las correas",
+   no "que pasa con MRO-30012". */
+
+.cats { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 2px; }
+
+.cat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 11px 7px 8px;
+  background: none;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.cat:hover { border-color: var(--line-strong); color: var(--text-primary); background: var(--surface); }
+.cat--on { border-color: var(--primary); background: var(--primary-light); color: var(--primary); font-weight: 600; }
+.cat__glyph { line-height: 0; flex: none; }
+.cat__name { white-space: nowrap; }
+.cat__n { font-family: var(--mono); font-size: 11px; opacity: .8; }
+.cat__open { color: var(--warning); font-weight: 700; }
+.cat--on .cat__open { color: var(--danger); }
+
+/* Fila de familia: el nivel general de la tabla. */
+.grouprow { cursor: pointer; }
+.grouprow td { padding: 14px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.grouprow:hover td { background: var(--primary-light); }
+.grouprow:focus-visible td { background: var(--primary-light); }
+.grouprow__name { display: block; font-size: 14px; font-weight: 650; letter-spacing: -0.01em; }
+.grouprow__state { display: table-cell; }
+.grouprow__state .tag { margin-right: 14px; }
+.grouprow__go { text-align: right; font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }
+.grouprow .cell-part__glyph { color: var(--primary); }
+
+.cell-part { display: flex; gap: 10px; align-items: flex-start; }
+.cell-part__glyph { flex: none; color: var(--text-secondary); line-height: 0; padding-top: 2px; }
+.cell-part__name { display: block; margin-top: 1px; }
 
 .flagreview {
   display: block;
@@ -915,9 +1163,12 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 .kv--wide { grid-template-columns: minmax(0, 1fr) auto; gap: 5px 14px; }
 .kv--wide dd { text-align: right; }
 
-.sparkline { width: 100%; height: 64px; display: block; margin-bottom: 10px; }
-.spark__line { fill: none; stroke: var(--secondary); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
-.spark__sim { fill: #EDF1F6; }
+.sparkline { width: 100%; height: auto; display: block; }
+.spark__line { fill: none; stroke: var(--primary); stroke-width: 2.2; }
+.spark__bar { fill: var(--line-strong); }
+.spark__sim { fill: #F1F5F9; }
+.spark__key .k-bar { border-top-width: 7px; border-color: var(--line-strong); width: 9px; }
+.spark__key .k-real { border-color: var(--primary); }
 
 /* ---------- Explorador de tablas ---------- */
 
@@ -1044,9 +1295,8 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
   background: var(--text-primary);
   color: #fff;
   padding: 10px 18px;
-  border-radius: 3px;
   font-size: 13px;
-  z-index: 40;
+  z-index: 2100;
   box-shadow: 0 6px 20px rgba(31,41,51,0.28);
 }
 

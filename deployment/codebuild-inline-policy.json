@@ -54,6 +54,17 @@
                 "events:PutTargets"
             ],
             "Resource": ["*"]
+        },
+        {
+            "Sid": "SecretsManagerTokenGitLab",
+            "Effect": "Allow",
+            "Action": [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret"
+            ],
+            "Resource": [
+                "arn:aws:secretsmanager:us-east-1:978439335053:secret:codebuild/mlops-sdk-token*"
+            ]
         }
     ]
 }
