@@ -176,17 +176,43 @@ def test_recommendations_endpoint_returns_the_screen(client):
     assert payload["items"][0]["explanation"]["headline"]
 
 
-def test_state_endpoint_rejects_an_invalid_transition(client):
+def test_state_endpoint_rejects_an_invalid_transition(client, queue):
+    """Saltarse pasos del flujo no esta permitido.
+
+    Se usa una pieza real: antes la prueba pasaba un identificador inventado y
+    aprovechaba que, al no existir, su estado por defecto era pendiente. Eso
+    verificaba la transicion pero encubria que el endpoint aceptaba cualquier
+    identificador y escribia su aprobacion.
+    """
+    item = next(i for i in queue if i["state"] == workflow.STATE_PENDING)
     response = client.post(
         "/api/v1/recommendations/state",
         json={
-            "sku_id": "NO-EXISTE",
-            "city_id": "NAVA",
+            "sku_id": item["sku_id"],
+            "city_id": item["city_id"],
             "new_state": workflow.STATE_CONFIRMED,
         },
     )
     assert response.status_code == 400
     assert "Transicion no permitida" in response.json()["detail"]
+
+
+def test_state_endpoint_rejects_an_unknown_part(client):
+    """Una combinacion inexistente no puede entrar en el historial.
+
+    El endpoint no comprobaba que la pieza y la ciudad existieran, de modo que
+    cualquier identificador quedaba registrado como aprobado en la auditoria.
+    """
+    response = client.post(
+        "/api/v1/recommendations/state",
+        json={
+            "sku_id": "NO-EXISTE",
+            "city_id": "NAVA",
+            "new_state": workflow.STATE_APPROVED,
+        },
+    )
+    assert response.status_code == 404
+    assert "No existe la recomendacion" in response.json()["detail"]
 
 
 def test_export_returns_a_csv(client):

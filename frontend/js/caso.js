@@ -317,7 +317,12 @@ async function send(item, newState, extra) {
     closeCase();
     await onChange();
   } catch (error) {
+    /* Un rechazo del servidor significa que el panel muestra un estado que ya
+       no es el de la base. Se cierra y se recarga para que los botones vuelvan
+       a corresponderse con lo que de verdad se puede hacer. */
     toast(error.message, true);
+    closeCase();
+    await onChange();
   }
 }
 

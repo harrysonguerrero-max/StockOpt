@@ -1,3 +1,52 @@
+# AWS CLI v2 pasa las salidas largas por un paginador que se detiene con
+# "-- MORE --" esperando una tecla, y deja el script colgado.
+$env:AWS_PAGER = ""
+
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+function New-ZipDeCarpeta {
+    <#
+    .SYNOPSIS
+        Comprime una carpeta escribiendo las rutas con barra normal.
+
+    .DESCRIPTION
+        En Windows PowerShell 5.1 ni Compress-Archive ni
+        ZipFile::CreateFromDirectory respetan el formato ZIP: guardan las rutas
+        con la barra invertida de Windows. Quien descomprime en Linux —CodeBuild
+        y Amplify— no ve carpetas sino archivos llamados "app\main.py", asi que
+        el build no encuentra el codigo y el sitio sale vacio.
+
+        Por eso se anaden las entradas de una en una, fijando el nombre a mano.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Origen,
+        [Parameter(Mandatory)][string]$Destino
+    )
+
+    $barra = [char]92
+    if (Test-Path $Destino) { [System.IO.File]::Delete($Destino) }
+
+    # Get-Item y no Resolve-Path: en carpetas bajo %TEMP%, Resolve-Path devuelve
+    # la forma corta 8.3 ("C:\Users\HARRYS~1\...") mientras Get-ChildItem
+    # devuelve FullName en forma larga. Restar longitudes entre las dos cortaba
+    # doce caracteres antes de tiempo y dejaba media carpeta pegada al nombre de
+    # cada entrada, asi que CodeBuild no encontraba buildspec.yml en la raiz.
+    $raiz = (Get-Item -LiteralPath $Origen).FullName.TrimEnd($barra)
+    $zip = [System.IO.Compression.ZipFile]::Open($Destino, 'Create')
+    try {
+        foreach ($archivo in Get-ChildItem -LiteralPath $raiz -Recurse -File -Force) {
+            $relativa = $archivo.FullName.Substring($raiz.Length + 1).Replace($barra, '/')
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zip, $archivo.FullName, $relativa)
+        }
+    } finally {
+        $zip.Dispose()
+    }
+
+    if (-not (Test-Path $Destino)) { throw "No se pudo crear $Destino" }
+}
+
 $accountId = "978439335053"
 $region = "us-east-1"
 $appName = "stockopt"
@@ -27,15 +76,13 @@ npm run build
 if ($LASTEXITCODE -ne 0) { throw "npm build failed." }
 Pop-Location
 
-# ================= ZIP WITH WSL =================
+# ================= ZIP DEL FRONTEND =================
+# Con Compress-Archive, que viene en PowerShell: `zip` dentro de WSL era una
+# dependencia sin declarar y su ausencia tumbaba el despliegue.
 Write-Host "Zipping dist..."
 
-wsl -d Ubuntu --cd "$distDir" --exec bash -lc "zip -r '$frontendZipName' . -x '.venv/*' -x '.venv/**' -x '*/.venv/*' -x '*/.venv/**' -x '__pycache__/*' -x '*/__pycache__/*' -x '*.pyc' -x '.git/*' -x '$frontendZipName'"
-
-
-if ($LASTEXITCODE -ne 0) { throw "Zip failed." }
-
-$zipFullPath = Join-Path $distDir $frontendZipName
+$zipFullPath = Join-Path $projectPath $frontendZipName
+New-ZipDeCarpeta -Origen $distDir -Destino $zipFullPath
 
 aws s3 cp $zipFullPath "s3://$bucketName/$frontendZipName"
 if ($LASTEXITCODE -ne 0) { throw "Upload failed." }
@@ -65,18 +112,25 @@ Write-Host "Deployment triggered successfully."
 
 Write-Host "Creating file $backendZipName..."
 
-# Limpiar ZIP previo
-wsl -d Ubuntu --cd "$projectPath" --exec bash -lc "rm -f '$backendZipName'"
+# Compress-Archive aplana el arbol si se le pasa una lista de archivos, y
+# CodeBuild necesita encontrar el buildspec en la raiz. De ahi la carpeta de
+# paso con robocopy, que si sabe excluir directorios.
+$backendZipPath = Join-Path $projectPath $backendZipName
+if (Test-Path $backendZipPath) { Remove-Item $backendZipPath -Force }
 
-# Crear ZIP
-wsl -d Ubuntu --cd "$projectPath" --exec bash -lc "zip -r '$backendZipName' . -x '.venv/*' -x '.venv/**' -x '*/.venv/*' -x '*/.venv/**' -x '__pycache__/*' -x '*/__pycache__/*' -x '*.pyc' -x '.git/*' -x '$backendZipName' -x 'frontend/*' -x 'frontend/**' -x '*/frontend/*' -x '*/frontend/**'"
+$staging = Join-Path $env:TEMP "supplyopt-backend-zip"
+if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 
+robocopy $projectPath $staging /E /NFL /NDL /NJH /NJS /NP `
+    /XD .venv .git frontend node_modules __pycache__ .pytest_cache .ruff_cache `
+    /XF *.pyc *.zip .env | Out-Null
 
-# Verificar ZIP
-if (-not (Test-Path "$projectPath\$backendZipName")) {
-    Write-Error "File $backendZipName was not created."
-    throw "File $backendZipName was not created."
-}
+# Robocopy usa 0-7 para exito; sin normalizarlo se leeria como fallo.
+if ($LASTEXITCODE -ge 8) { throw "Robocopy fallo al preparar el zip del backend." }
+$global:LASTEXITCODE = 0
+
+New-ZipDeCarpeta -Origen $staging -Destino $backendZipPath
+Remove-Item $staging -Recurse -Force
 
 Write-Host "$backendZipName created successfully."
 

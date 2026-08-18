@@ -20,6 +20,16 @@ class Settings(BaseSettings):
         aqui cuando no. Los origenes autorizados incluyen el puerto en que corre
         la propia aplicacion y el puerto habitual de un frontend en desarrollo,
         para poder servir la interfaz por separado durante el trabajo local.
+
+        `BACKEND_CORS_ORIGIN_REGEX` cubre el dominio de Amplify, que lleva
+        dentro el identificador de la aplicacion y cambia cada vez que el
+        despliegue la recrea. Fijarlo por expresion regular evita reconstruir la
+        imagen del backend en cada recreacion.
+
+        Hace falta porque las rutas del API Gateway son `ANY /{proxy+}` y
+        capturan tambien el OPTIONS del preflight: al existir una ruta que casa,
+        API Gateway no lo resuelve por su cuenta y lo reenvia aqui. De ahi que
+        un GET funcionara —no genera preflight— y un POST no.
     """
 
     PROJECT_NAME: str = "SupplyOpt"
@@ -31,6 +41,8 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:5173",
     ]
+
+    BACKEND_CORS_ORIGIN_REGEX: str | None = r"https://.*\.amplifyapp\.com"
     MLFLOW_TRACKING_URI: str | None = "http://localhost:5000"
     GEMINI_API_KEY: str | None = None
 

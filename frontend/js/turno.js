@@ -308,8 +308,12 @@ function caseCard(item) {
         toast(`${item.sku_id} · aprobado`);
         await onChanged();
       } catch (error) {
-        approve.disabled = false;
+        /* Si el servidor rechaza la transicion es que la pantalla ya no
+           coincide con la base: alguien decidio esa fila desde otro sitio, o
+           esta pestaña lleva abierta desde antes. Recargar deja los botones
+           acordes a la realidad en lugar de ofrecer una accion imposible. */
         toast(error.message, true);
+        await onChanged();
       }
     });
   }

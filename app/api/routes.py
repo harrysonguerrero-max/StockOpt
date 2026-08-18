@@ -125,9 +125,20 @@ def change_state(change: StateChange):
         Diccionario con el estado anterior, el nuevo y la marca de tiempo.
 
     Funcionalidad:
-        Delega la validacion de la transicion en la capa de servicios y traduce
-        un movimiento invalido en un error 400 con el motivo explicito.
+        Comprueba primero que la combinacion de pieza y ciudad exista. Sin esa
+        comprobacion el endpoint aceptaba cualquier identificador y escribia su
+        aprobacion en la base: una pieza inventada quedaba registrada en el
+        historial de auditoria sin corresponder a ninguna recomendacion.
+
+        Despues delega la validacion de la transicion en la capa de servicios y
+        traduce un movimiento invalido en un error 400 con el motivo explicito.
     """
+    if find_recommendation(change.sku_id, change.city_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No existe la recomendacion {change.sku_id} / {change.city_id}",
+        )
+
     try:
         return update_state(
             sku_id=change.sku_id,

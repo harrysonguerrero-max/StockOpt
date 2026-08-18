@@ -24,10 +24,11 @@ WEB_DIR = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")
 
-if settings.BACKEND_CORS_ORIGINS:
+if settings.BACKEND_CORS_ORIGINS or settings.BACKEND_CORS_ORIGIN_REGEX:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.BACKEND_CORS_ORIGINS,
+        allow_origin_regex=settings.BACKEND_CORS_ORIGIN_REGEX,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

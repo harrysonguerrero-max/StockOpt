@@ -4,7 +4,7 @@
 
 ## 0. Estado actual de la implementación
 
-**Última actualización:** 2026-08-04
+**Última actualización:** 2026-08-12
 
 ### Qué está hecho
 
@@ -19,12 +19,29 @@
 | 2.b · Modelo ML entrenado | ✅ | `app/core/training.py` |
 | **2.c · Historia sintética** | ✅ | `app/core/synthesis.py` |
 | 3 · Optimización MILP | ✅ | `app/core/optimization.py` |
+| **3.b · Presupuesto y costo de quiebre** | ✅ | mochila en `app/core/optimization.py` |
 | 4 · Reglas de negocio | ✅ | dentro del optimizador |
 | 5 · Explicación con LLM | ✅ código listo, ⏸️ sin clave | `app/services/llm_agent.py` |
-| 6 · Interfaz | ✅ | `app/api/` + `app/web/` |
+| 6 · Interfaz | ✅ reescrita | `app/api/` + `frontend/` |
+| **6.b · Recorrido del pipeline y explorador de datos** | ✅ | `app/services/pipeline_report.py`, `data_views.py` |
 | 9 · Feedback y reentrenamiento | ⬜ | — |
 
-**151 tests** en `tests/core/`.
+**284 tests** en `tests/core/`.
+
+### Lo que cambió desde la versión anterior de este documento
+
+**El presupuesto ya no es una idea pendiente.** El optimizador resuelve una
+mochila sobre todas las piezas a la vez: reparte el presupuesto de la corrida
+maximizando el beneficio neto —lo que cuesta el quiebre que se evita menos lo
+que cuesta evitarlo— y publica una cuarta decisión, `APLAZADO`, para las
+reposiciones que procedían y no cupieron. Con ella entran `stockout_cost_usd` y
+`net_benefit_usd` por fila. Esto cierra dos puntos que §11 daba por pendientes:
+el presupuesto global y el costo de quiebre en la función objetivo.
+
+**La interfaz se reescribió entera** y vive en `frontend/`, fuera de `app/`. Se
+compila con Vite —sin framework: sigue siendo HTML y módulos ES— para poder
+publicarse en Amplify como sitio estático mientras la API queda en ECS. El
+detalle está en la Etapa 6.
 
 ### Arquitectura
 
@@ -74,9 +91,14 @@ python -m uvicorn app.main:app --port 8000
 
 | Decisión | Casos |
 |---|---|
-| COMPRAR | 11 · 4.003,38 USD · 676 unidades |
-| NO_COMPRAR | 22 |
+| COMPRAR | 7 · 2.430,89 USD · 317 unidades |
 | REVISAR | 7 |
+| **APLAZADO** | 3 · 1.116,94 USD sin financiar |
+| NO_COMPRAR | 23 |
+
+Presupuesto de la corrida: **2.500 USD**. Evita 12.485,80 USD de quiebre, un
+retorno de 5,1×, y deja 3.152,08 USD de riesgo sin cubrir en las tres
+reposiciones aplazadas.
 
 Patrones: 26 Estable · 9 Volátil · 5 Estacional.
 Modelo: **WMAPE 21,1 %**, mejora 28,2 % sobre repetir el último mes y 3,2 %
@@ -88,8 +110,12 @@ Instalado desde el GitLab interno (`v0.5.0`). En uso: `BaseModel` en
 `DemandModel`, `MLObserver` para Prometheus, y `BaseAgent` con
 `llm_provider="gemini"` en `ExplanationAgent`.
 
-**MLflow no está configurado.** Sin `MLFLOW_TRACKING_URI` el SDK guarda en
-`./artifacts/<run_id>/` y no falla.
+**MLflow ya está configurado** con `MLFLOW_TRACKING_URI` apuntando al ALB
+interno de MLflow. Ojo: cuando ese servidor no responde —está sujeto al mismo
+apagado programado que el resto—, el SDK registra el fallo y sigue, y las
+pruebas se llenan de avisos de reintento que tapan el resumen de pytest. No
+rompe nada, pero conviene saberlo antes de leer un log y pensar que algo falló.
+Sin la variable, el SDK guarda en `./artifacts/<run_id>/`.
 
 ---
 
@@ -696,9 +722,11 @@ El MVP se considera exitoso si logra demostrar que, para un conjunto acotado de 
 | 2 | **Servidor MLflow** (`MLFLOW_TRACKING_URI`) | minutos | Hoy los runs quedan en disco local y no se comparan entre sí |
 | 3 | **Feedback loop** (§9) | alto | Es la mitad del valor del sistema y hoy no existe nada |
 | 4 | **Detección de outliers** (§1.1) | bajo | Un consumo atípico hoy entra al modelo sin marcarse |
-| 5 | **Presupuesto de escenario** | medio | La restricción existe en el spec pero no hay dato ni parámetro |
+| 5 | ~~Presupuesto de escenario~~ | — | ✅ **Hecho.** Mochila sobre el presupuesto de la corrida, con decisión `APLAZADO` |
 | 6 | **Ingesta manual de proveedores** (§1.2) | medio | Depende de mover la persistencia a base de datos |
 | 7 | **Reentrenamiento periódico** | medio | Hoy el modelo se entrena a mano |
+| 8 | **Persistencia de aprobaciones fuera de la imagen** | medio | Hoy se pierden cada noche. Ver §11.3 |
+| 9 | **Autenticación** | medio | Sin ella la auditoría no prueba nada. Ver §11.3 |
 
 ### 11.2 Mejoras sobre lo ya construido
 
@@ -736,10 +764,22 @@ mayormente planas, no hay mucha estructura que aprender. Tres caminos reales:
 
 Esto es lo que un revisor externo preguntaría y hoy no tiene respuesta.
 
-**No hay autenticación.** `updated_by` es texto libre que manda el navegador.
-Cualquiera puede aprobar una compra como cualquier otro. Para una demo interna
-es aceptable; para mostrarlo a un cliente hay que decirlo antes de que
-pregunten.
+**No hay autenticación, y ya no es teórico.** `updated_by` es texto libre que
+manda el navegador, así que el `audit_log` registra lo que el cliente diga que
+es. Durante el rediseño de la interfaz, un clic automatizado de verificación
+aprobó `MRO-20033 / NAVA` y quedó firmado como «comprador»: la traza no
+distingue una decisión humana de un accidente de una prueba. Con el despliegue
+en Amplify la API queda además tras un endpoint público de API Gateway con
+`AllowOrigins: *` y `authorization-type NONE`, de modo que `POST
+/recommendations/state` lo alcanza cualquiera que conozca la URL.
+
+**Las aprobaciones no sobreviven a la noche.** `approvals.db` vive en
+`app/data/state/`, el `Dockerfile` hace `COPY app ./app` y el archivo no está en
+`.dockerignore`: la base se hornea en la imagen. El almacenamiento de Fargate es
+efímero y el autoescalado programado apaga el servicio a las 23:00 UTC de lunes
+a viernes (`MinCapacity=0`). Cada mañana el sistema arranca con las aprobaciones
+que hubiera en la máquina de compilación y el historial de auditoría vacío. Para
+un producto cuyo argumento es la trazabilidad, es el fallo más grave que queda.
 
 **El dataset es sintético en sus campos críticos.** Vida útil, stock actual,
 MOQ, capacidad y flete no vienen de ningún sistema real: los generó el build con
@@ -752,18 +792,25 @@ históricas y no contempla aduanas, cierres de planta ni estacionalidad del
 proveedor. Con σ/μ ≈ 0,53 la variabilidad ya es alta; un evento excepcional la
 rompe.
 
-**No hay costo de quiebre.** El sistema minimiza el costo de compra, pero nunca
-compara contra lo que cuesta parar una línea por falta de una pieza. Para una
-pieza de criticidad A ese costo domina cualquier ahorro de flete. Hoy la
-criticidad solo afecta el nivel de servicio, no la función objetivo.
+**~~No hay costo de quiebre.~~** ✅ Resuelto. `stockout_cost_usd` entra en la
+función objetivo y la mochila maximiza el beneficio neto. Queda un matiz: el
+costo de quiebre se deriva de la criticidad con un parámetro fijo, no de lo que
+cuesta de verdad parar una línea en Nava o en Obregón. Esa cifra la tiene
+operaciones y cambiaría el orden de prioridades.
 
 **El horizonte es de un mes.** El sistema decide como si cada mes fuera
 independiente. No hay noción de que comprar hoy afecta la decisión del mes
 siguiente, ni de trayectoria de inventario.
 
-**No se modela el tiempo de tránsito entre plantas.** Si Nava tiene exceso de
-una pieza y Obregón está en quiebre, la respuesta correcta puede ser mover
-stock, no comprar. El sistema nunca considera esa opción.
+**No se modela el traslado entre plantas, y los datos dicen que importa.** Si
+Nava tiene exceso de una pieza y Obregón está por debajo del mínimo, la
+respuesta correcta puede ser mover stock, no comprar. El sistema nunca considera
+esa opción. Contando sobre el dataset actual hay **11 piezas** en esa situación,
+por unos 2.860 USD de compra —más que el presupuesto entero de la corrida—, y
+una de ellas, `MRO-90011`, está aplazada por falta de presupuesto mientras
+Obregón tiene ocho unidades sobre su mínimo. Un traslado paga flete pero no
+precio de compra, así que bajo restricción de presupuesto es estrictamente más
+barato que comprar. Ver §11.6.
 
 **Una sola moneda y sin impuestos.** Todo está en USD sin IVA, aranceles ni tipo
 de cambio, con proveedores mexicanos. En una compra real eso cambia el ranking
@@ -781,15 +828,59 @@ dataset, el sistema no avisa.
 versión de datos se generaron. Si mañana cambian los datos, no hay forma de
 reconstruir por qué se recomendó lo de hoy.
 
-### 11.4 Orden sugerido
+### 11.4 Las cinco mejoras propuestas
+
+Ordenadas por lo que impide hoy, no por lo que sería vistoso.
+
+**1 · Autenticación, y `updated_by` desde el token.** Un autorizador de Cognito
+en API Gateway y el usuario tomado del JWT, nunca del cuerpo de la petición.
+Sin esto el `audit_log` no prueba nada —lo firmó un clic de prueba durante el
+desarrollo— y el endpoint de escritura queda abierto al publicar en Amplify.
+Bloquea enseñárselo a un cliente. *Esfuerzo: medio.*
+
+**2 · Sacar las aprobaciones de la imagen.** DynamoDB encaja: la clave es
+`sku_id + city_id`, el volumen es de decenas de filas y no hay que administrar
+nada. Mientras tanto, `app/data/state/` debería estar en `.dockerignore` para
+que al menos no se publique una base con decisiones de la máquina de
+compilación. Hoy el apagado nocturno borra cada día las aprobaciones y la
+auditoría. *Esfuerzo: medio.*
+
+**3 · Identificador de corrida en cada decisión.** Un `run_id` con el hash de
+las entradas, el presupuesto y la fecha, guardado en la recomendación y en la
+aprobación. Antes era higiene; con la mochila es necesario: una fila está
+`APLAZADO` por lo que consumieron *las demás*, así que sin saber contra qué
+corrida se decidió, el motivo no se puede reconstruir. *Esfuerzo: bajo.*
+
+**4 · Cerrar el bucle de feedback (§9).** Sigue sin existir y es la mitad del
+valor. Ahora hay un punto de enganche que antes no existía: en los casos
+`REVISAR` la interfaz muestra una recomendación explícita del sistema, así que
+cada decisión del comprador es un ejemplo etiquetado —coincide o la corrige— sin
+pedirle nada extra. De ahí sale el ratio de cumplimiento de §9.2 casi gratis.
+*Esfuerzo: alto.*
+
+**5 · Traslado entre plantas antes de comprar.** Añadir el movimiento de stock
+como variable del optimizador, con su flete y su tiempo de tránsito, y
+resolverlo antes que la compra. Con presupuesto restringido siempre es más
+barato mover que comprar. Sobre el dataset actual habría 11 candidatos y
+cerraría al menos una reposición aplazada. Advertencia honesta: el excedente
+medido es *stock por encima del mínimo*, así que moverlo entero dejaría a la
+planta de origen sin colchón; el modelo tiene que respetar el mínimo de las dos.
+*Esfuerzo: medio-alto.*
+
+### 11.5 Orden sugerido
 
 1. Configurar `GEMINI_API_KEY` y `MLFLOW_TRACKING_URI` — desbloquea lo ya escrito.
-2. Decir en la demo qué es sintético y qué es real.
-3. Feedback loop (§9): es lo que convierte el MVP en un sistema que aprende.
-4. Costo de quiebre en la función objetivo: es el argumento de negocio más fuerte.
-5. Variables externas en el modelo: la única vía para que el forecast mejore.
+2. Sacar `approvals.db` de la imagen: hoy el sistema pierde su auditoría cada noche.
+3. Autenticación antes de publicar en Amplify.
+4. `run_id` en cada decisión — es barato y sin él la mochila no es reconstruible.
+5. Feedback loop (§9): es lo que convierte el MVP en un sistema que aprende.
+6. Traslado entre plantas: el ahorro está medido y supera el presupuesto de la corrida.
+7. Variables externas en el modelo: la única vía para que el forecast mejore.
 
-### 11.5 Deuda técnica registrada
+La demo sigue necesitando decir qué dato es sintético y cuál real. La interfaz
+ya lo marca por su cuenta (§Etapa 6), pero conviene abrirlo en voz alta.
+
+### 11.6 Deuda técnica registrada
 
 - **Flag de validación global, no por fila** — el spec pide un flag por
   pieza/proveedor/ciudad; hoy la validación es todo o nada.

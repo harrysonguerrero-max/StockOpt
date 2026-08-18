@@ -1,6 +1,63 @@
+# Despliegue completo desde cero: Amplify, ALB, API Gateway, ECS, ECR y CodeBuild.
+#
+# Si algo falla, el bloque catch del final borra todo lo que el script toca. Eso
+# deja la cuenta limpia para volver a lanzar, que es justo lo que hace falta
+# cuando el fallo ocurre a mitad: los recursos a medias provocan choques de
+# nombres en la siguiente corrida y hay que borrarlos a mano uno por uno.
+
 # ================= STRICT MODE =================
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+# AWS CLI v2 pasa las salidas largas por un paginador, que se detiene con
+# "-- MORE --" esperando una tecla. En un script eso no informa de nada y deja
+# el despliegue colgado hasta que alguien pulsa Enter.
+$env:AWS_PAGER = ""
+
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+function New-ZipDeCarpeta {
+    <#
+    .SYNOPSIS
+        Comprime una carpeta escribiendo las rutas con barra normal.
+
+    .DESCRIPTION
+        En Windows PowerShell 5.1 ni Compress-Archive ni
+        ZipFile::CreateFromDirectory respetan el formato ZIP: guardan las rutas
+        con la barra invertida de Windows. Quien descomprime en Linux —CodeBuild
+        y Amplify— no ve carpetas sino archivos llamados "app\main.py", asi que
+        el build no encuentra el codigo y el sitio sale vacio.
+
+        Por eso se anaden las entradas de una en una, fijando el nombre a mano.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Origen,
+        [Parameter(Mandatory)][string]$Destino
+    )
+
+    $barra = [char]92
+    if (Test-Path $Destino) { [System.IO.File]::Delete($Destino) }
+
+    # Get-Item y no Resolve-Path: en carpetas bajo %TEMP%, Resolve-Path devuelve
+    # la forma corta 8.3 ("C:\Users\HARRYS~1\...") mientras Get-ChildItem
+    # devuelve FullName en forma larga. Restar longitudes entre las dos cortaba
+    # doce caracteres antes de tiempo y dejaba media carpeta pegada al nombre de
+    # cada entrada, asi que CodeBuild no encontraba buildspec.yml en la raiz.
+    $raiz = (Get-Item -LiteralPath $Origen).FullName.TrimEnd($barra)
+    $zip = [System.IO.Compression.ZipFile]::Open($Destino, 'Create')
+    try {
+        foreach ($archivo in Get-ChildItem -LiteralPath $raiz -Recurse -File -Force) {
+            $relativa = $archivo.FullName.Substring($raiz.Length + 1).Replace($barra, '/')
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zip, $archivo.FullName, $relativa)
+        }
+    } finally {
+        $zip.Dispose()
+    }
+
+    if (-not (Test-Path $Destino)) { throw "No se pudo crear $Destino" }
+}
 
 try {
 
@@ -135,9 +192,12 @@ try {
 
     if ($LASTEXITCODE -ne 0) { throw "Log group creation failed." }
 
+    # CloudWatch Logs recibe las etiquetas como mapa plano, no como lista de
+    # estructuras Key/Value. Con la forma larga interpretaba el primer token
+    # como el mapa entero y el segundo le sobraba: "Unknown options".
     aws logs tag-log-group `
         --log-group-name $logGroupName `
-        --tags Key=Name,Value=${appName}-logs Key=Project,Value=${appName} `
+        --tags Name=${appName}-logs,Project=${appName} `
         --region $region
 
     # ================= CREATE TARGET GROUP AND ALB =================
@@ -218,7 +278,7 @@ try {
 
     aws apigatewayv2 tag-resource `
         --resource-arn "arn:aws:apigateway:$region::/apis/$apiId" `
-        --tags Key=Name,Value=${appName}-api-gateway Key=Project,Value=${appName} `
+        --tags Name=${appName}-api-gateway,Project=${appName} `
         --region $region
 
     $rootIntegrationId = aws apigatewayv2 create-integration `
@@ -470,14 +530,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "npm build failed." }
     Pop-Location
 
-    # ================= ZIP WITH WSL =================
+    # ================= ZIP DEL FRONTEND =================
+    #
+    # Con Compress-Archive, que viene en PowerShell. Antes se llamaba a `zip`
+    # dentro de WSL: una dependencia que no esta declarada en ninguna parte y
+    # cuya ausencia tumbaba el despliegue entero. `dist` ya es salida limpia de
+    # Vite, asi que no hay nada que excluir.
+
     Write-Host "Zipping dist..."
 
-    wsl -d Ubuntu --cd "$distDir" --exec bash -lc "zip -r '$frontendZipName' . -x '.venv/*' -x '.venv/**' -x '*/.venv/*' -x '*/.venv/**' -x '__pycache__/*' -x '*/__pycache__/*' -x '*.pyc' -x '.git/*' -x '$frontendZipName'"
-
-    if ($LASTEXITCODE -ne 0) { throw "Zip failed." }
-
-    $zipFullPath = Join-Path $distDir $frontendZipName
+    $zipFullPath = Join-Path $projectPath $frontendZipName
+    New-ZipDeCarpeta -Origen $distDir -Destino $zipFullPath
 
     # ================= UPLOAD ZIP =================
     Write-Host "Uploading ZIP..."
@@ -506,20 +569,32 @@ try {
 
     Write-Host "Creating file $backendZipName..."
 
-    # Limpiar ZIP previo
-    wsl -d Ubuntu --cd "$projectPath" --exec bash -lc "rm -f '$backendZipName'"
+    # ================= ZIP DEL BACKEND =================
+    #
+    # `Compress-Archive` aplana la estructura si se le pasa una lista de
+    # archivos, y CodeBuild necesita el arbol intacto para encontrar el
+    # buildspec. Por eso se copia primero a una carpeta de paso con robocopy,
+    # que si sabe excluir directorios, y se comprime esa carpeta entera.
+    #
+    # `frontend` queda fuera a proposito: lo publica Amplify, no esta imagen.
 
+    $backendZipPath = Join-Path $projectPath $backendZipName
+    if (Test-Path $backendZipPath) { Remove-Item $backendZipPath -Force }
 
-    # Crear ZIP
-    # El guion de '-x .git/*' faltaba y 'x' se estaba tratando como archivo.
-    wsl -d Ubuntu --cd "$projectPath" --exec bash -lc "zip -r '$backendZipName' . -x '.venv/*' -x '.venv/**' -x '*/.venv/*' -x '*/.venv/**' -x '__pycache__/*' -x '*/__pycache__/*' -x '*.pyc' -x '.git/*' -x '$backendZipName' -x 'frontend/*' -x 'frontend/**' -x '*/frontend/*' -x '*/frontend/**'"
+    $staging = Join-Path $env:TEMP "supplyopt-backend-zip"
+    if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 
+    robocopy $projectPath $staging /E /NFL /NDL /NJH /NJS /NP `
+        /XD .venv .git frontend node_modules __pycache__ .pytest_cache .ruff_cache artifacts\mlruns `
+        /XF *.pyc *.zip .env | Out-Null
 
-    # Verificar ZIP
-    if (-not (Test-Path "$projectPath\$backendZipName")) {
-        Write-Error "File $backendZipName was not created."
-        throw "File $backendZipName was not created."
-    }
+    # Robocopy usa 0-7 para exito y 8 o mas para error. Sin normalizarlo, el
+    # siguiente `if ($LASTEXITCODE -ne 0)` del script leeria un exito como fallo.
+    if ($LASTEXITCODE -ge 8) { throw "Robocopy fallo al preparar el zip del backend." }
+    $global:LASTEXITCODE = 0
+
+    New-ZipDeCarpeta -Origen $staging -Destino $backendZipPath
+    Remove-Item $staging -Recurse -Force
 
     Write-Host "$backendZipName created successfully."
 
@@ -543,17 +618,24 @@ try {
 
     Write-Host "Creating CodeBuild project..."
 
-    # Una sola conversion. Convertir dos veces envolvia el JSON como cadena y
-    # CodeBuild recibia "{\"type\":\"S3\"...}" en lugar de un objeto.
-    $sourceJson = @{type = "S3"; location = "${bucketName}/${backendZipName}"} |
-        ConvertTo-Json -Compress
+    # Dos cosas que hay que hacer a la vez y por motivos distintos.
+    #
+    # Una sola conversion a JSON: convertir dos veces envolvia el objeto como
+    # cadena y CodeBuild recibia "{\"type\":\"S3\"...}" en vez de un objeto.
+    #
+    # Y las comillas escapadas: al pasar un argumento a un ejecutable nativo,
+    # Windows PowerShell 5.1 se come las comillas dobles, asi que aws recibia
+    # {type:S3,location:...} y lo rechazaba por JSON invalido. Es la misma forma
+    # que ya usan --artifacts, --environment y --logs-config mas abajo.
+    $sourceJson = (@{type = "S3"; location = "${bucketName}/${backendZipName}"} |
+        ConvertTo-Json -Compress) -replace '"', '\"'
 
     aws codebuild create-project `
         --name "$codebuildProjectName" `
         --region $region `
         --source $sourceJson `
         --artifacts '{\"type\":\"NO_ARTIFACTS\"}' `
-        --environment '{\"type\":\"LINUX_CONTAINER\",\"image\":\"aws/codebuild/amazonlinux-x86_64-standard:5.0\",\"computeType\":\"BUILD_GENERAL1_SMALL\",\"privilegedMode\":false,\"imagePullCredentialsType\":\"CODEBUILD\"}' `
+        --environment '{\"type\":\"LINUX_CONTAINER\",\"image\":\"aws/codebuild/amazonlinux-x86_64-standard:5.0\",\"computeType\":\"BUILD_GENERAL1_SMALL\",\"privilegedMode\":true,\"imagePullCredentialsType\":\"CODEBUILD\"}' `
         --service-role "arn:aws:iam::${accountId}:role/service-role/${codebuildServiceRoleName}" `
         --timeout-in-minutes 15 `
         --queued-timeout-in-minutes 480 `
@@ -832,6 +914,39 @@ try {
     }
 
     # ================= CALL CLEANUP =================
-    Cleanup -appName $appName -region $region
+    #
+    # Se limpia siempre que algo falle: deja la cuenta sin restos a medias, que
+    # es lo que permite volver a lanzar desde cero sin choques de nombres.
+    #
+    # Se imprime antes el error, porque el motivo del fallo se perdia entre la
+    # cascada de borrados y sin el no hay forma de saber que corregir.
 
+    # Con $ErrorActionPreference = "Stop", Write-Error es terminante: usado aqui
+    # abortaba el propio catch y Cleanup no llegaba a ejecutarse nunca. El aviso
+    # va con Write-Host, que no puede interrumpir nada.
+    Write-Host ""
+    Write-Host "==================================================" -ForegroundColor Red
+    Write-Host " EL DESPLIEGUE FALLO" -ForegroundColor Red
+    Write-Host "==================================================" -ForegroundColor Red
+    Write-Host ""
+    Write-Host " $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host ""
+    Write-Host " Se puede borrar todo lo creado para volver a lanzar desde cero," -ForegroundColor Yellow
+    Write-Host " o dejarlo en pie para inspeccionar que quedo a medias." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host " Borra: app Amplify, bucket S3, API Gateway, log group, servicio y" -ForegroundColor Yellow
+    Write-Host " cluster ECS, repositorio ECR, roles IAM, ALB y proyecto CodeBuild." -ForegroundColor Yellow
+    Write-Host ""
+
+    $respuesta = Read-Host " Escribe S para borrar, cualquier otra cosa para dejarlo"
+
+    if ($respuesta -eq 'S' -or $respuesta -eq 's') {
+        Write-Host ""
+        Write-Host "Limpiando lo creado..." -ForegroundColor Yellow
+        Cleanup -appName $appName -region $region
+    } else {
+        Write-Host ""
+        Write-Host "No se ha borrado nada. Recuerda que los recursos que queden" -ForegroundColor Cyan
+        Write-Host "provocaran choques de nombres en la siguiente corrida." -ForegroundColor Cyan
+    }
 }
