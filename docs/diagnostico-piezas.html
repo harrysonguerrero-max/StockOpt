@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagnóstico del Catálogo MRO</title>
+<style>
+  :root {
+    color-scheme: light;
+    --primary:        #003B70;
+    --secondary:      #0067A0;
+    --primary-light:  #D9EAF4;
+    --ink:            #1F2933;
+    --ink-2:          #55606D;
+    --ink-3:          #7A8694;
+    --ground:         #F4F6F9;
+    --surface:        #FFFFFF;
+    --rule:           #DFE5EC;
+    --rule-soft:      #EDF1F6;
+    --crit-3:         #C62828;
+    --crit-2:         #C88700;
+    --crit-1:         #2E7D32;
+    --crit-3-wash:    #FBEAEA;
+    --crit-2-wash:    #FBF2E0;
+    --crit-1-wash:    #E7F2E8;
+    --bar-track:      #E8EDF3;
+    --fsn-f:          #003B70;
+    --fsn-s:          #0067A0;
+    --fsn-n:          #6FA8CC;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --primary:       #6FB4E8;
+      --secondary:     #4E9BD4;
+      --primary-light: #1B2C3D;
+      --ink:           #EEF2F6;
+      --ink-2:         #AFBCCA;
+      --ink-3:         #7F8D9C;
+      --ground:        #0E1319;
+      --surface:       #141A21;
+      --rule:          #29323C;
+      --rule-soft:     #1E2630;
+      --crit-3:        #E06060;
+      --crit-2:        #CE9A2E;
+      --crit-1:        #3E9E6B;
+      --crit-3-wash:   #2A1A1C;
+      --crit-2-wash:   #29220F;
+      --crit-1-wash:   #142620;
+      --bar-track:     #212A34;
+      --fsn-f:         #9CC9EE;
+      --fsn-s:         #5E9FD4;
+      --fsn-n:         #38709F;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --primary:       #6FB4E8;
+    --secondary:     #4E9BD4;
+    --primary-light: #1B2C3D;
+    --ink:           #EEF2F6;
+    --ink-2:         #AFBCCA;
+    --ink-3:         #7F8D9C;
+    --ground:        #0E1319;
+    --surface:       #141A21;
+    --rule:          #29323C;
+    --rule-soft:     #1E2630;
+    --crit-3:        #E06060;
+    --crit-2:        #CE9A2E;
+    --crit-1:        #3E9E6B;
+    --crit-3-wash:   #2A1A1C;
+    --crit-2-wash:   #29220F;
+    --crit-1-wash:   #142620;
+    --bar-track:     #212A34;
+    --fsn-f:         #9CC9EE;
+    --fsn-s:         #5E9FD4;
+    --fsn-n:         #38709F;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0;
+  }
+
+  header.page h1 {
+    font-size: clamp(28px, 4.4vw, 40px);
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.022em;
+    margin: 10px 0 12px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  header.page p.lede {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 17px;
+    color: var(--ink-2);
+  }
+
+  section { display: flex; flex-direction: column; gap: 18px; }
+
+  h2 {
+    font-size: 21px;
+    font-weight: 650;
+    letter-spacing: -0.012em;
+    margin: 0;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 15px;
+    font-weight: 650;
+    margin: 0 0 4px;
+    color: var(--ink);
+  }
+  p { margin: 0; }
+  p + p { margin-top: 12px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 24px;
+  }
+
+  /* ---- verdict ---- */
+  .verdict {
+    display: grid;
+    grid-template-columns: 4px 1fr;
+    gap: 0;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .verdict .stripe { background: var(--crit-2); }
+  .verdict .body { padding: 22px 24px; }
+  .verdict h2 { margin-bottom: 10px; }
+  .verdict p { color: var(--ink-2); max-width: 70ch; }
+
+  /* ---- KPI row ---- */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .kpi .label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .kpi .value {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--primary);
+  }
+  .kpi .value.flag { color: var(--crit-3); }
+  .kpi .note { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+
+  /* ---- matrix ---- */
+  .matrix-scroll { overflow-x: auto; }
+  table.matrix {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 560px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.matrix th, table.matrix td {
+    border: 1px solid var(--rule);
+    padding: 12px 14px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.matrix thead th {
+    background: var(--rule-soft);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  table.matrix th.rowhead {
+    font-size: 13px;
+    font-weight: 650;
+    width: 190px;
+  }
+  .cellcount {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .cellskus {
+    font-size: 11.5px;
+    color: var(--ink-2);
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  td.c3 { background: var(--crit-3-wash); }
+  td.c2 { background: var(--crit-2-wash); }
+  td.c1 { background: var(--crit-1-wash); }
+  td.c3 .cellcount { color: var(--crit-3); }
+  td.c2 .cellcount { color: var(--crit-2); }
+  td.c1 .cellcount { color: var(--crit-1); }
+  td.empty .cellcount { color: var(--ink-3); }
+  td.empty { background: transparent; }
+
+  .dot {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    margin-right: 7px;
+    vertical-align: baseline;
+  }
+  .dot.d3 { background: var(--crit-3); }
+  .dot.d2 { background: var(--crit-2); }
+  .dot.d1 { background: var(--crit-1); }
+
+  /* ---- charts ---- */
+  .chart-head { margin-bottom: 16px; }
+  .chart-head .sub { font-size: 13.5px; color: var(--ink-2); margin-top: 4px; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 18px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+  .legend span.item { display: inline-flex; align-items: center; }
+
+  .barlist { display: flex; flex-direction: column; gap: 7px; }
+  .barrow {
+    display: grid;
+    grid-template-columns: 190px 1fr 86px;
+    align-items: center;
+    gap: 12px;
+    font-size: 12.5px;
+  }
+  .barrow .name {
+    color: var(--ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .barrow .name b { color: var(--ink); font-weight: 600; }
+  .bartrack {
+    background: var(--bar-track);
+    height: 15px;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .barfill {
+    height: 100%;
+    border-radius: 0 4px 4px 0;
+  }
+  .barrow .val {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  @media (max-width: 620px) {
+    .barrow { grid-template-columns: 1fr 70px; grid-template-areas: "name val" "bar bar"; row-gap: 3px; }
+    .barrow .name { grid-area: name; }
+    .barrow .val  { grid-area: val; }
+    .bartrack     { grid-area: bar; }
+  }
+
+  /* ---- quality gauges ---- */
+  .gauges { display: flex; flex-direction: column; gap: 22px; }
+  .gauge .glabel {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 7px;
+    font-size: 13.5px;
+  }
+  .gauge .glabel .who { color: var(--ink); font-weight: 600; }
+  .gauge .glabel .num {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .gauge .gtrack {
+    background: var(--bar-track);
+    height: 22px;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .gauge .gfill { height: 100%; border-radius: 0 4px 4px 0; }
+  .gauge .gnote { font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
+
+  .quadgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+  }
+  .quad {
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .quad .qn {
+    font-size: 27px; font-weight: 700; line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .quad .qname { font-size: 13px; font-weight: 650; color: var(--ink); margin-top: 2px; }
+  .quad .qdesc { font-size: 11.5px; color: var(--ink-3); line-height: 1.45; margin-top: 3px; }
+  .quad.hot { border-color: var(--crit-3); background: var(--crit-3-wash); }
+  .quad.hot .qn { color: var(--crit-3); }
+  .quad.cold .qn { color: var(--ink-3); }
+
+  /* ---- data table ---- */
+  .tbl-scroll { overflow-x: auto; }
+  table.data {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 720px;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.data th, table.data td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  table.data thead th {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  table.data td.num, table.data th.num { text-align: right; }
+  table.data tbody tr:last-child td { border-bottom: none; }
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.03em;
+  }
+  .pill.p3 { background: var(--crit-3-wash); color: var(--crit-3); }
+  .pill.p2 { background: var(--crit-2-wash); color: var(--crit-2); }
+  .pill.p1 { background: var(--crit-1-wash); color: var(--crit-1); }
+
+  ul.tight { margin: 0; padding-left: 20px; color: var(--ink-2); }
+  ul.tight li { margin-bottom: 8px; }
+  ul.tight li:last-child { margin-bottom: 0; }
+  ul.tight b, p b { color: var(--ink); font-weight: 650; }
+
+  code {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--rule-soft);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .footnote {
+    font-size: 12.5px;
+    color: var(--ink-3);
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    line-height: 1.6;
+  }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <p class="eyebrow">Diagnóstico de datos · StockOpt</p>
+    <h1>Qué piezas hay en el catálogo y si sirven para una cervecera</h1>
+    <p class="lede">Análisis de las 20 referencias MRO cargadas hoy en <code>parts_master.csv</code>, su composición por criticidad y valor, y la calidad del dato de consumo que alimenta el pronóstico.</p>
+  </header>
+
+  <div class="verdict">
+    <div class="stripe"></div>
+    <div class="body">
+      <h2>Veredicto: las piezas sirven; el patrón de consumo no</h2>
+      <p>Las 20 referencias son <b>MRO industrial genérico</b> —rodamientos, sellos, bandas, filtros, acoplamientos, sensores— presentes en cualquier planta con motores, bombas y transportadores. Para una cervecera son directamente aplicables: una línea de embotellado es exactamente eso. <b>El problema no son las piezas, es la demanda:</b> solo 3,3&nbsp;% de los meses tienen consumo cero cuando en refacciones reales ese número ronda 40–70&nbsp;%. El dato se comporta como consumo de producción, no como consumo de mantenimiento.</p>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <span class="label">Referencias</span>
+      <span class="value">20</span>
+      <span class="note">9 familias MRO, 2 plantas</span>
+    </div>
+    <div class="kpi">
+      <span class="label">Valor anual</span>
+      <span class="value">54,9k</span>
+      <span class="note">USD/año proyectados</span>
+    </div>
+    <div class="kpi">
+      <span class="label">Meses en cero</span>
+      <span class="value flag">3,3 %</span>
+      <span class="note">Esperado en MRO real: 40–70 %</span>
+    </div>
+    <div class="kpi">
+      <span class="label">Series intermitentes</span>
+      <span class="value flag">2 / 40</span>
+      <span class="note">38 clasifican como demanda «suave»</span>
+    </div>
+    <div class="kpi">
+      <span class="label">Rotación mínima</span>
+      <span class="value flag">9,8×</span>
+      <span class="note">vueltas/año. En MRO real, los ítems N rotan &lt; 1</span>
+    </div>
+  </div>
+
+  <!-- ============ ORIGEN ============ -->
+  <section>
+    <h2>De dónde salen estas piezas realmente</h2>
+    <div class="card">
+      <p style="color:var(--ink-2); max-width:72ch;">El catálogo no viene de un ERP de una planta. Se construyó a partir de tres fuentes públicas distintas, y eso explica tanto lo que funciona como lo que no:</p>
+      <div class="tbl-scroll" style="margin-top:16px;">
+        <table class="data" style="min-width:620px;">
+          <thead>
+            <tr><th>Fuente</th><th>Qué aportó</th><th>Industria de origen</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Procurement KPI</code><br><span style="color:var(--ink-3);font-size:12px;">777 órdenes</span></td>
+              <td>Proveedores, lead times reales, precios, defectuosos</td>
+              <td>Compras genéricas — solo 164 de 777 órdenes son categoría MRO; el resto es papelería, electrónica, empaque</td>
+            </tr>
+            <tr>
+              <td><code>ai4i2020</code></td>
+              <td>Señal de falla de máquina</td>
+              <td>Mantenimiento predictivo industrial (dataset académico UCI)</td>
+            </tr>
+            <tr>
+              <td><code>parts.csv</code> + <code>inventory-levels</code></td>
+              <td>Estructura de almacén y ubicaciones</td>
+              <td>Componentes electrónicos de bajo valor (LEDs, buzzers, fotorresistencias)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:16px; color:var(--ink-2); max-width:72ch;">Las descripciones actuales —<i>Deep Groove Ball Bearing 6205-2RS</i>, <i>Poly-V Belt 6PK1780</i>— son nomenclatura MRO estándar y correcta. Ninguna es específica de un sector: el rodamiento 6205 es la referencia más común del mundo y va igual en un transportador de botellas que en un molino.</p>
+    </div>
+  </section>
+
+  <!-- ============ MATRIZ ============ -->
+  <section>
+    <h2>Matriz de criticidad × valor</h2>
+    <p style="color:var(--ink-2); max-width:72ch;">Criticidad viene del maestro de piezas (columna <code>criticality</code>). El valor es clasificación ABC de Pareto sobre el consumo anual proyectado: <b>X&nbsp;alto</b> = hasta el 80&nbsp;% acumulado, <b>Y&nbsp;medio</b> = 80–95&nbsp;%, <b>Z&nbsp;bajo</b> = el 5&nbsp;% restante.</p>
+    <div class="card">
+      <div class="matrix-scroll">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th class="rowhead">Criticidad</th>
+              <th>X · Valor alto<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">≤ 80 % acumulado</span></th>
+              <th>Y · Valor medio<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">80 – 95 %</span></th>
+              <th>Z · Valor bajo<br><span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">95 – 100 %</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th class="rowhead"><span class="dot d3"></span>3 · Crítica (A)</th>
+              <td class="c3"><span class="cellcount">4</span><span class="cellskus">Sello hidráulico 50mm<br>Rodamiento NU-2210<br>Rodamiento 30206<br>Rodamiento 6205-2RS</span></td>
+              <td class="c3"><span class="cellcount">2</span><span class="cellskus">Contactor LC1-D40<br>Sensor proximidad M12</span></td>
+              <td class="empty"><span class="cellcount">0</span><span class="cellskus">—</span></td>
+            </tr>
+            <tr>
+              <th class="rowhead"><span class="dot d2"></span>2 · Importante (B)</th>
+              <td class="c2"><span class="cellcount">3</span><span class="cellskus">Banda Poly-V 6PK1780<br>Filtro aire AF-2500<br>Filtro hidráulico 10µ</span></td>
+              <td class="c2"><span class="cellcount">3</span><span class="cellskus">Banda V A-68<br>Araña acople 65 Shore<br>Termopar Tipo-K</span></td>
+              <td class="c2"><span class="cellcount">3</span><span class="cellskus">Inserto acople GR-38<br>Sello V-Ring VS-35<br>Juego carbones 12.5x25</span></td>
+            </tr>
+            <tr>
+              <th class="rowhead"><span class="dot d1"></span>1 · Rutinaria (C)</th>
+              <td class="c1"><span class="cellcount">1</span><span class="cellskus">Grasa Litio EP-2 400g</span></td>
+              <td class="c1"><span class="cellcount">1</span><span class="cellskus">Tornillo M10x40 Gr8.8</span></td>
+              <td class="c1"><span class="cellcount">3</span><span class="cellskus">Roldana presión M10<br>Grasera M6x1<br>O-Ring NBR 40x3</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:18px; color:var(--ink-2); font-size:14px; max-width:72ch;"><b>Lo que dice la matriz.</b> La celda 3&nbsp;×&nbsp;X con 4 piezas es la que justifica el sistema: son caras <i>y</i> críticas, así que un quiebre cuesta doble. La celda 1&nbsp;×&nbsp;X con la grasa es la interesante —barata por unidad (2,53&nbsp;USD) pero 4.022&nbsp;USD/año por volumen: es candidata a contrato de suministro, no a decisión mensual. Y la esquina 3&nbsp;×&nbsp;Z está vacía: no hay ninguna pieza crítica y barata, que es justo donde una política de «stock generoso» sería obvia y gratuita.</p>
+    </div>
+
+    <div class="card">
+      <div class="chart-head">
+        <h3>Tabla de segmentación — código, variedad y valor</h3>
+        <p class="sub">Formato estándar de análisis ABC. <b>% variedad</b> = participación en el conteo de referencias · <b>% valor</b> = participación en el consumo anual (54 894 USD/año)</p>
+      </div>
+      <div class="tbl-scroll">
+        <table class="data" style="min-width:700px;">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Criticidad</th>
+              <th>Valor</th>
+              <th class="num">Piezas</th>
+              <th class="num">% variedad</th>
+              <th class="num">USD/año</th>
+              <th class="num">% valor</th>
+              <th class="num">Índice</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b style="color:var(--crit-3);">3X</b></td>
+              <td><span class="pill p3">3 · Crítica</span></td>
+              <td>X · Alto</td>
+              <td class="num">4</td><td class="num">20,0 %</td>
+              <td class="num">24 509</td><td class="num"><b>44,6 %</b></td>
+              <td class="num" style="color:var(--crit-3);"><b>2,23×</b></td>
+            </tr>
+            <tr>
+              <td><b style="color:var(--crit-3);">3Y</b></td>
+              <td><span class="pill p3">3 · Crítica</span></td>
+              <td>Y · Medio</td>
+              <td class="num">2</td><td class="num">10,0 %</td>
+              <td class="num">3 894</td><td class="num">7,1 %</td>
+              <td class="num">0,71×</td>
+            </tr>
+            <tr>
+              <td><b style="color:var(--crit-3);">3Z</b></td>
+              <td><span class="pill p3">3 · Crítica</span></td>
+              <td>Z · Bajo</td>
+              <td class="num">0</td><td class="num">0,0 %</td>
+              <td class="num">0</td><td class="num">0,0 %</td>
+              <td class="num" style="color:var(--ink-3);">—</td>
+            </tr>
+            <tr>
+              <td><b style="color:var(--crit-2);">2X</b></td>
+              <td><span class="pill p2">2 · Importante</span></td>
+              <td>X · Alto</td>
+              <td class="num">3</td><td class="num">15,0 %</td>
+              <td class="num">14 382</td><td class="num"><b>26,2 %</b></td>
+              <td class="num" style="color:var(--crit-2);"><b>1,75×</b></td>
+            </tr>
+            <tr>
+              <td><b style="color:var(--crit-2);">2Y</b></td>
+              <td><span class="pill p2">2 · Importante</span></td>
+              <td>Y · Medio</td>
+              <td class="num">3</td><td class="num">15,0 %</td>
+              <td class="num">4 213</td><td class="num">7,7 %</td>
+              <td class="num">0,51×</td>
+            </tr>
+            <tr>
+              <td><b style="color:var(--crit-2);">2Z</b></td>
+              <td><span class="pill p2">2 · Importante</span></td>
+              <td>Z · Bajo</td>
+              <td class="num">3</td><td class="num">15,0 %</td>
+              <td class="num">1 475</td><td class="num">2,7 %</td>
+              <td class="num">0,18×</td>
+            </tr>
+            <tr>
+              <td><b style="color:var(--crit-1);">1X</b></td>
+              <td><span class="pill p1">1 · Rutinaria</span></td>
+              <td>X · Alto</td>
+              <td class="num">1</td><td class="num">5,0 %</td>
+              <td class="num">4 022</td><td class="num">7,3 %</td>
+              <td class="num" style="color:var(--crit-1);"><b>1,47×</b></td>
+            </tr>
+            <tr>
+              <td><b style="color:var(--crit-1);">1Y</b></td>
+              <td><span class="pill p1">1 · Rutinaria</span></td>
+              <td>Y · Medio</td>
+              <td class="num">1</td><td class="num">5,0 %</td>
+              <td class="num">1 544</td><td class="num">2,8 %</td>
+              <td class="num">0,56×</td>
+            </tr>
+            <tr>
+              <td><b style="color:var(--crit-1);">1Z</b></td>
+              <td><span class="pill p1">1 · Rutinaria</span></td>
+              <td>Z · Bajo</td>
+              <td class="num">3</td><td class="num">15,0 %</td>
+              <td class="num">856</td><td class="num">1,6 %</td>
+              <td class="num">0,10×</td>
+            </tr>
+            <tr style="border-top:2px solid var(--rule);">
+              <td colspan="3"><b>Total</b></td>
+              <td class="num"><b>20</b></td><td class="num"><b>100 %</b></td>
+              <td class="num"><b>54 894</b></td><td class="num"><b>100 %</b></td>
+              <td class="num">1,00×</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:16px; color:var(--ink-2); font-size:13.5px; max-width:74ch;">El <b>índice</b> es <code>% valor ÷ % variedad</code>: cuánto pesa el segmento en dinero frente a lo que pesa en número de referencias. Un índice &gt; 1 significa que ese segmento concentra más valor del que le correspondería por conteo.</p>
+
+      <div class="tbl-scroll" style="margin-top:24px;">
+        <table class="data" style="min-width:560px;">
+          <thead>
+            <tr><th>Agregado</th><th class="num">Piezas</th><th class="num">% variedad</th><th class="num">% valor</th><th class="num">Índice</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="pill p3">Criticidad 3 · A</span></td><td class="num">6</td><td class="num">30,0 %</td><td class="num"><b>51,7 %</b></td><td class="num"><b>1,72×</b></td></tr>
+            <tr><td><span class="pill p2">Criticidad 2 · B</span></td><td class="num">9</td><td class="num">45,0 %</td><td class="num">36,6 %</td><td class="num">0,81×</td></tr>
+            <tr><td><span class="pill p1">Criticidad 1 · C</span></td><td class="num">5</td><td class="num">25,0 %</td><td class="num">11,7 %</td><td class="num">0,47×</td></tr>
+            <tr style="border-top:1px solid var(--rule);"><td><b>Valor X · Alto</b></td><td class="num">8</td><td class="num">40,0 %</td><td class="num"><b>78,2 %</b></td><td class="num"><b>1,95×</b></td></tr>
+            <tr><td><b>Valor Y · Medio</b></td><td class="num">6</td><td class="num">30,0 %</td><td class="num">17,6 %</td><td class="num">0,59×</td></tr>
+            <tr><td><b>Valor Z · Bajo</b></td><td class="num">6</td><td class="num">30,0 %</td><td class="num">4,2 %</td><td class="num">0,14×</td></tr>
+            <tr style="border-top:1px solid var(--rule);"><td><b style="color:var(--fsn-f);">Rotación F · Fast</b></td><td class="num">7</td><td class="num">35,0 %</td><td class="num">37,5 %</td><td class="num">1,07×</td></tr>
+            <tr><td><b style="color:var(--fsn-s);">Rotación S · Slow</b></td><td class="num">9</td><td class="num">45,0 %</td><td class="num"><b>55,4 %</b></td><td class="num">1,23×</td></tr>
+            <tr><td><b style="color:var(--fsn-n);">Rotación N · Non-moving</b></td><td class="num">4</td><td class="num">20,0 %</td><td class="num">7,1 %</td><td class="num">0,35×</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:16px; color:var(--ink-2); font-size:14px; max-width:74ch;"><b>Las dos cifras que se presentan.</b> El segmento <b>3X</b> es el 20&nbsp;% de las referencias y el <b>44,6&nbsp;%</b> del dinero: cuatro piezas concentran casi la mitad del gasto y además paran línea si faltan. Y la rotación <b>S</b> lleva el <b>55,4&nbsp;%</b> del valor con solo el 45&nbsp;% de las referencias — el capital está en lo que se mueve despacio, que es exactamente donde el dimensionamiento del inventario mínimo tiene más margen de error y más impacto.</p>
+    </div>
+  </section>
+
+  <!-- ============ COMPOSICIÓN ============ -->
+  <section>
+    <h2>Composición del catálogo por valor anual</h2>
+    <p style="color:var(--ink-2); max-width:72ch;">Cada barra es una referencia, ordenada por consumo anual proyectado en USD (demanda mensual × 12 × costo unitario, sumando ambas plantas). El color es la criticidad asignada en el maestro.</p>
+    <div class="card">
+      <div class="legend">
+        <span class="item"><span class="dot d3"></span>3 · Crítica (A) — 6 piezas</span>
+        <span class="item"><span class="dot d2"></span>2 · Importante (B) — 9 piezas</span>
+        <span class="item"><span class="dot d1"></span>1 · Rutinaria (C) — 5 piezas</span>
+      </div>
+      <div class="barlist">
+        <div class="barrow"><span class="name"><b>Sello hidráulico</b> 50mm</span><div class="bartrack"><div class="barfill" style="width:100%;background:var(--crit-3);"></div></div><span class="val">11 519</span></div>
+        <div class="barrow"><span class="name"><b>Banda Poly-V</b> 6PK1780</span><div class="bartrack"><div class="barfill" style="width:52.8%;background:var(--crit-2);"></div></div><span class="val">6 081</span></div>
+        <div class="barrow"><span class="name"><b>Filtro aire</b> AF-2500</span><div class="bartrack"><div class="barfill" style="width:48.7%;background:var(--crit-2);"></div></div><span class="val">5 609</span></div>
+        <div class="barrow"><span class="name"><b>Rodamiento</b> NU-2210</span><div class="bartrack"><div class="barfill" style="width:46.3%;background:var(--crit-3);"></div></div><span class="val">5 337</span></div>
+        <div class="barrow"><span class="name"><b>Rodamiento</b> 30206</span><div class="bartrack"><div class="barfill" style="width:40.2%;background:var(--crit-3);"></div></div><span class="val">4 631</span></div>
+        <div class="barrow"><span class="name"><b>Grasa Litio</b> EP-2 400g</span><div class="bartrack"><div class="barfill" style="width:34.9%;background:var(--crit-1);"></div></div><span class="val">4 022</span></div>
+        <div class="barrow"><span class="name"><b>Rodamiento</b> 6205-2RS</span><div class="bartrack"><div class="barfill" style="width:26.2%;background:var(--crit-3);"></div></div><span class="val">3 022</span></div>
+        <div class="barrow"><span class="name"><b>Filtro hidráulico</b> 10µ</span><div class="bartrack"><div class="barfill" style="width:23.4%;background:var(--crit-2);"></div></div><span class="val">2 692</span></div>
+        <div class="barrow"><span class="name"><b>Banda V</b> A-68</span><div class="bartrack"><div class="barfill" style="width:22.0%;background:var(--crit-2);"></div></div><span class="val">2 532</span></div>
+        <div class="barrow"><span class="name"><b>Contactor</b> LC1-D40</span><div class="bartrack"><div class="barfill" style="width:18.6%;background:var(--crit-3);"></div></div><span class="val">2 148</span></div>
+        <div class="barrow"><span class="name"><b>Sensor proximidad</b> M12</span><div class="bartrack"><div class="barfill" style="width:15.2%;background:var(--crit-3);"></div></div><span class="val">1 746</span></div>
+        <div class="barrow"><span class="name"><b>Tornillo</b> M10x40 Gr8.8</span><div class="bartrack"><div class="barfill" style="width:13.4%;background:var(--crit-1);"></div></div><span class="val">1 544</span></div>
+        <div class="barrow"><span class="name"><b>Araña acople</b> 65 Shore</span><div class="bartrack"><div class="barfill" style="width:7.5%;background:var(--crit-2);"></div></div><span class="val">868</span></div>
+        <div class="barrow"><span class="name"><b>Termopar</b> Tipo-K 200mm</span><div class="bartrack"><div class="barfill" style="width:7.1%;background:var(--crit-2);"></div></div><span class="val">813</span></div>
+        <div class="barrow"><span class="name"><b>Roldana presión</b> M10</span><div class="bartrack"><div class="barfill" style="width:6.3%;background:var(--crit-1);"></div></div><span class="val">725</span></div>
+        <div class="barrow"><span class="name"><b>Inserto acople</b> GR-38</span><div class="bartrack"><div class="barfill" style="width:5.7%;background:var(--crit-2);"></div></div><span class="val">661</span></div>
+        <div class="barrow"><span class="name"><b>Sello V-Ring</b> VS-35</span><div class="bartrack"><div class="barfill" style="width:4.8%;background:var(--crit-2);"></div></div><span class="val">558</span></div>
+        <div class="barrow"><span class="name"><b>Carbones</b> 12.5x25mm</span><div class="bartrack"><div class="barfill" style="width:2.2%;background:var(--crit-2);"></div></div><span class="val">256</span></div>
+        <div class="barrow"><span class="name"><b>Grasera</b> M6x1 recta</span><div class="bartrack"><div class="barfill" style="width:0.8%;background:var(--crit-1);"></div></div><span class="val">91</span></div>
+        <div class="barrow"><span class="name"><b>O-Ring NBR</b> 40x3mm</span><div class="bartrack"><div class="barfill" style="width:0.4%;background:var(--crit-1);"></div></div><span class="val">40</span></div>
+      </div>
+      <p style="margin-top:20px; color:var(--ink-2); font-size:14px; max-width:72ch;"><b>Concentración sana pero plana.</b> El sello hidráulico solo es el 21&nbsp;% del gasto anual y ocho referencias cubren el 78&nbsp;%. En un catálogo MRO real de una planta grande la concentración es mucho más extrema —el 5&nbsp;% de las referencias suele llevarse el 70&nbsp;% del valor— porque conviven turbinas de 40.000&nbsp;USD con tornillos de 0,50. Aquí el rango va de 40 a 11.500&nbsp;USD/año: falta la cola cara.</p>
+    </div>
+  </section>
+
+  <!-- ============ FSN ============ -->
+  <section>
+    <h2>Rotación FSN: frecuencia de movimiento</h2>
+    <p style="color:var(--ink-2); max-width:72ch;">FSN clasifica por <b>rotación</b>, no por valor ni por criticidad: mide cada cuánto se mueve la pieza. Define el riesgo de obsolescencia y el ritmo de reposición. Se calcula aquí con <code>issue_rate</code> —la proporción de días del mes en que la pieza registra algún consumo— promediada entre las dos plantas.</p>
+
+    <div class="card">
+      <div class="chart-head">
+        <h3>Las 20 referencias ordenadas por frecuencia de movimiento</h3>
+        <p class="sub">Umbrales: <b>F</b> ≥ 50 % de días con movimiento · <b>S</b> 15–50 % · <b>N</b> &lt; 15 %</p>
+      </div>
+      <div class="legend">
+        <span class="item"><span class="dot" style="background:var(--fsn-f);"></span><b style="color:var(--ink);">F · Fast</b>&nbsp;— 7 piezas · reposición frecuente</span>
+        <span class="item"><span class="dot" style="background:var(--fsn-s);"></span><b style="color:var(--ink);">S · Slow</b>&nbsp;— 9 piezas · revisión periódica</span>
+        <span class="item"><span class="dot" style="background:var(--fsn-n);"></span><b style="color:var(--ink);">N · Non-moving</b>&nbsp;— 4 piezas · revisar existencia</span>
+      </div>
+      <div class="barlist">
+        <div class="barrow"><span class="name"><b>Tornillo</b> M10x40 Gr8.8</span><div class="bartrack"><div class="barfill" style="width:87.4%;background:var(--fsn-f);"></div></div><span class="val">87 %</span></div>
+        <div class="barrow"><span class="name"><b>Roldana presión</b> M10</span><div class="bartrack"><div class="barfill" style="width:86.3%;background:var(--fsn-f);"></div></div><span class="val">86 %</span></div>
+        <div class="barrow"><span class="name"><b>Banda V</b> A-68</span><div class="bartrack"><div class="barfill" style="width:80.6%;background:var(--fsn-f);"></div></div><span class="val">81 %</span></div>
+        <div class="barrow"><span class="name"><b>Filtro aire</b> AF-2500</span><div class="bartrack"><div class="barfill" style="width:75.5%;background:var(--fsn-f);"></div></div><span class="val">75 %</span></div>
+        <div class="barrow"><span class="name"><b>Banda Poly-V</b> 6PK1780</span><div class="bartrack"><div class="barfill" style="width:73.3%;background:var(--fsn-f);"></div></div><span class="val">73 %</span></div>
+        <div class="barrow"><span class="name"><b>Grasa Litio</b> EP-2 400g</span><div class="bartrack"><div class="barfill" style="width:72.0%;background:var(--fsn-f);"></div></div><span class="val">72 %</span></div>
+        <div class="barrow"><span class="name"><b>Grasera</b> M6x1 recta</span><div class="bartrack"><div class="barfill" style="width:55.1%;background:var(--fsn-f);"></div></div><span class="val">55 %</span></div>
+        <div class="barrow"><span class="name"><b>Filtro hidráulico</b> 10µ</span><div class="bartrack"><div class="barfill" style="width:48.7%;background:var(--fsn-s);"></div></div><span class="val">49 %</span></div>
+        <div class="barrow"><span class="name"><b>Sello hidráulico</b> 50mm</span><div class="bartrack"><div class="barfill" style="width:41.1%;background:var(--fsn-s);"></div></div><span class="val">41 %</span></div>
+        <div class="barrow"><span class="name"><b>Rodamiento</b> 6205-2RS</span><div class="bartrack"><div class="barfill" style="width:37.7%;background:var(--fsn-s);"></div></div><span class="val">38 %</span></div>
+        <div class="barrow"><span class="name"><b>O-Ring NBR</b> 40x3mm</span><div class="bartrack"><div class="barfill" style="width:35.6%;background:var(--fsn-s);"></div></div><span class="val">36 %</span></div>
+        <div class="barrow"><span class="name"><b>Rodamiento</b> 30206</span><div class="bartrack"><div class="barfill" style="width:35.1%;background:var(--fsn-s);"></div></div><span class="val">35 %</span></div>
+        <div class="barrow"><span class="name"><b>Sello V-Ring</b> VS-35</span><div class="bartrack"><div class="barfill" style="width:33.1%;background:var(--fsn-s);"></div></div><span class="val">33 %</span></div>
+        <div class="barrow"><span class="name"><b>Rodamiento</b> NU-2210</span><div class="bartrack"><div class="barfill" style="width:31.6%;background:var(--fsn-s);"></div></div><span class="val">32 %</span></div>
+        <div class="barrow"><span class="name"><b>Araña acople</b> 65 Shore</span><div class="bartrack"><div class="barfill" style="width:15.6%;background:var(--fsn-s);"></div></div><span class="val">16 %</span></div>
+        <div class="barrow"><span class="name"><b>Sensor proximidad</b> M12</span><div class="bartrack"><div class="barfill" style="width:15.3%;background:var(--fsn-s);"></div></div><span class="val">15 %</span></div>
+        <div class="barrow"><span class="name"><b>Termopar</b> Tipo-K 200mm</span><div class="bartrack"><div class="barfill" style="width:12.2%;background:var(--fsn-n);"></div></div><span class="val">12 %</span></div>
+        <div class="barrow"><span class="name"><b>Contactor</b> LC1-D40</span><div class="bartrack"><div class="barfill" style="width:10.2%;background:var(--fsn-n);"></div></div><span class="val">10 %</span></div>
+        <div class="barrow"><span class="name"><b>Inserto acople</b> GR-38</span><div class="bartrack"><div class="barfill" style="width:6.6%;background:var(--fsn-n);"></div></div><span class="val">7 %</span></div>
+        <div class="barrow"><span class="name"><b>Carbones</b> 12.5x25mm</span><div class="bartrack"><div class="barfill" style="width:6.0%;background:var(--fsn-n);"></div></div><span class="val">6 %</span></div>
+      </div>
+      <p style="margin-top:20px; color:var(--ink-2); font-size:14px; max-width:72ch;"><b>El hallazgo que confirma el problema de los ceros.</b> La categoría <b>N</b> aquí es falsa. Un ítem realmente <i>non-moving</i> en MRO no se mueve en 6 o 12 meses; estos cuatro se mueven el 6–12&nbsp;% de los <i>días</i>, es decir <b>todos los meses sin excepción</b>. La rotación mínima de todo el catálogo es <b>9,8 vueltas al año</b> y la mediana 14,1. En un almacén de refacciones real, los ítems N tienen rotación <b>menor a 1</b> y muchos llevan años quietos: ahí es donde vive el capital inmovilizado y el riesgo de obsolescencia que FSN existe para detectar.</p>
+    </div>
+
+    <div class="card">
+      <div class="chart-head">
+        <h3>Cruce FSN × Criticidad</h3>
+        <p class="sub">Dónde se concentra el riesgo de obsolescencia frente al riesgo de paro</p>
+      </div>
+      <div class="matrix-scroll">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th class="rowhead">Rotación</th>
+              <th><span class="dot d3"></span>3 · Crítica</th>
+              <th><span class="dot d2"></span>2 · Importante</th>
+              <th><span class="dot d1"></span>1 · Rutinaria</th>
+              <th>Acción que dicta FSN</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th class="rowhead" style="color:var(--fsn-f);">F · Fast</th>
+              <td><span class="cellcount">0</span></td>
+              <td><span class="cellcount">3</span><span class="cellskus">Bandas, filtro aire</span></td>
+              <td><span class="cellcount">4</span><span class="cellskus">Tornillería, grasa</span></td>
+              <td style="font-size:12.5px;color:var(--ink-2);">Reposición frecuente y automática. Candidatas a contrato de suministro o kanban, no a decisión mensual.</td>
+            </tr>
+            <tr>
+              <th class="rowhead" style="color:var(--fsn-s);">S · Slow</th>
+              <td><span class="cellcount">4</span><span class="cellskus">Rodamientos, sello hidráulico</span></td>
+              <td><span class="cellcount">4</span><span class="cellskus">Filtro, sellos, acople</span></td>
+              <td><span class="cellcount">1</span><span class="cellskus">O-Ring</span></td>
+              <td style="font-size:12.5px;color:var(--ink-2);">Revisión periódica. <b>Aquí vive el núcleo crítico:</b> 4 de las 6 piezas de criticidad A son de rotación lenta.</td>
+            </tr>
+            <tr>
+              <th class="rowhead" style="color:var(--fsn-n);">N · Non-moving</th>
+              <td><span class="cellcount">2</span><span class="cellskus">Contactor, sensor</span></td>
+              <td><span class="cellcount">2</span><span class="cellskus">Termopar, carbones</span></td>
+              <td><span class="cellcount">0</span></td>
+              <td style="font-size:12.5px;color:var(--ink-2);">Revisar existencia y vigencia. Las dos críticas justifican stock aunque no roten; las dos importantes hay que auditarlas.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:18px; color:var(--ink-2); font-size:14px; max-width:72ch;"><b>La celda que importa es N × Crítica.</b> Contactor y sensor de proximidad se mueven poco pero paran una línea cuando fallan: son el caso clásico donde el ABC por valor daría «no invertir» y FSN + criticidad dicen lo contrario. Ninguna de las dos clasificaciones sola llega a esa conclusión — por eso se cruzan.</p>
+    </div>
+  </section>
+
+  <!-- ============ CALIDAD ============ -->
+  <section>
+    <h2>Calidad del dato: el problema de los ceros</h2>
+    <p style="color:var(--ink-2); max-width:72ch;">Esto es lo que detectaste. El consumo de refacciones es intermitente por naturaleza: una pieza se pide cuando algo falla, no todos los meses. El histórico actual no se comporta así.</p>
+
+    <div class="card">
+      <div class="chart-head">
+        <h3>Proporción de meses con consumo cero</h3>
+        <p class="sub">Sobre 2.880 observaciones mensuales (20 piezas × 2 plantas × 72 meses)</p>
+      </div>
+      <div class="gauges">
+        <div class="gauge">
+          <div class="glabel"><span class="who">Histórico actual de StockOpt</span><span class="num" style="color:var(--crit-3);">3,3 %</span></div>
+          <div class="gtrack"><div class="gfill" style="width:3.3%;background:var(--crit-3);"></div></div>
+          <p class="gnote">94 de 2.880 observaciones. La mediana de las series tiene <b>cero</b> meses sin consumo.</p>
+        </div>
+        <div class="gauge">
+          <div class="glabel"><span class="who">Rango típico en MRO real (mensual)</span><span class="num" style="color:var(--ink-2);">40 – 70 %</span></div>
+          <div class="gtrack">
+            <div class="gfill" style="width:70%;background:linear-gradient(90deg, transparent 0%, transparent 40%, var(--secondary) 40%, var(--secondary) 100%);opacity:.85;"></div>
+          </div>
+          <p class="gnote">Incluso tras agregar a mes, la mayoría de las referencias MRO pasan meses enteros sin movimiento.</p>
+        </div>
+        <div class="gauge">
+          <div class="glabel"><span class="who">Dato crudo diario del propio proyecto</span><span class="num" style="color:var(--ink-2);">≈ 90 %</span></div>
+          <div class="gtrack"><div class="gfill" style="width:90%;background:var(--primary-light);"></div></div>
+          <p class="gnote">El perfilado de la Etapa 0 sí lo midió: 90&nbsp;% de días en cero, y 86&nbsp;% de los eventos son de 1 unidad. Esa intermitencia <b>desapareció</b> al construir el dataset mensual.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chart-head">
+        <h3>Régimen de demanda de las 40 series</h3>
+        <p class="sub">Clasificación ADI / CV² (Syntetos, Boylan &amp; Croston, 2005) — umbrales ADI 1,32 y CV² 0,49</p>
+      </div>
+      <div class="quadgrid">
+        <div class="quad cold">
+          <div class="qn">38</div>
+          <div class="qname">Suave</div>
+          <div class="qdesc">Frecuente y regular. El suavizado exponencial simple basta.</div>
+        </div>
+        <div class="quad cold">
+          <div class="qn">2</div>
+          <div class="qname">Intermitente</div>
+          <div class="qdesc">Espaciada pero de tamaño estable. Terreno de Croston.</div>
+        </div>
+        <div class="quad cold">
+          <div class="qn">0</div>
+          <div class="qname">Errática</div>
+          <div class="qdesc">Frecuente pero de tamaño muy variable.</div>
+        </div>
+        <div class="quad hot">
+          <div class="qn">0</div>
+          <div class="qname">Lumpy</div>
+          <div class="qdesc">Espaciada <i>y</i> de tamaño variable. <b>Aquí vive la mayoría del MRO real.</b></div>
+        </div>
+      </div>
+      <p style="margin-top:20px; color:var(--ink-2); font-size:14px; max-width:72ch;"><b>El diagnóstico completo.</b> El ADI mediano es <b>1,00</b> —cada serie tiene consumo <i>todos</i> los meses— y el CV² mediano es <b>0,11</b>, cuando en refacciones reales supera 1,0 con holgura. La demanda media es de <b>18,3 unidades/mes por pieza y planta</b>: eso no es una refacción, es un insumo de producción. Un rodamiento 6205 que se cambia 15 veces al mes en la misma planta significaría que algo se está destruyendo continuamente.</p>
+    </div>
+
+    <div class="card">
+      <div class="chart-head">
+        <h3>Calidad de la fuente de compras</h3>
+        <p class="sub">Dataset <code>Procurement KPI Analysis</code> — 777 órdenes, del que salen proveedores y lead times</p>
+      </div>
+      <div class="tbl-scroll">
+        <table class="data" style="min-width:560px;">
+          <thead>
+            <tr><th>Hallazgo</th><th class="num">Registros</th><th class="num">% del total</th><th>Tratamiento</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Órdenes canceladas contadas como entregas</td><td class="num">63</td><td class="num">8,1 %</td><td>Filtradas por <code>Order_Status</code></td></tr>
+            <tr><td>Sin fecha de entrega</td><td class="num">87</td><td class="num">11,2 %</td><td>Descartadas — sin fechas no hay plazo medible</td></tr>
+            <tr><td><code>Defective_Units</code> nulo</td><td class="num">136</td><td class="num">17,5 %</td><td>Imputado cero</td></tr>
+            <tr><td>Órdenes de categoría MRO</td><td class="num">164</td><td class="num">21,1 %</td><td>El otro 79 % es papelería, electrónica, empaque</td></tr>
+            <tr><td>Órdenes pendientes o parciales</td><td class="num">154</td><td class="num">19,8 %</td><td>Sin cierre confirmado</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:18px; color:var(--ink-2); font-size:14px; max-width:72ch;">El lead time medio de <b>10,6 días con σ = 5,5</b> se calcula sobre estas órdenes. Es un dato defendible en su forma —viene de fechas reales, no de un supuesto— pero <b>solo una de cada cinco órdenes es MRO</b>: el plazo mezcla la entrega de un rodamiento con la de una caja de folders, que no tienen la misma cadena de suministro.</p>
+    </div>
+  </section>
+
+  <!-- ============ CBI ============ -->
+  <section>
+    <h2>¿Serviría para una cervecera mexicana?</h2>
+    <div class="card">
+      <p style="color:var(--ink-2); max-width:72ch;"><b>El proyecto ya está apuntado ahí.</b> Las dos plantas del dataset son <b>Nava, Coahuila</b> y <b>Ciudad Obregón, Sonora</b>, y el propio spec declara que la paleta azul «es coherente con la identidad visual corporativa observada en la marca Constellation Brands». No es una hipótesis: es el destino que el MVP ya asume.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:22px;">
+        <div>
+          <h3 style="color:var(--crit-1);">Lo que encaja sin tocar nada</h3>
+          <ul class="tight" style="font-size:14px;">
+            <li>Rodamientos, sellos, bandas y acoplamientos son el corazón del mantenimiento de una línea de embotellado: transportadores, llenadoras, etiquetadoras.</li>
+            <li>Filtros hidráulicos y de aire aplican a compresores y centrales hidráulicas, presentes en toda cervecera.</li>
+            <li>La estructura multi-planta con lead time diferenciado ya modela la realidad de Nava vs. Obregón.</li>
+            <li>Sensores de proximidad y contactores son estándar en automatización de líneas.</li>
+          </ul>
+        </div>
+        <div>
+          <h3 style="color:var(--crit-3);">Lo que faltaría para que sea creíble</h3>
+          <ul class="tight" style="font-size:14px;">
+            <li><b>Piezas de proceso cervecero:</b> sellos sanitarios, válvulas mariposa y de asiento, mangueras grado alimenticio, empaques de intercambiador de placas, sondas de CO₂.</li>
+            <li><b>Grado sanitario:</b> acero 316L y elastómeros EPDM/FKM certificados, que cambian por completo el proveedor y el precio.</li>
+            <li><b>Estacionalidad de verdad:</b> la producción cervecera pica en verano; el histórico actual no tiene ese ciclo de demanda.</li>
+            <li><b>Intermitencia:</b> el punto anterior — sin meses en cero, el modelo nunca enfrenta el problema real.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote"><b>Cómo se calculó.</b> Valor anual = <code>forecast_q50</code> × 12 × <code>unit_cost_usd</code>, sumando las dos plantas. Clasificación ABC por Pareto acumulado sobre ese valor. Ceros medidos sobre <code>qty_issued</code> en <code>demand_history.csv</code> (2.880 filas). ADI = periodos totales ÷ periodos con demanda; CV² calculado solo sobre los periodos con demanda, por serie <code>sku_id × city_id</code>. Los datos de compras vienen de <code>Procurement KPI Analysis Dataset.csv</code> antes de la limpieza de la Etapa&nbsp;0.</p>
+
+</div>
+
+</body>
+</html>

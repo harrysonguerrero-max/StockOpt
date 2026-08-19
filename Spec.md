@@ -1,10 +1,18 @@
 # Spec — MVP de optimización de inventario con IA
 
+> **Si eres un agente y necesitas entender qué hace el sistema, empieza por
+> [§13 · Formulación matemática del sistema](#13-formulación-matemática-del-sistema).**
+> Documenta el modelo formal que el código implementa *hoy* —cada fórmula con el
+> glosario de sus símbolos y unidades—, el mapa fórmula → archivo → función
+> (§13.11), el inventario de supuestos y sus límites (§13.12) y el diagnóstico
+> del dato de entrada (§13.13). Las secciones 1 a 12 son el spec original de
+> producto: describen lo que se quería construir, no siempre lo que quedó.
+
 ---
 
 ## 0. Estado actual de la implementación
 
-**Última actualización:** 2026-08-12
+**Última actualización:** 2026-08-18
 
 ### Qué está hecho
 
@@ -70,6 +78,60 @@ python -m app.services.build_forecast         # proyección e inventario mínimo
 python -m app.services.build_recommendations  # decisiones de compra
 python -m uvicorn app.main:app --port 8000
 ```
+
+### El pipeline y la fórmula de cada paso
+
+Referencia rápida para presentación. Cada fórmula está desarrollada con su
+glosario completo de símbolos en §13; aquí va la declaración y el enlace.
+
+| # | Paso | Qué decide | Fórmula que aplica | Detalle |
+|---|---|---|---|---|
+| **0** | Perfilado y limpieza | Qué filas entran | Atípicos por doble criterio: `IQR: [Q1 − 1,5·RIC , Q3 + 1,5·RIC]` y `MAD: |x − mediana| / (1,4826·MAD) > 3` | §Etapa 0 |
+| **1** | Ingesta y validación | Integridad del dataset | Reglas duras: `precio ≥ 0`, `MOQ ≥ 1`, `lead_time > 0`, `cantidad ≥ 0`, `∀ pieza: |ofertas| ≥ 2` | §1.1 |
+| **1.3** | Clasificación de patrón | Qué método usar | Fuerza estacional `F_s = 1 − Var(R)/Var(S+R)` · Kruskal-Wallis `p_est` · Kendall `tau` · `CV = sigma/mu`. Precedencia: `Insuf → Estacional → Tendencia → Volátil → Estable` | [§13.1](#131-etapa-13--clasificación-de-patrones-de-demanda) |
+| **1.3** | Confianza del patrón | Si necesita humano | `gamma = 0,30·V(n) + 0,45·W(CV) + 0,25·R(y)` | [§13.1.6](#1316-score-de-confianza-del-patrón) |
+| **2** | Proyección de demanda | Cuánto se va a consumir | Uno de cuatro según patrón:<br>· Estable → `D50 = (1/6)·Σ y[t]`<br>· Volátil → `D50 = P50(ventana)`<br>· Tendencia → `D50 = a·n + b` (OLS)<br>· Estacional → `D50 = l[n] + s[n−11]` (Holt-Winters) | [§13.2.1](#1321-los-cuatro-estimadores) |
+| **2** | Intervalo | Rango plausible | `D25/D75 = max(0, D50 ∓ 0,674·S)` | [§13.2.2](#1322-construcción-del-intervalo) |
+| **2** | Validación del método | Si el método sirve | `WMAPE = Σ|e_j| / Σ y_j` con origen móvil, 6 meses reservados | [§13.2.3](#1323-validación-retrospectiva-wmape-con-origen-móvil) |
+| **2.b** | Modelo ML | Corrección del punto central | `g* = argmin Σ (y − g(X))²`, gradient boosting sobre rezagos 1/2/3/6/12 + ventanas + mes cíclico + atributos | [§13.3.2](#1332-estimador-y-objetivo) |
+| **2.b** | Combinación | Proyección final | `D50_final = 0,5·M + 0,5·D50` (Bates & Granger, 1969) | [§13.3.4](#1334-combinación-con-la-proyección-estadística) |
+| **3** | **Inventario mínimo** | **Cuándo reponer** | `Imin = ceil( d·L + z(k)·sqrt( L·sigma_d² + d²·sigma_L² ) )` | [§13.4](#134-etapa-23--política-de-inventario-el-inventario-mínimo) |
+| **3** | Inventario máximo | Techo de bodega | `Imax = max( Imin , ceil( D50·3 ) )` | [§13.5](#135-etapa-3--niveles-derivados-y-cotas) |
+| **3** | Nivel objetivo | Cuánto reponer | `Itgt = min( max(Imin, ceil(Imin + D50·1,5)) , Imax )` | [§13.5](#135-etapa-3--niveles-derivados-y-cotas) |
+| **3** | Tope por vida útil | Antiobsolescencia | `Ivida = max( 0 , floor( d·0,80·V ) − q )` | [§13.5](#135-etapa-3--niveles-derivados-y-cotas) |
+| **3** | Selección de proveedor | A quién comprar | `min Σ (p_o·x_o + f_o·u_o)` s.a. cobertura, techo, `Σu ≤ 1`, `x_o ≥ m_o·u_o`, `x_o ≤ U_o·u_o` | [§13.6](#136-etapa-3--milp-de-selección-de-proveedor) |
+| **3.b** | Costo de quiebre | Cuánto vale no tenerla | `Cq = dias_expuestos · r · c_dia(k)` | [§13.7](#137-etapa-3b--valoración-del-quiebre) |
+| **3.b** | Reparto de presupuesto | Qué se financia | `max Σ b_s·v_s` s.a. `Σ Ctot_s·v_s ≤ B`, `v_s ∈ {0,1}` | [§13.8](#138-etapa-3b--mochila-de-presupuesto) |
+| **4** | Decisión final | COMPRAR / REVISAR / APLAZADO / NO_COMPRAR | Árbol de 7 reglas en orden estricto | [§13.9](#139-árbol-de-decisión-completo) |
+
+**Las tres fórmulas que hay que saber defender en una presentación:**
+
+```
+1)  Imin = ceil( d·L  +  z(k)·sqrt( L·sigma_d²  +  d²·sigma_L² ) )
+             └──┬──┘     └──────────────┬──────────────────────┘
+          lo que consumo         colchón que absorbe que la demanda
+          mientras espero        suba Y que el proveedor se retrase
+
+2)  min Σ_o ( p_o·x_o  +  f_o·u_o )      ← precio por unidad + flete por activar
+        con  x_o ≥ m_o·u_o                 ← el MOQ solo aplica si le compro
+
+3)  max Σ_s ( Cq_s − Ctot_s )·v_s        ← beneficio neto en USD
+        s.a. Σ_s Ctot_s·v_s ≤ B            ← sin pasarse del presupuesto
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `d` | Demanda media diaria proyectada | unidades/día |
+| `L` | Plazo de entrega medio | días (≈ 10,6) |
+| `sigma_d` | Desviación de la demanda diaria | unidades/día |
+| `sigma_L` | Desviación del plazo de entrega | días (≈ 5,45) |
+| `z(k)` | Factor de servicio por criticidad | A = 1,65 (95 %) · B = 1,28 (90 %) · C = 0,84 (80 %) |
+| `p_o`, `f_o`, `m_o` | Precio unitario, flete fijo y MOQ de la oferta | USD/u, USD, unidades |
+| `x_o`, `u_o` | Cantidad a comprar y binaria de activación | unidades enteras, 0/1 |
+| `Cq_s` | Costo del quiebre que se evita | USD |
+| `Ctot_s` | Costo total de la reposición | USD |
+| `v_s` | Si la compra se financia esta corrida | 0/1 |
+| `B` | Presupuesto de la corrida | USD (hoy 2 500) |
 
 ### Archivos generados en `app/data/mvp/`
 
@@ -867,6 +929,13 @@ medido es *stock por encima del mínimo*, así que moverlo entero dejaría a la
 planta de origen sin colchón; el modelo tiene que respetar el mínimo de las dos.
 *Esfuerzo: medio-alto.*
 
+**6 · Invertir la jerarquía: continuidad de producción primero, presupuesto
+después.** Ver [§14](#14-diseño--continuidad-de-producción-como-restricción-dura).
+*Esfuerzo: medio.*
+
+**7 · Chat con LLM sobre el estado del sistema.** Ver
+[§15](#15-diseño--chat-de-explicabilidad-y-trazabilidad). *Esfuerzo: medio.*
+
 ### 11.5 Orden sugerido
 
 1. Configurar `GEMINI_API_KEY` y `MLFLOW_TRACKING_URI` — desbloquea lo ya escrito.
@@ -923,3 +992,1111 @@ css
   --warning: #C88700;
   --danger: #C62828;
 }
+---
+
+## 13. Formulación matemática del sistema
+
+Esta sección documenta el **modelo formal que el código implementa hoy**, no el
+que se pretendía implementar. Cada fórmula lleva debajo el glosario de todos sus
+símbolos con sus unidades, y al final hay un mapa fórmula → archivo → función
+para que un agente pueda ir del planteamiento al código sin leerlo entero.
+
+Notación en ASCII (`sigma`, `sqrt`, `sum`) porque el documento se lee tanto en
+terminal como en navegador.
+
+### 13.0 Notación, conjuntos e índices
+
+```
+i  in  I     piezas (SKU)                      |I| = 20
+c  in  C     ciudades                          |C| = 2   (NAVA, OBRE)
+s  =  (i,c)  serie pieza-ciudad                |S| = 40
+t  in  T     periodos mensuales                |T| = 72  (2020-02 .. 2026-01)
+o  in  O(s)  ofertas aplicables a la serie s   |O(s)| in {2,3}
+```
+
+| Símbolo | Qué es | Unidad | Origen |
+|---|---|---|---|
+| `y[s,t]` | Demanda observada de la serie `s` en el mes `t` (`qty_issued`) | unidades | `demand_history.csv` |
+| `n[s]` | Número de meses observados de la serie `s` | conteo | Derivado |
+| `q[s]` | Existencias actuales (`on_hand_qty`) | unidades | `inventory_current.csv` |
+| `k[i]` | Criticidad de la pieza: A, B o C | categoría | `parts_master.csv` |
+| `V[i]` | Vida útil de la pieza (`shelf_life_days`) | días | `parts_master.csv` |
+| `p[o]` | Precio unitario de la oferta `o` | USD/unidad | `supplier_offers.csv` |
+| `f[o]` | Costo fijo de flete de la oferta `o` | USD | `supplier_offers.csv` |
+| `m[o]` | Cantidad mínima de orden (MOQ) de la oferta `o` | unidades | `supplier_offers.csv` |
+| `K[o]` | Capacidad mensual de la oferta `o` | unidades/mes | `supplier_offers.csv` |
+| `B` | Presupuesto de la corrida (`SCENARIO_BUDGET_USD`) | USD | Parámetro, hoy 2 500 |
+
+**Supuesto estructural del sistema entero:** el horizonte de decisión es de **un
+periodo** (`PLANNING_PERIOD_DAYS = 30`). No existe variable de estado que enlace
+la decisión de este mes con la del siguiente; cada corrida resuelve un problema
+estático. Es una simplificación deliberada frente a la formulación dinámica de
+Scarf (1960), y es la limitación teórica más importante del modelo actual.
+
+---
+
+### 13.1 Etapa 1.3 — Clasificación de patrones de demanda
+
+Función `phi: R^n -> {Insuficiente, Estacional, Tendencia, Volatil, Estable}`,
+evaluada por reglas en orden estricto de precedencia.
+
+#### 13.1.1 Estadísticos descriptivos
+
+```
+mu[s]    = (1/n) * sum_t  y[s,t]
+
+sigma[s] = sqrt( (1/n) * sum_t ( y[s,t] - mu[s] )^2 )          [ddof = 0]
+
+CV[s]    = sigma[s] / mu[s]        si mu[s] > 0,  else 0
+
+z0[s]    = (1/n) * sum_t  1{ y[s,t] = 0 }
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `mu[s]` | Demanda media mensual de la serie | unidades/mes | — |
+| `sigma[s]` | Desviación estándar poblacional (`ddof=0`, no muestral) | unidades/mes | Elección deliberada: la serie se trata como población, no como muestra |
+| `CV[s]` | Coeficiente de variación | adimensional | Criterio de volatilidad |
+| `z0[s]` | Proporción de meses con demanda cero | fracción 0–1 | Diagnóstico de intermitencia |
+| `1{·}` | Función indicadora: 1 si la condición se cumple, 0 si no | — | — |
+
+#### 13.1.2 Fuerza estacional
+
+Descomposición aditiva clásica por medias móviles
+(`statsmodels.seasonal_decompose`, periodo 12):
+
+```
+y[s,t] = T[s,t] + S[s,t] + R[s,t]
+
+F_s[s] = clip( 1 - Var(R) / Var(S + R) ,  0 , 1 )
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `T[s,t]` | Componente de tendencia | unidades | Media móvil centrada de orden 12 |
+| `S[s,t]` | Componente estacional | unidades | Promedio de residuos por posición del ciclo |
+| `R[s,t]` | Residuo | unidades | Lo no explicado por tendencia ni estación |
+| `F_s[s]` | Fuerza estacional | adimensional 0–1 | Fracción de la varianza no-tendencial atribuible al ciclo |
+| `Var(·)` | Varianza sobre los índices donde el residuo no es NaN | unidades² | Los extremos se pierden por la media móvil |
+| `clip(x,a,b)` | Recorte al intervalo `[a,b]` | — | — |
+
+`F_s` devuelve 0 si `n < 24` o si la serie es constante.
+
+#### 13.1.3 Contraste de efecto de mes (Kruskal-Wallis)
+
+Se agrupan las observaciones por posición dentro del ciclo anual —los 12 grupos
+`G_j = { y[s,t] : t ≡ j (mod 12) }`— y se contrasta:
+
+```
+H0 :  todos los G_j provienen de la misma distribución
+H1 :  al menos un mes difiere
+
+p_est[s] = p-valor del estadístico H de Kruskal-Wallis
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `G_j` | Observaciones del mes `j` del ciclo | unidades | 12 grupos, ~6 observaciones cada uno con 72 meses |
+| `p_est[s]` | p-valor del contraste | fracción 0–1 | Devuelve 1.0 si `n < 24`, si `sigma = 0`, o si quedan menos de 3 grupos con ≥2 observaciones |
+
+**Por qué no-paramétrico:** la demanda de refacciones es un conteo sesgado a la
+derecha; ANOVA supondría normalidad y homocedasticidad que la serie no cumple.
+
+#### 13.1.4 Contraste de tendencia (Mann-Kendall vía tau de Kendall)
+
+```
+tau[s]   = tau_b( (1,2,...,n) , (y[s,1],...,y[s,n]) )
+
+p_ten[s] = p-valor asociado a tau
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `tau[s]` | Tau-b de Kendall entre el orden temporal y la serie | adimensional −1…1 | Positivo = crecimiento monótono; es el estadístico de Mann-Kendall |
+| `p_ten[s]` | p-valor del contraste de tendencia | fracción 0–1 | Devuelve `(0, 1)` si `n < 3` o `sigma = 0` |
+
+**Por qué tau y no la pendiente OLS:** tau mide monotonía por concordancia de
+pares, sin suponer linealidad ni normalidad de los residuos.
+
+#### 13.1.5 Regla de decisión (precedencia estricta)
+
+```
+phi[s] =
+    Insuficiente   si  n[s] < 6   or   mu[s] = 0
+    Estacional     si  F_s[s] >= 0.45   and   p_est[s] < 0.05
+    Tendencia      si  p_ten[s] < 0.05
+    Volatil        si  CV[s] > 0.50
+    Estable        en otro caso
+```
+
+| Umbral | Valor | Constante | Justificación |
+|---|---|---|---|
+| Mínimo de periodos | 6 | `MIN_PERIODS` | Debajo no hay estadística |
+| Fuerza estacional | 0,45 | `SEASONAL_STRENGTH_MIN` | Calibrado: con 3 ciclos, `seasonal_decompose` extrae fuerza 0,32 media incluso de ruido puro |
+| Significancia estacional | 0,05 | `SEASONAL_PVALUE_MAX` | La doble condición baja el falso positivo del 26 % al 2 % |
+| Significancia de tendencia | 0,05 | `TREND_PVALUE_MAX` | Convencional |
+| Umbral de volatilidad | 0,50 | `CV_VOLATILE` | Convencional en gestión de inventarios |
+
+**La precedencia no es cosmética.** Una serie estacional tiene `CV` alto por
+construcción; si *Volátil* se evaluara antes, ninguna estacionalidad se
+detectaría nunca. El orden pone los patrones explicables por delante del cajón
+de sastre.
+
+#### 13.1.6 Score de confianza del patrón
+
+Combinación lineal convexa de tres factores escalonados:
+
+```
+gamma[s] = 0.30 * V(n)  +  0.45 * W(CV)  +  0.25 * R(y)
+```
+
+con
+
+```
+V(n)  = 0.20 si n < 6 ;  0.55 si n < 12 ;  0.80 si n < 24 ;  1.00 en otro caso
+
+W(CV) = 1.00 si CV <= 0.25 ;  0.80 si CV <= 0.50 ;  0.50 si CV <= 1.00 ;  0.25 en otro caso
+
+R(y)  = clip( 1 - | mean(y_ultimos3) - mean(y_resto) | / mean(y_resto) , 0 , 1 )
+```
+
+| Símbolo | Qué es | Unidad | Peso |
+|---|---|---|---|
+| `gamma[s]` | Confianza del patrón, previa a validar el método | fracción 0–1 | — |
+| `V(n)` | Factor de volumen de historia | fracción 0–1 | 0,30 |
+| `W(CV)` | Factor de volatilidad | fracción 0–1 | **0,45** — el mayor, porque la dispersión es lo que más degrada el pronóstico |
+| `R(y)` | Estabilidad reciente: penaliza si los últimos 3 meses se despegan del histórico | fracción 0–1 | 0,25 |
+
+Si `phi[s] = Insuficiente`, se fuerza `gamma[s] = 0`.
+
+---
+
+### 13.2 Etapa 2 — Proyección de demanda
+
+El sistema **no aplica un solo estimador**: enruta cada serie a uno distinto
+según su patrón. Formalmente es un **modelo por regímenes** con la clasificación
+de §13.1 como función de asignación.
+
+#### 13.2.1 Los cuatro estimadores
+
+Sea `w = 6` (`MOVING_WINDOW`) la ventana reciente y `Y[s] = (y[s,n-w+1],...,y[s,n])`.
+
+**Estable — media móvil:**
+```
+D50[s] = (1/w) * sum_{t=n-w+1}^{n}  y[s,t]
+
+S[s]   = sqrt( (1/w) * sum_t ( y[s,t] - D50[s] )^2 )
+```
+
+**Volátil — percentiles empíricos:**
+```
+D25[s] = P25( Y[s] )      D50[s] = P50( Y[s] )      D75[s] = P75( Y[s] )
+```
+
+**Tendencia — mínimos cuadrados sobre toda la historia:**
+```
+(a, b) = argmin_{a,b}  sum_{t=1}^{n} ( y[s,t] - (a*t + b) )^2
+
+D50[s] = a * n + b
+
+S[s]   = sqrt( (1/n) * sum_t ( y[s,t] - (a*t + b) )^2 )
+```
+
+**Estacional — Holt-Winters aditivo sin tendencia, periodo 12:**
+```
+Nivel:       l[t] = alpha * ( y[t] - s[t-12] )  +  (1 - alpha) * l[t-1]
+Estación:    s[t] = delta * ( y[t] - l[t] )     +  (1 - delta) * s[t-12]
+Proyección:  D50[s] = l[n] + s[n-11]
+
+S[s] = sqrt( (1/n) * sum_t ( y[s,t] - yhat[s,t] )^2 )      [residuos del ajuste]
+```
+
+| Símbolo | Qué es | Unidad | Origen |
+|---|---|---|---|
+| `D50[s]` | Proyección central de demanda mensual | unidades/mes | Salida `forecast_q50` |
+| `S[s]` | Dispersión asociada al método | unidades/mes | Ventana, residuos OLS o residuos del ajuste, según método |
+| `a`, `b` | Pendiente e intercepto de la recta | unidades/mes², unidades/mes | `np.polyfit` grado 1 |
+| `alpha`, `delta` | Constantes de suavizado de nivel y estación | adimensional 0–1 | Estimadas por máxima verosimilitud (`.fit()`) |
+| `l[t]`, `s[t]` | Componentes de nivel y estación | unidades | Recursivos |
+
+**Salvaguardas:** si `n < 24` o Holt-Winters no converge (`ValueError` o
+`LinAlgError`), la serie cae al estimador *Estable*. Si `phi[s] = Insuficiente`
+se devuelve `(0,0,0)` y la decisión pasa al comprador.
+
+#### 13.2.2 Construcción del intervalo
+
+Salvo en el método volátil (que ya devuelve percentiles empíricos):
+
+```
+D25[s] = max( 0 ,  D50[s] - 0.674 * S[s] )
+D75[s] = max( 0 ,  D50[s] + 0.674 * S[s] )
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `0.674` | Cuantil 0,75 de la normal estándar, `Phi^{-1}(0.75)` | adimensional | `QUANTILE_Z`. Define el rango intercuartílico bajo normalidad |
+| `max(0, ·)` | Recorte en cero | — | Una demanda negativa no tiene sentido operativo |
+
+**Limitación teórica declarada:** el intervalo asume **simetría normal**. Con
+`CV > 0,5` la normal asigna masa a valores negativos y subestima la cola derecha;
+el recorte mitiga lo primero, no lo segundo.
+
+#### 13.2.3 Validación retrospectiva (WMAPE con origen móvil)
+
+Se reservan los últimos `h = 6` meses (`BACKTEST_MONTHS`) y se re-proyecta cada
+uno usando **solo** información anterior:
+
+```
+Para j = 0..h-1:
+    tau_j = n - h + j
+    e_j   = | y[s, tau_j]  -  D50( y[s, 1..tau_j-1] , phi[s] ) |
+
+WMAPE[s] = ( sum_j e_j ) / ( sum_j y[s, tau_j] )
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `h` | Meses reservados para prueba | conteo | 6 |
+| `tau_j` | Índice del mes evaluado | — | Origen móvil: el corte avanza mes a mes |
+| `e_j` | Error absoluto del mes `j` | unidades | — |
+| `WMAPE[s]` | Error porcentual **ponderado sobre el total** | fracción | NaN si `n < h + 24` o si el total real es 0 |
+
+**Por qué WMAPE y no MAPE.** El MAPE clásico `(1/h)*sum|e_j/y_j|` diverge cuando
+`y_j = 0`. La demanda de refacciones tiene meses en cero por definición: el MAPE
+sería infinito, o habría que descartar justo las observaciones más informativas.
+WMAPE pone el total en el denominador **una sola vez** y admite ceros
+individuales.
+
+#### 13.2.4 Ajuste de confianza por error medido
+
+```
+gamma_final[s] = clip( gamma[s] * psi(WMAPE[s]) , 0 , 1 )
+
+psi(w) =  0.65  si w > 0.50
+          0.85  si 0.30 < w <= 0.50
+          1.00  si w <= 0.30
+          1.00  si w = NaN            [sin validación, no se penaliza]
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `gamma_final[s]` | Confianza final publicada (`confidence_final`) | fracción 0–1 |
+| `psi(·)` | Factor de penalización por error demostrado | adimensional |
+
+**Bandera de revisión humana:** `needs_review = 1` si `gamma_final < 0.5` o
+`phi[s] = Insuficiente`.
+
+---
+
+### 13.3 Etapa 2.b — Modelo de aprendizaje automático
+
+**Paradigma: modelo global.** Se ajusta **un único estimador** sobre las 40
+series a la vez, no uno por serie. Con `n = 72` observaciones por serie, un
+modelo independiente sobreajustaría; el modelo global comparte estructura entre
+series, práctica estándar cuando hay muchas series cortas.
+
+#### 13.3.1 Espacio de variables
+
+```
+X[s,t] = (  y[s,t-1], y[s,t-2], y[s,t-3], y[s,t-6], y[s,t-12],
+            MM3[s,t], SD3[s,t], MM6[s,t], SD6[s,t],
+            ev[s,t-1], br[s,t-1],
+            sin(2*pi*mes/12), cos(2*pi*mes/12),
+            rank(k[i]), coste[i], V[i], 1{c = NAVA}  )
+```
+
+| Grupo | Símbolo | Qué es | Unidad |
+|---|---|---|---|
+| Rezagos | `y[s,t-L]`, `L in {1,2,3,6,12}` | Demanda de `L` meses atrás de la misma serie | unidades |
+| Ventanas | `MM_w[s,t]`, `SD_w[s,t]`, `w in {3,6}` | Media y desviación móvil, **desplazadas un mes** | unidades |
+| Eventos | `ev[s,t-1]`, `br[s,t-1]` | Eventos de salida y de falla del mes anterior | conteo |
+| Calendario | `sin`, `cos` del mes | Codificación cíclica del mes del año | adimensional |
+| Atributos | `rank(k[i])` | Criticidad ordinal: A=3, B=2, C=1 | ordinal |
+| Atributos | `coste[i]`, `V[i]` | Costo unitario y vida útil de la pieza | USD, días |
+| Geografía | `1{c = NAVA}` | Indicadora de planta | 0/1 |
+
+**Prevención de fuga de información.** Todas las ventanas móviles llevan
+`.shift(1)` antes de calcularse, y rezagos y agregados se calculan **dentro** de
+cada grupo `(sku_id, city_id)`, de modo que ninguna serie contamine a otra ni el
+mes `t` vea información de `t`.
+
+#### 13.3.2 Estimador y objetivo
+
+```
+g* = argmin_{g in G}   sum_{(s,t) in Train}  ( y[s,t] - g(X[s,t]) )^2
+
+     G = ensamble aditivo de árboles con refuerzo de gradiente
+         (HistGradientBoostingRegressor)
+
+Predicción:  M[s] = max( 0 , g*( X[s, n] ) )
+```
+
+| Hiperparámetro | Valor | Papel |
+|---|---|---|
+| `max_iter` | 300 | Número de árboles del ensamble |
+| `learning_rate` | 0,06 | Contracción de cada árbol |
+| `max_depth` | 5 | Profundidad máxima — controla el orden de interacción |
+| `min_samples_leaf` | 12 | Mínimo de observaciones por hoja |
+| `l2_regularization` | 1,0 | Penalización L2 sobre los valores de hoja |
+| `random_state` | 20260803 | Semilla fija — reproducibilidad |
+
+#### 13.3.3 Partición temporal y métricas
+
+La partición es **por fecha, nunca aleatoria**: los últimos 6 meses son
+validación. Una partición aleatoria dejaría meses futuros en el entrenamiento y
+produciría una métrica optimista insostenible en producción.
+
+```
+e[s,t] = g*(X[s,t]) - y[s,t]
+
+MAE   = mean( |e| )
+RMSE  = sqrt( mean( e^2 ) )
+WMAPE = sum(|e|) / sum(y)
+MAPE  = mean( |e| / y )                 solo sobre y > 0
+sMAPE = mean( 2*|e| / ( |y| + |yhat| ) )
+Sesgo = mean( e )
+```
+
+| Símbolo | Qué es | Unidad | Papel |
+|---|---|---|---|
+| `WMAPE` | Métrica de cabecera | fracción | Admite ceros; refleja impacto sobre inventario |
+| `Sesgo` | Error medio **con signo** | unidades/mes | Debe oscilar en torno a 0. Un sesgo persistente consume el colchón de seguridad de forma estructural y **ninguna fórmula de stock lo corrige** |
+| `MAPE` | Porcentual clásico | fracción | Solo informativo, sobre `y > 0` |
+
+**Referencias de comparación obligatorias:**
+
+```
+Baseline ingenuo:   yhat[s,t] = y[s,t-1]
+Baseline promedio:  yhat[s,t] = MM6[s,t]
+
+Mejora_vs_ref = 1  -  WMAPE_modelo / WMAPE_ref
+```
+
+#### 13.3.4 Combinación con la proyección estadística
+
+El modelo **no reemplaza** al estimador estadístico: se promedian.
+
+```
+D50_final[s] = lambda * M[s]  +  (1 - lambda) * D50[s]
+
+Delta[s]     = D50_final[s] - D50[s]
+
+D25_final[s] = max( 0 , D25[s] + Delta[s] )
+D75_final[s] = max( 0 , D75[s] + Delta[s] )
+```
+
+| Símbolo | Qué es | Unidad | Valor |
+|---|---|---|---|
+| `lambda` | Peso asignado al modelo de ML (`MODEL_WEIGHT`) | adimensional 0–1 | **0,5** |
+| `M[s]` | Proyección del modelo para la serie | unidades/mes | §13.3.2 |
+| `Delta[s]` | Desplazamiento aplicado también a los cuantiles | unidades/mes | Mantiene el intervalo centrado |
+
+**Fundamento teórico:** combinación de pronósticos (Bates & Granger, 1969).
+Cuando dos estimadores tienen error de magnitud parecida y errores poco
+correlacionados, la combinación tiene varianza menor que cualquiera de los dos.
+`lambda = 0.5` es la combinación de varianza mínima bajo el supuesto de errores
+de igual varianza e incorrelados — **no está optimizado sobre los datos**.
+
+**Degradación limpia:** si no existe modelo entrenado, `M[s]` no está definido y
+la serie conserva la proyección estadística intacta (`forecast_source =
+"estadistico"`). El pipeline nunca depende del modelo para arrancar.
+
+---
+
+### 13.4 Etapa 2/3 — Política de inventario: el inventario mínimo
+
+La pieza teórica más establecida del sistema: **punto de reorden con stock de
+seguridad bajo demanda y plazo de entrega estocásticos**, formulación canónica de
+Hadley & Whitin (1963) y Silver-Pyke-Peterson.
+
+#### 13.4.1 Conversión a base diaria
+
+```
+d[s]       = D50_final[s] / 30
+
+sigma_d[s] = sigma[s] / sqrt(30)
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `d[s]` | Demanda media **diaria** | unidades/día | La media se reparte linealmente |
+| `sigma_d[s]` | Desviación estándar **diaria** | unidades/día | Escala con `sqrt(30)`: la varianza de una suma de 30 variaciones diarias independientes es 30 veces la diaria |
+| `30` | Días por mes (`DAYS_PER_MONTH`) | días/mes | Constante de planificación, no calendario real |
+
+**Advertencia de consistencia.** El `sigma[s]` que entra aquí es la desviación de
+la **serie histórica completa**, no el RMSE del pronóstico. La teoría pide el
+error de pronóstico; usar la dispersión de la serie sobreestima el colchón en
+series con estacionalidad ya modelada, porque carga contra una variación que el
+método ya anticipa.
+
+#### 13.4.2 Varianza combinada y stock de seguridad
+
+```
+Var_L[s] = L * sigma_d[s]^2   +   d[s]^2 * sigma_L^2
+
+SS[s]    = z(k[i]) * sqrt( max( Var_L[s] , 0 ) )
+```
+
+| Símbolo | Qué es | Unidad | Origen |
+|---|---|---|---|
+| `L` | Plazo de entrega medio de planificación | días | Media de `lead_time_avg_days` de proveedores activos ≈ 10,6 |
+| `sigma_L` | Desviación estándar del plazo de entrega | días | Media de `lead_time_std_days` ≈ 5,45 |
+| `Var_L[s]` | Varianza de la demanda acumulada durante el plazo | unidades² | — |
+| `SS[s]` | Stock de seguridad | unidades | — |
+| `z(k)` | Factor de seguridad según criticidad | adimensional | A = 1,65 · B = 1,28 · C = 0,84 (`Z_BY_CRITICALITY`) |
+
+**Derivación (ley de la varianza total).** Si `L` es aleatorio e independiente de
+la demanda:
+
+```
+Var(D_L) = E[ Var(D_L | L) ]  +  Var( E[D_L | L] )
+         = E[ L * sigma_d^2 ]  +  Var( L * d )
+         = L * sigma_d^2       +  d^2 * sigma_L^2
+```
+
+El primer término es la incertidumbre de la demanda; el segundo, la del
+proveedor, **multiplicada por la demanda al cuadrado**. Con `sigma_L / L ≈ 0,53`
+en estos proveedores, ambos términos son del mismo orden: la mitad del riesgo no
+viene de la demanda sino del plazo.
+
+**Nivel de servicio implícito de cada `z`:**
+
+| Criticidad | `z` | Nivel de servicio de ciclo `alpha = Phi(z)` |
+|---|---|---|
+| A | 1,65 | ≈ 95 % |
+| B | 1,28 | ≈ 90 % |
+| C | 0,84 | ≈ 80 % |
+
+Estos tres números son **la única declaración de política de servicio del
+sistema**, y están fijados por constante, no derivados de un costo de faltante.
+Ver §13.12 para la relación de dualidad que permitiría calibrarlos.
+
+#### 13.4.3 Inventario mínimo
+
+```
+DL[s]   = d[s] * L                      demanda durante el plazo
+
+Imin[s] = ceil( DL[s] + SS[s] )
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `DL[s]` | Demanda esperada durante el plazo (`demand_lead_time`) | unidades | No es colchón: es lo mínimo indispensable |
+| `Imin[s]` | **Inventario mínimo / punto de reorden** (`inventory_min`) | unidades enteras | `ceil` porque las piezas se compran enteras |
+
+**Limitación teórica declarada (Eppen & Martin, 1988).** La fórmula da la
+varianza correcta, pero aplicar `z = Phi^{-1}(alpha)` sobre ella supone que la
+demanda durante un plazo aleatorio es normal. En realidad es una **mezcla** de
+distribuciones, sesgada a la derecha, así que el servicio real queda por debajo
+del nominal. El sistema no corrige esto.
+
+---
+
+### 13.5 Etapa 3 — Niveles derivados y cotas
+
+```
+Imax[s]  = max( Imin[s] ,  ceil( D50_final[s] * 3.0 ) )
+
+Itgt[s]  = min(  max( Imin[s] , ceil( Imin[s] + D50_final[s] * 1.5 ) )  ,  Imax[s]  )
+
+Ivida[s] = max( 0 ,  floor( d[s] * 0.80 * V[i] )  -  q[s] )
+
+Amax[s]  = min( Imax[s] - q[s] ,  Ivida[s] )
+
+need[s]  = max( 0 ,  Imin[s] - q[s] )
+
+des[s]   = max( 0 ,  min( Itgt[s] - q[s] ,  Amax[s] ) )
+```
+
+| Símbolo | Qué es | Unidad | Constante |
+|---|---|---|---|
+| `Imax[s]` | Inventario máximo: cobertura de 3 meses, nunca menor que el mínimo | unidades | `MAX_COVERAGE_MONTHS = 3` |
+| `Itgt[s]` | Nivel objetivo de reposición: mínimo + 1,5 meses de consumo | unidades | `TARGET_COVERAGE_MONTHS = 1.5` |
+| `Ivida[s]` | Unidades consumibles antes del vencimiento, descontando lo que ya hay | unidades | `SHELF_LIFE_SAFETY_RATIO = 0.80` |
+| `Amax[s]` | Techo efectivo de compra | unidades | El más restrictivo de los dos |
+| `need[s]` | Faltante hasta el mínimo — **restricción dura** del MILP | unidades | — |
+| `des[s]` | Cantidad deseada hasta el objetivo — **lo que se pide** | unidades | — |
+
+**Fundamento y su límite.** `Itgt` implementa una política **order-up-to**: no se
+repone hasta el mínimo (eso dejaría la pieza al borde y obligaría a recomprar el
+mes siguiente pagando otro flete) sino hasta un nivel objetivo. El parámetro 1,5
+meses es **fijo por constante**; la teoría clásica lo derivaría equilibrando
+costo de ordenar contra costo de mantener (fórmula de Wilson / EOQ), usando el
+flete que ya está en los datos. Esa derivación no está implementada.
+
+---
+
+### 13.6 Etapa 3 — MILP de selección de proveedor
+
+Se resuelve **un modelo independiente por cada serie `s`** — 40 modelos de a lo
+sumo 3 ofertas. Estructura: **problema de costo fijo** (*fixed-charge*), linaje
+Balinski (1961).
+
+```
+minimizar     sum_{o in O(s)}  (  p[o] * x[o]  +  f[o] * u[o]  )
+
+sujeto a      sum_o  x[o]  >=  R_inf                       (cobertura)
+              sum_o  x[o]  <=  R_sup                       (techo)
+              sum_o  u[o]  <=  1                           (proveedor único)
+
+              x[o]  >=  m[o] * u[o]      para todo o       (MOQ condicional)
+              x[o]  <=  U[o] * u[o]      para todo o       (enlace y capacidad)
+
+              x[o]  in  Z+ ,   u[o]  in  {0,1}
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `x[o]` | Unidades a comprar de la oferta `o` | unidades enteras | Variable de decisión |
+| `u[o]` | Indicadora de activación de la oferta `o` | 0/1 | Variable de decisión |
+| `p[o]`, `f[o]`, `m[o]` | Precio unitario, flete fijo, MOQ | USD/u, USD, u | Datos |
+| `U[o]` | Cota superior efectiva: `min( R_sup , K[o] )` | unidades | Datos |
+| `R_inf` | Cantidad mínima requerida | unidades | `max(des, need)` en el caso normal |
+| `R_sup` | Cantidad máxima permitida | unidades | `max(Amax, des, need)` en el caso normal |
+
+**El mecanismo central son las dos restricciones de enlace.** Con `u[o] = 0`
+ambas fuerzan `x[o] = 0` y no se paga flete. Con `u[o] = 1` obligan a
+`m[o] <= x[o] <= U[o]`. Es lo que convierte «el flete solo se paga si se usa el
+proveedor» y «el MOQ solo aplica si se le compra» en restricciones lineales.
+
+**`sum_o u[o] <= 1` es una restricción operativa, no matemática.** Permitir
+dividir la orden entre proveedores daría un óptimo igual o mejor; se impone
+*single-sourcing* para que la orden sea ejecutable por una persona.
+
+**Solver:** CBC vía PuLP, con sonda de arranque (`_solver_answers`) porque PuLP
+declara disponible a `COIN_CMD` con que exista un ejecutable llamado `cbc`, sin
+comprobar que arranque. Límite de 60 s por modelo; en la práctica milisegundos.
+
+---
+
+### 13.7 Etapa 3.b — Valoración del quiebre
+
+Traduce el riesgo de faltante a dólares para que entre en la función objetivo de
+la mochila. **Es un cálculo determinista**, no probabilístico.
+
+```
+cover[s]       = q[s] / d[s]                si D50 > 0 ,  else 360
+
+expuesto_hoy   = max( 0 ,  L - cover[s] )
+expuesto_luego = max( 0 ,  P + L - cover[s] )
+
+dias[s]        = expuesto_luego  -  expuesto_hoy
+
+Cq[s]          = dias[s]  *  clip( r[s] , 0 , 1 )  *  c_dia( k[i] )
+```
+
+| Símbolo | Qué es | Unidad | Origen |
+|---|---|---|---|
+| `cover[s]` | Días que aguantan las existencias al ritmo proyectado | días | Calculado |
+| `P` | Periodo de planificación (`PLANNING_PERIOD_DAYS`) | días | 30 |
+| `expuesto_hoy` | Días de quiebre si se repone en esta corrida | días | — |
+| `expuesto_luego` | Días de quiebre si se aplaza a la corrida siguiente | días | — |
+| `dias[s]` | **Días de quiebre que compra la decisión de hoy** | días | La diferencia entre ambos futuros |
+| `r[s]` | Tasa de salida: proporción de días del mes en que la pieza se pide (`issue_rate`) | fracción 0–1 | `demand_forecast.csv` |
+| `c_dia(k)` | Costo por día de quiebre según criticidad | USD/día | A = 400 · B = 80 · C = 10 (`STOCKOUT_COST_PER_DAY_USD`) |
+| `Cq[s]` | Costo esperado del quiebre evitado (`stockout_cost_usd`) | USD | — |
+
+**El factor `r[s]` es la corrección que hace defendible la cifra.** Un día sin
+existencias solo cuesta si ese día alguien pide la pieza. Sin multiplicar por la
+frecuencia de salida, la valoración supone que la pieza hace falta todos los días
+y **triplica el riesgo**.
+
+**Tres limitaciones declaradas:**
+
+1. **Es determinista.** Supone que la demanda ocurre exactamente al ritmo
+   proyectado, así que ignora que una serie volátil puede agotarse antes.
+   Subestima el riesgo justo en las piezas menos predecibles. Corregirlo exige
+   trabajar con la distribución de la demanda, no con su valor esperado.
+2. **Es cota superior por el otro lado.** Supone que cada día en que la pieza se
+   pide y no está se pierde entero, sin contar canibalización de otra máquina ni
+   expedición de la orden.
+3. **`c_dia(k)` es un parámetro fijo, no una estimación.** Su magnitud decide por
+   sí sola cuánto pesa la criticidad frente al precio. Debe validarse con
+   mantenimiento antes de darle poder sobre las compras.
+
+---
+
+### 13.8 Etapa 3.b — Mochila de presupuesto
+
+**Es el único paso que acopla las piezas entre sí.** Hasta aquí cada serie se
+resolvía por separado.
+
+```
+maximizar     sum_{s in Cand}  b[s] * v[s]
+
+sujeto a      sum_{s in Cand}  Ctot[s] * v[s]  <=  B
+
+              v[s]  in  {0,1}
+```
+
+| Símbolo | Qué es | Unidad | Origen |
+|---|---|---|---|
+| `Cand` | Compras candidatas: solo las filas con `decision = COMPRAR` | conjunto | Salida de §13.6 |
+| `v[s]` | Si la compra `s` se financia en esta corrida | 0/1 | Variable de decisión |
+| `Ctot[s]` | Costo total de la compra ya resuelta (`total_cost_usd`) | USD | Salida del MILP |
+| `b[s]` | Beneficio neto: `Cq[s] - Ctot[s]` (`net_benefit_usd`) | USD | §13.7 |
+| `B` | Presupuesto de la corrida | USD | 2 500 |
+
+**Es el problema de la mochila 0/1**, linaje Lorie & Savage (1955) y Weingartner
+(1963) en racionamiento de capital.
+
+**Por qué exacto y no voraz.** El algoritmo voraz —ordenar por `b[s]/Ctot[s]` y
+llenar— es óptimo solo si las compras fueran fraccionables. Con decisiones
+indivisibles puede fallar: una compra muy rentable y cara desplaza a varias menos
+rentables y baratas que juntas rinden más. Con ~10–15 candidatos,
+*branch-and-bound* resuelve en milisegundos, así que no hay razón para la
+aproximación.
+
+**Atajos implementados:** si `sum Ctot <= B` se aprueban todas sin resolver; los
+candidatos con `Ctot[s] > B` se descartan antes de plantear el modelo.
+
+**Solo compiten las filas `COMPRAR`.** Las de `REVISAR` no son gasto aprobado
+sino decisión pendiente de una persona; descontarlas reservaría dinero para
+compras que quizá nunca se hagan.
+
+**Nota sobre unidades del objetivo.** `b[s]` está en USD y la restricción en USD:
+no hace falta multiplicador de Lagrange que traduzca entre «servicio» y «dinero»,
+porque la valoración de §13.7 ya puso ambas mitades en la misma moneda.
+
+---
+
+### 13.9 Árbol de decisión completo
+
+Orden estricto de evaluación por serie `s`:
+
+```
+1.  need[s] = 0                  ->  NO_COMPRAR   "por encima del mínimo"
+2.  O(s) = vacío                 ->  NO_COMPRAR   "sin proveedor para la ciudad"
+3.  Ivida[s] < min_o m[o]        ->  NO_COMPRAR   "vida útil no admite ni el MOQ"
+4.  min_o m[o] > Amax[s]         ->  REVISAR      resolver con R_sup = min_o m[o]
+5.  en otro caso                 ->  COMPRAR      resolver con R_inf = max(des,need)
+
+6.  post-MILP:     si COMPRAR y b[s] <= 0
+                                 ->  NO_COMPRAR   "reponer cuesta más que el quiebre"
+
+7.  post-mochila:  si COMPRAR y v[s] = 0
+                                 ->  APLAZADO     "no cabe en el presupuesto"
+```
+
+**Bandera de revisión humana** `needs_review = 1` si: la serie ya venía marcada
+del forecast (`gamma_final < 0.5` o patrón Insuficiente), o la decisión es
+`REVISAR`, o la decisión es `COMPRAR` con `gamma_final < 0.5`, o la decisión es
+`APLAZADO`.
+
+**El estado `REVISAR` no es un fallo del solver.** Es una tensión real de
+compras: el lote mínimo del proveedor supera el máximo que la pieza admite en
+bodega. Devolver «infactible» escondería la decisión; el sistema resuelve
+igualmente, informa cuánto costaría y cuántos meses de inventario dejaría, y lo
+marca para que decida el comprador.
+
+---
+
+### 13.10 Paradigma global y su ubicación en la literatura
+
+El sistema implementa el paradigma clásico **«pronosticar y luego optimizar»**
+(*predict-then-optimize* desacoplado), arquitectura estándar de investigación de
+operaciones desde los años 60:
+
+```
+   clasificar patrón            ->  estadística de series de tiempo (1970s)
+        |
+   pronosticar por régimen      ->  media móvil / OLS / Holt-Winters / percentiles
+        |                           + gradient boosting promediado al 50 %
+   traducir a inventario mínimo ->  punto de reorden con varianza combinada
+        |                           (Hadley & Whitin, 1963)
+   optimizar la compra          ->  MILP de costo fijo (Balinski, 1961)
+        |
+   repartir el presupuesto      ->  mochila 0/1 (Lorie-Savage 1955 / Weingartner 1963)
+```
+
+**Lo que el sistema NO es.** No implementa el paradigma integrado moderno
+(*Smart Predict-then-Optimize*, Elmachtoub & Grigas 2022; aprendizaje por
+refuerzo): el modelo de ML se entrena para minimizar **error de pronóstico**
+(WMAPE), sin ninguna noción de costo, presupuesto ni quiebre. Esas magnitudes
+entran en una etapa posterior y completamente separada. Un modelo con mejor WMAPE
+puede, en principio, producir peores decisiones de compra, y el sistema no lo
+detectaría.
+
+**Dónde el ML toca realmente la decisión.** En un solo punto: `D50_final`, y
+diluido al 50 % con el método estadístico. Todo lo que decide —el patrón, el
+inventario mínimo, el proveedor, el reparto del presupuesto— es matemática
+determinista anterior a 1985.
+
+---
+
+### 13.11 Mapa fórmula → código
+
+| § | Concepto | Archivo | Función / constante |
+|---|---|---|---|
+| 13.1.2 | Fuerza estacional | `app/core/patterns.py` | `seasonal_strength` |
+| 13.1.3 | Kruskal-Wallis | `app/core/patterns.py` | `seasonality_pvalue` |
+| 13.1.4 | Mann-Kendall | `app/core/patterns.py` | `trend_test` |
+| 13.1.5 | Regla de precedencia | `app/core/patterns.py` | `classify_series`, `PRECEDENCE` |
+| 13.1.6 | Score de confianza | `app/core/patterns.py` | `confidence_score` |
+| 13.2.1 | Los cuatro estimadores | `app/core/forecast.py` | `forecast_stable/volatile/trend/seasonal` |
+| 13.2.2 | Cuantiles | `app/core/forecast.py` | `_spread_from_std`, `QUANTILE_Z` |
+| 13.2.3 | WMAPE origen móvil | `app/core/forecast.py` | `backtest_wmape` |
+| 13.2.4 | Ajuste de confianza | `app/core/forecast.py` | `adjust_confidence` |
+| 13.3.1 | Espacio de variables | `app/core/training.py` | `build_features`, `LAGS`, `ROLLING_WINDOWS` |
+| 13.3.2 | Estimador | `app/core/training.py` | `DemandModel.train`, `MODEL_PARAMS` |
+| 13.3.3 | Partición y métricas | `app/core/training.py` | `temporal_split`, `regression_metrics` |
+| 13.3.4 | Combinación | `app/services/model_registry.py` | `blend_forecasts`, `MODEL_WEIGHT` |
+| 13.4.1 | Conversión diaria | `app/core/inventory.py` | `monthly_to_daily`, `DAYS_PER_MONTH` |
+| 13.4.2 | Stock de seguridad | `app/core/inventory.py` | `safety_stock`, `Z_BY_CRITICALITY` |
+| 13.4.3 | Inventario mínimo | `app/core/inventory.py` | `inventory_minimum` |
+| 13.5 | Niveles derivados | `app/core/optimization.py` | `target_inventory`, `maximum_inventory`, `consumable_within_shelf_life` |
+| 13.6 | MILP de proveedor | `app/core/optimization.py` | `solve_single_purchase` |
+| 13.7 | Valoración del quiebre | `app/core/optimization.py` | `days_of_cover`, `stockout_days_avoided`, `stockout_cost` |
+| 13.8 | Mochila | `app/core/optimization.py` | `allocate_budget`, `apply_budget` |
+| 13.9 | Árbol de decisión | `app/core/optimization.py` | `build_recommendations` |
+
+---
+
+### 13.12 Inventario de supuestos y sus límites
+
+Recopilación explícita para que un agente sepa qué puede y qué no puede
+concluirse del sistema.
+
+| # | Supuesto | Dónde entra | Consecuencia si es falso |
+|---|---|---|---|
+| 1 | La demanda mensual es aproximadamente normal | Cuantiles (§13.2.2), stock de seguridad (§13.4.2) | Con `CV > 0,5` los intervalos y el servicio real quedan cortos en la cola derecha |
+| 2 | La demanda durante un plazo aleatorio es normal | `z` aplicado sobre `sqrt(Var_L)` (§13.4.2) | Eppen & Martin (1988): la mezcla es sesgada; el servicio nominal se sobreestima |
+| 3 | Demanda y plazo de entrega son independientes | Ley de varianza total (§13.4.2) | En la práctica correlacionan en la peor dirección: alta demanda congestiona al proveedor |
+| 4 | La dispersión relevante es `sigma` de la serie | §13.4.1 | La teoría pide el RMSE del pronóstico; usar la serie sobreestima el colchón en series ya modeladas |
+| 5 | Las demandas de meses consecutivos son independientes | Escalado `sqrt(30)` (§13.4.1) | Con autocorrelación el exponente real está entre 0,6 y 0,8, no en 0,5 |
+| 6 | El pasado del proveedor predice su futuro | `L`, `sigma_L` (§13.4.2) | No contempla aduanas, cierres de planta ni estacionalidad del proveedor |
+| 7 | El horizonte es de un periodo | Todo el sistema (§13.0) | No hay trayectoria de inventario: comprar hoy no afecta la decisión del mes siguiente |
+| 8 | La demanda ocurre al ritmo proyectado | Valoración del quiebre (§13.7) | Subestima el riesgo en las series volátiles, que son las que más lo necesitan |
+| 9 | `c_dia(k)` refleja el costo real de parar la línea | §13.7 | Su magnitud decide el peso de la criticidad frente al precio; hoy es un número fijo sin validar |
+| 10 | Los tres `z` reflejan la política de servicio deseada | §13.4.2 | Fijados por constante, no derivados de un costo de faltante |
+| 11 | Cada serie se optimiza independientemente | §13.6 | No modela consolidación de órdenes (un flete por proveedor) ni traslado entre plantas |
+| 12 | Los errores de ambos estimadores tienen igual varianza y son incorrelados | `lambda = 0.5` (§13.3.4) | El peso óptimo de la combinación no está estimado sobre los datos |
+
+**La relación de dualidad que cerraría los supuestos 9 y 10.** Fijar `z` y fijar
+un costo de faltante son el mismo acto. Para un modelo `(R,Q)`:
+
+```
+b  =  ( h * Q )  /  ( D * ( 1 - alpha ) )
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `b` | Costo de faltante por unidad **implícito** en el servicio declarado | USD/unidad |
+| `h` | Costo de mantener inventario por unidad y año | USD/unidad/año |
+| `Q` | Cantidad de reposición | unidades |
+| `D` | Demanda anual | unidades/año |
+| `alpha` | Nivel de servicio de ciclo declarado, `Phi(z)` | fracción 0–1 |
+
+Corrida al revés sobre los parámetros que el sistema ya tiene, revela qué costo
+de quiebre está asumiendo cada `z` sin haberlo decidido, y permite contrastarlo
+contra lo que operaciones dice que cuesta parar una línea en Nava o en Obregón.
+
+---
+
+### 13.13 Diagnóstico del dato de entrada
+
+Medido sobre `demand_history.csv` (2 880 observaciones) el 2026-08-18. Es
+material de §13.12 pero se separa porque no es un supuesto del modelo sino una
+propiedad del dato que lo alimenta.
+
+| Métrica | Valor medido | Referencia en MRO real | Lectura |
+|---|---|---|---|
+| Meses con demanda cero | **3,26 %** | 40–70 % mensual | El histórico no es intermitente |
+| `z0` mediano por serie | **0,000** | > 0,4 | La serie mediana consume **todos** los meses |
+| ADI mediano | **1,00** | > 1,32 | Sin espaciamiento entre eventos |
+| `CV²` mediano (sobre periodos con demanda) | **0,11** | > 1,0 | Tamaños de evento muy estables |
+| Demanda media por serie | **18,3 u/mes** | 0,1–3 u/mes | Perfil de insumo de producción, no de refacción |
+| Rotación mínima del catálogo | **9,8 vueltas/año** | ítems N rotan < 1 | Ningún ítem realmente inmóvil |
+
+**Clasificación ADI / CV² (Syntetos, Boylan & Croston, 2005)**, umbrales
+`ADI = 1,32` y `CV² = 0,49`:
+
+| Régimen | Series | Lo que implica |
+|---|---|---|
+| Suave | **38 / 40** | El suavizado exponencial simple bastaría |
+| Intermitente | 2 / 40 | Terreno de Croston/SBA |
+| Errática | 0 / 40 | — |
+| Lumpy | **0 / 40** | Es donde vive la mayoría del MRO real |
+
+**Consecuencia teórica.** El dato actual **no ejercita** la rama de la literatura
+que corresponde a refacciones (Croston 1972, SBA 2005, TSB 2011, distribuciones
+Poisson/binomial negativa). Los métodos implementados en §13.2 son los adecuados
+para el dato que hay; serían insuficientes para dato MRO real. Esto acota lo que
+el MVP demuestra: valida la **arquitectura de decisión**, no la capacidad de
+pronosticar demanda intermitente.
+
+**Clasificaciones del catálogo** (20 piezas, ver `docs/diagnostico-piezas.html`):
+
+- **Criticidad** (del maestro): A = 6 · B = 9 · C = 5
+- **Valor ABC** (Pareto sobre consumo anual proyectado, 54 894 USD/año):
+  A ≤ 80 % = 8 piezas · B 80–95 % = 6 · C = 6
+- **Rotación FSN** (por `issue_rate`): F ≥ 50 % = 7 · S 15–50 % = 9 · N < 15 % = 4
+
+La celda **N × Criticidad A** (contactor y sensor de proximidad) es el caso donde
+el ABC por valor recomendaría no invertir y el cruce con criticidad dice lo
+contrario: rotan poco pero paran una línea. Ninguna clasificación por separado
+llega a esa conclusión.
+
+---
+
+## 14. Diseño — Continuidad de producción como restricción dura
+
+> **Estado: ⬜ propuesto, no implementado.** Diseño corto para retomar después.
+
+### 14.1 El problema con el modelo actual
+
+Hoy el presupuesto **manda sobre todo**. La mochila de §13.8 maximiza beneficio
+neto sujeta a `B = 2.500 USD`, y una pieza puede quedar `APLAZADO` aunque su
+quiebre pare una línea, simplemente porque otras rendían más por dólar.
+
+La corrida actual lo demuestra: **3 piezas aplazadas por 1.116,94 USD**, dejando
+3.152,08 USD de riesgo sin cubrir. Si alguna de esas tres es de criticidad A, el
+sistema está eligiendo ahorrar 1.117 USD a cambio de arriesgar un paro de línea
+que cuesta 400 USD/día. Eso es un mal negocio que el modelo no ve porque trata
+todas las piezas con la misma moneda.
+
+**La inversión conceptual:** el presupuesto deja de ser una restricción sobre
+*todo* y pasa a ser una restricción sobre *lo discrecional*. La continuidad de
+producción sube a restricción dura.
+
+### 14.2 Formulación propuesta
+
+Se parte el conjunto de candidatos en dos según criticidad:
+
+```
+Cand_dura   = { s : k[i] = A }        piezas cuyo quiebre para una línea
+Cand_flex   = { s : k[i] in {B,C} }   el resto
+```
+
+Modelo:
+
+```
+maximizar     sum_{s in Cand_flex}  b[s] * v[s]
+
+sujeto a      v[s] = 1                        para todo s in Cand_dura     (R1)
+
+              sum_{s in Cand}  Ctot[s] * v[s]  <=  B + E                   (R2)
+
+              E  <=  E_max                                                 (R3)
+
+              v[s] in {0,1} ,  E >= 0
+```
+
+| Símbolo | Qué es | Unidad | Nota |
+|---|---|---|---|
+| `Cand_dura` | Reposiciones de criticidad A que están bajo el mínimo | conjunto | Se financian siempre |
+| `Cand_flex` | Reposiciones B y C | conjunto | Compiten por lo que sobre |
+| `v[s]` | Si la compra se financia | 0/1 | Forzada a 1 en `Cand_dura` |
+| `b[s]` | Beneficio neto `Cq[s] − Ctot[s]` | USD | §13.7 |
+| `B` | Presupuesto nominal de la corrida | USD | 2 500 |
+| `E` | **Excedente autorizado**: cuánto se permite pasarse para cubrir lo crítico | USD | Nueva variable |
+| `E_max` | Tope del excedente | USD | Parámetro de negocio |
+
+**Cómo se lee (R1).** Toda pieza de criticidad A bajo su mínimo se repone, sin
+competir. El optimizador ya no puede aplazarla.
+
+**Cómo se lee (R2) y (R3).** El presupuesto se vuelve elástico hasta `E_max`.
+Si lo crítico cabe en `B`, `E = 0` y nada cambia. Si no cabe, el modelo consume
+excedente **y lo reporta explícitamente**, que es el punto: la decisión de gastar
+de más queda visible y justificada, no escondida.
+
+### 14.3 El caso infactible y qué debe hacer el sistema
+
+Si `sum_{Cand_dura} Ctot[s] > B + E_max`, el modelo es infactible. **No debe
+fallar en silencio ni relajar (R1) por su cuenta.** Debe:
+
+1. Reportar el déficit exacto: `Deficit = sum_{Cand_dura} Ctot − (B + E_max)`.
+2. Ordenar las piezas de `Cand_dura` por `Cq[s]` descendente —el quiebre que
+   evitan— y marcar cuáles caben.
+3. Devolver las que no caben con decisión `ESCALAR`, un quinto estado, con el
+   texto: *«Reponer esta pieza crítica requiere ampliar el presupuesto en X USD;
+   no hacerlo expone a un quiebre valorado en Y USD.»*
+
+Es el mismo principio de `REVISAR`: cuando el sistema no puede decidir, lo dice
+en vez de fingir que sí.
+
+### 14.4 Refinamiento: criticidad como restricción de servicio, no como binaria
+
+La partición A / {B,C} es tosca. Una versión más fina impone un **nivel de
+servicio agregado mínimo por clase**:
+
+```
+sum_{s in Clase_k}  v[s]  >=  ceil( theta[k] * |Clase_k| )        para cada k
+```
+
+| Símbolo | Qué es | Unidad | Valor sugerido |
+|---|---|---|---|
+| `Clase_k` | Reposiciones necesarias de criticidad `k` | conjunto | — |
+| `theta[k]` | Fracción mínima de la clase que debe financiarse | fracción 0–1 | A = 1,00 · B = 0,80 · C = 0,50 |
+
+Esto es **consistente con los `z` de §13.4.2**: si ya se declaró 95/90/80 % de
+nivel de servicio por criticidad al calcular `Imin`, el presupuesto no debería
+contradecir esa política aplazando justo las críticas. Hoy hay una incoherencia
+declarada entre las dos etapas y esta restricción la cierra.
+
+### 14.5 Qué habría que tocar
+
+| Archivo | Cambio |
+|---|---|
+| `app/core/optimization.py` | `allocate_budget`: partir candidatos, añadir `v[s] = 1` forzado y la variable `E` |
+| `app/core/optimization.py` | Nuevo estado `DECISION_ESCALATE = "ESCALAR"` y su motivo |
+| `app/core/optimization.py` | Constantes `BUDGET_OVERRUN_MAX_USD`, `SERVICE_FLOOR_BY_CRITICALITY` |
+| `app/services/pipeline_report.py` | Reportar `E` consumido y déficit si lo hay |
+| `frontend/` | Banda propia para `ESCALAR` — es acción de gerencia, no de comprador |
+| `tests/core/` | Caso: crítica que no cabe → `ESCALAR`, no `APLAZADO` |
+
+### 14.6 Lo que este diseño NO resuelve
+
+- **El horizonte sigue siendo de un periodo.** Forzar la compra crítica hoy no
+  considera que el mes siguiente puede haber otra peor.
+- **`c_dia(k)` sigue sin validar** (§13.7, limitación 3). La partición por
+  criticidad hereda la misma debilidad: si la etiqueta A está mal puesta en el
+  maestro, el modelo protege la pieza equivocada con dinero real.
+- **No sustituye al traslado entre plantas** (§11.4 mejora 5). Mover stock sigue
+  siendo más barato que comprar, y debería resolverse *antes* de consumir
+  excedente presupuestal.
+
+---
+
+## 15. Diseño — Chat de explicabilidad y trazabilidad
+
+> **Estado: ⬜ propuesto, no implementado.** Diseño corto para retomar después.
+
+### 15.1 Qué problema resuelve
+
+Hoy la explicación del sistema está congelada en la columna `reason` de cada
+fila: una frase generada por plantilla en el momento de la corrida. Sirve para
+auditar *una* decisión, pero no responde preguntas transversales, que son las que
+de verdad hace un comprador o un gerente:
+
+- «¿Por qué esta pieza está aplazada y aquella no, si cuestan lo mismo?»
+- «¿Cuánto tendría que subir el presupuesto para que no quede nada aplazado?»
+- «¿Qué piezas dependen del proveedor Alpha y qué pasa si se retrasa?»
+- «¿Por qué el inventario mínimo de esta pieza subió respecto al mes pasado?»
+
+Ninguna se contesta leyendo una fila. Todas se contestan con los datos que el
+sistema ya tiene, si algo sabe navegarlos.
+
+**El agente ya existe a medias.** `app/services/llm_agent.py` tiene
+`ExplanationAgent` con `BaseAgent` del SDK y `llm_provider="gemini"`, pero solo
+genera texto por fila. Este diseño lo convierte en conversacional.
+
+### 15.2 Principio de diseño no negociable
+
+**El LLM no calcula, no decide y no estima. Solo consulta y redacta.**
+
+Toda cifra que aparezca en una respuesta debe venir de una herramienta que la
+leyó del dataset o la recalculó con las funciones de `app/core/`. Si el LLM no
+puede respaldar un número con una llamada a herramienta, debe decir que no lo
+sabe. Esto es lo que separa un asistente auditable de uno que alucina cifras de
+inventario — y en un sistema cuyo argumento central es la trazabilidad, un número
+inventado destruye el producto entero.
+
+### 15.3 Herramientas expuestas al agente
+
+```
+consultar_decision(sku_id, city_id)
+    -> fila completa de purchase_recommendations.csv + su motivo
+
+consultar_pronostico(sku_id, city_id)
+    -> patrón, método, D25/D50/D75, WMAPE, confianza, Imin, safety_stock
+
+consultar_inventario(sku_id?, city_id?, solo_bajo_minimo?)
+    -> existencias, mínimo, máximo, cobertura en días
+
+explicar_inventario_minimo(sku_id, city_id)
+    -> descompone Imin en (d·L) + (z·sqrt(...)) con los valores usados
+
+comparar_ofertas(sku_id, city_id)
+    -> las 2-3 ofertas cotizadas, cuál ganó y por qué (usa offer_costs)
+
+simular_presupuesto(nuevo_B)
+    -> re-corre allocate_budget con otro B, devuelve qué dejaría de aplazarse
+
+explicar_aplazamiento(sku_id, city_id)
+    -> qué compras consumieron el presupuesto que esta necesitaba
+
+resumen_corrida()
+    -> conteos por decisión, gasto, quiebre evitado, retorno, aplazado
+
+historial_serie(sku_id, city_id, meses)
+    -> consumo mensual, marcando is_synthetic
+```
+
+| Herramienta | Lee de | Recalcula con |
+|---|---|---|
+| `consultar_decision` | `purchase_recommendations.csv` | — |
+| `consultar_pronostico` | `demand_forecast.csv` | — |
+| `explicar_inventario_minimo` | `demand_forecast.csv`, `suppliers.csv` | `app.core.inventory.inventory_minimum` |
+| `comparar_ofertas` | `supplier_offers.csv`, `supplier_coverage.csv` | `app.core.optimization.offer_costs` |
+| `simular_presupuesto` | `purchase_recommendations.csv` | `app.core.optimization.allocate_budget` |
+| `explicar_aplazamiento` | `purchase_recommendations.csv` | `allocate_budget` con y sin la pieza |
+
+`simular_presupuesto` y `explicar_aplazamiento` son las dos que justifican el
+chat: responden contrafactuales que ninguna columna estática puede contener.
+
+### 15.4 Arquitectura
+
+Respeta la regla de dependencias `api → services → core`:
+
+```
+app/api/routes.py           POST /chat  { pregunta, historial } -> { respuesta, fuentes }
+        |
+app/services/chat_agent.py  ChatAgent(BaseAgent) — orquesta el bucle de herramientas
+        |
+app/services/chat_tools.py  las 9 funciones de §15.3, puras sobre DataFrames
+        |
+app/core/                   inventory.py, optimization.py — el cálculo real
+```
+
+`chat_tools.py` **no llama al LLM**: son funciones normales, testeables sin red.
+Eso permite cubrirlas con pytest como cualquier otro módulo y garantiza que la
+capa de cálculo sea verificable con independencia del modelo.
+
+### 15.5 Contrato de respuesta
+
+Cada respuesta del chat devuelve:
+
+```json
+{
+  "respuesta": "texto en lenguaje natural",
+  "fuentes": [
+    {"herramienta": "explicar_inventario_minimo", "argumentos": {...}, "resultado": {...}}
+  ],
+  "run_id": "..."
+}
+```
+
+**`fuentes` no es opcional y la interfaz debe mostrarlo.** Es lo que convierte la
+respuesta en auditable: el usuario ve qué se consultó para producirla. Sin eso,
+el chat es una caja negra encima de un sistema que se vendía como trazable.
+
+El `run_id` (mejora 3 de §11.4) es **prerrequisito duro** de este diseño: una
+respuesta sobre por qué algo está `APLAZADO` solo es reconstruible si se sabe
+contra qué corrida se contestó. Implementar el chat antes que `run_id` produce un
+asistente que da respuestas correctas hoy e irreproducibles mañana.
+
+### 15.6 Degradación sin clave
+
+Igual que `ExplanationAgent` hoy: sin `GEMINI_API_KEY`, el endpoint responde con
+el resultado crudo de la herramienta más relevante y un aviso de que la redacción
+en lenguaje natural no está disponible. El sistema no depende del LLM para ser
+consultable — el LLM solo mejora la forma de la respuesta.
+
+### 15.7 Riesgos declarados
+
+| Riesgo | Mitigación |
+|---|---|
+| El LLM inventa cifras | Toda cifra proviene de herramienta; sin herramienta, se responde «no lo sé» |
+| Inyección de instrucciones vía nombres de pieza o motivos | El contenido del dataset se pasa como **datos**, nunca como instrucción; el prompt de sistema lo declara |
+| El chat se usa como fuente de verdad en vez del CSV | El contrato incluye `run_id` y `fuentes`; la interfaz enlaza a la fila original |
+| Costo por consulta | Las herramientas devuelven agregados, no tablas completas; el histórico se resume antes de entrar al contexto |
+| Sin autenticación (§11.3) el chat expone el dataset entero | **Bloqueante:** no publicar el endpoint antes de la mejora 1 de §11.4 |
+
+### 15.8 Orden de implementación
+
+1. `chat_tools.py` con las 9 funciones + tests. Sin LLM: es cálculo puro.
+2. `run_id` en cada decisión (mejora 3 de §11.4) — prerrequisito.
+3. `ChatAgent` sobre `BaseAgent`, con el bucle de herramientas.
+4. Endpoint `POST /chat` **detrás de autenticación**.
+5. Interfaz: panel lateral con el historial y las fuentes de cada respuesta.
