@@ -11,6 +11,21 @@ Funcionalidad:
     independiente. Son decisiones separadas mientras no exista un presupuesto
     global, y resolverlas por separado mantiene el modelo pequeño y la
     explicacion de cada recomendacion trazable a sus propias restricciones.
+
+    Dos decisiones de politica gobiernan el modulo entero.
+
+    La primera es cuanto reponer. El nivel objetivo no es una cobertura en meses
+    fijada por constante sino la cantidad economica de pedido de Wilson: la que
+    equilibra el flete que se paga por pedir contra el costo de mantener en
+    bodega lo que se pidio de mas. De ahi sale tanto el nivel hasta el que se
+    repone como el techo de inventario, que en una politica (s, S) son el mismo
+    numero.
+
+    La segunda es que se financia cuando el dinero no alcanza. El presupuesto ya
+    no manda sobre todo: las piezas cuyo quiebre para una linea se reponen
+    siempre, y el presupuesto se vuelve elastico hasta un excedente autorizado
+    para conseguirlo. Solo lo que no compromete la continuidad de produccion
+    compite por lo que sobre.
 """
 
 import math
@@ -20,12 +35,19 @@ import pulp
 
 from app.core.inventory import DAYS_PER_MONTH
 
-MAX_COVERAGE_MONTHS = 3
-TARGET_COVERAGE_MONTHS = 1.5
+MONTHS_PER_YEAR = 12
+
+HOLDING_COST_RATE_ANNUAL = 0.25
+
+EOQ_MAX_COVERAGE_MONTHS = 6.0
 
 SHELF_LIFE_SAFETY_RATIO = 0.80
 
 SCENARIO_BUDGET_USD = 2500.0
+
+BUDGET_OVERRUN_MAX_USD = 1500.0
+
+SERVICE_FLOOR_BY_CRITICALITY = {"A": 1.00, "B": 0.80, "C": 0.50}
 
 STOCKOUT_COST_PER_DAY_USD = {"A": 400.0, "B": 80.0, "C": 10.0}
 
@@ -37,14 +59,24 @@ DECISION_BUY = "COMPRAR"
 DECISION_HOLD = "NO_COMPRAR"
 DECISION_REVIEW = "REVISAR"
 DECISION_DEFERRED = "APLAZADO"
+DECISION_ESCALATE = "ESCALAR"
 
-REASON_ABOVE_MINIMUM = "Inventario por encima del minimo: no requiere reposicion"
-REASON_SHELF_LIFE_BLOCK = "Vida util no permite consumir ni la cantidad minima de orden"
-REASON_NO_SUPPLIER = "Ninguna oferta cumple las restricciones para esta ciudad"
-REASON_INFEASIBLE = "El modelo no encontro solucion factible"
-REASON_LOW_CONFIDENCE = "Confianza baja en la proyeccion: requiere validacion humana"
-REASON_OVER_BUDGET = "No cabe en el presupuesto de la corrida"
-REASON_NOT_WORTH_IT = "Reponer cuesta mas que el quiebre que evita"
+DECISION_LABELS = {
+    DECISION_BUY: "BUY",
+    DECISION_HOLD: "NO ACTION",
+    DECISION_REVIEW: "REVIEW",
+    DECISION_DEFERRED: "DEFERRED",
+    DECISION_ESCALATE: "ESCALATE",
+}
+
+REASON_ABOVE_MINIMUM = "Stock is above the operating minimum: no replenishment needed"
+REASON_SHELF_LIFE_BLOCK = "Shelf life does not allow consuming even the minimum order quantity"
+REASON_NO_SUPPLIER = "No offer meets the constraints for this city"
+REASON_INFEASIBLE = "The model found no feasible solution"
+REASON_LOW_CONFIDENCE = "Low confidence in the forecast: needs human validation"
+REASON_OVER_BUDGET = "Does not fit in the discretionary budget of this run"
+REASON_NOT_WORTH_IT = "Replenishing costs more than the stockout it prevents"
+REASON_ESCALATE = "Critical part that does not fit even with the authorised budget overrun"
 
 
 _cached_solver = None
@@ -123,6 +155,9 @@ COLUMNS = [
     "demand_monthly",
     "forecast_source",
     "shelf_life_days",
+    "order_cost_usd",
+    "holding_cost_usd",
+    "eoq_units",
     "target_qty",
     "max_allowed_qty",
     "coverage_months",
@@ -243,37 +278,54 @@ def stockout_cost(
     )
 
 
-def allocate_budget(candidates: list, budget) -> set:
-    """Elige que compras entran en el presupuesto de la corrida.
+def _service_requirement(pool: list, affordable: list, criticality: str, floors: dict) -> int:
+    """Calcula cuantas compras de una clase de criticidad hay que financiar.
 
     Entrada:
-        candidates: lista de diccionarios con key, cost y benefit de cada compra
-            que el optimizador recomienda.
-        budget: tope de gasto en USD, o None para no aplicar limite.
+        pool: candidatos discrecionales de la corrida.
+        affordable: los que caben por si solos en lo que queda de presupuesto.
+        criticality: clase de criticidad que se esta evaluando.
+        floors: fraccion minima de cada clase que debe financiarse.
 
     Salida:
-        Conjunto de claves de las compras que se aprueban.
+        Numero de compras de esa clase que la restriccion exige aprobar.
 
     Funcionalidad:
-        Resuelve una mochila: maximiza el beneficio neto total, es decir el
-        quiebre que se evita menos lo que cuesta evitarlo, sin pasar del
-        presupuesto. No es lo mismo que ir aprobando de mayor beneficio a menor
-        hasta agotar el dinero, porque una compra muy rentable y cara puede
-        desplazar a varias algo menos rentables y baratas que juntas rinden mas.
-
-        Es la primera restriccion del sistema que acopla las piezas entre si.
-        Mientras cada pieza se resolvia por separado, el modelo entero no decidia
-        nada que no resolviera ordenar las ofertas por precio; aqui si, porque la
-        eleccion de que comprar depende de todo lo demas que compite por el mismo
-        dinero.
+        La fraccion se aplica sobre todas las reposiciones necesarias de la
+        clase, no sobre las que caben, porque el nivel de servicio se declara
+        sobre la necesidad real. Pero el resultado se recorta a las que caben:
+        exigir mas de las que el presupuesto puede pagar hace el modelo
+        infactible sin informar de nada.
     """
-    if budget is None:
-        return {candidate["key"] for candidate in candidates}
+    share = floors.get(criticality, 0.0)
+    if share <= 0:
+        return 0
+    needed = len([c for c in pool if c.get("criticality") == criticality])
+    available = len([c for c in affordable if c.get("criticality") == criticality])
+    return min(available, math.ceil(share * needed))
 
-    affordable = [c for c in candidates if c["cost"] <= budget]
-    if sum(c["cost"] for c in candidates) <= budget:
-        return {candidate["key"] for candidate in candidates}
 
+def _solve_knapsack(pool: list, affordable: list, capacity: float, floors: dict, enforced: list):
+    """Resuelve la mochila discrecional con los pisos de servicio indicados.
+
+    Entrada:
+        pool: candidatos discrecionales de la corrida.
+        affordable: los que caben por si solos en la capacidad disponible.
+        capacity: dinero disponible en USD.
+        floors: fraccion minima de cada clase que debe financiarse.
+        enforced: clases de criticidad cuyo piso se impone en esta pasada.
+
+    Salida:
+        Conjunto de claves aprobadas, o None si el modelo resulta infactible.
+
+    Funcionalidad:
+        Es la mochila 0/1 de siempre —maximizar beneficio neto sin pasar del
+        dinero— mas una restriccion de cardinalidad por clase de criticidad.
+
+        Devolver None en lugar de un conjunto vacio es lo que permite distinguir
+        entre no poder pagar nada y no poder cumplir un piso de servicio, que son
+        dos situaciones que exigen respuestas distintas.
+    """
     problem = pulp.LpProblem("presupuesto", pulp.LpMaximize)
     switches = {
         candidate["key"]: problem.add_variable(f"buy_{index}", cat="Binary")
@@ -285,25 +337,153 @@ def allocate_budget(candidates: list, budget) -> set:
     )
     problem += (
         pulp.lpSum([candidate["cost"] * switches[candidate["key"]] for candidate in affordable])
-        <= budget
+        <= capacity
     )
+
+    for criticality in enforced:
+        required = _service_requirement(pool, affordable, criticality, floors)
+        if required <= 0:
+            continue
+        members = [c for c in affordable if c.get("criticality") == criticality]
+        problem += pulp.lpSum([switches[c["key"]] for c in members]) >= required
 
     problem.solve(_solver())
     if pulp.LpStatus[problem.status] != "Optimal":
-        return set()
+        return None
 
     return {key for key, switch in switches.items() if round(switch.value() or 0) == 1}
 
 
-def apply_budget(recommendations: pd.DataFrame, budget) -> pd.DataFrame:
-    """Aplaza las compras que no caben en el presupuesto.
+def allocate_discretionary(pool: list, capacity: float, floors: dict) -> set:
+    """Reparte entre las compras discrecionales el dinero que quedo libre.
+
+    Entrada:
+        pool: candidatos que no comprometen la continuidad de produccion.
+        capacity: dinero disponible en USD tras cubrir lo critico.
+        floors: fraccion minima de cada clase de criticidad que debe financiarse.
+
+    Salida:
+        Conjunto de claves de las compras aprobadas.
+
+    Funcionalidad:
+        Resuelve una mochila: maximiza el beneficio neto total, es decir el
+        quiebre que se evita menos lo que cuesta evitarlo, sin pasar del dinero
+        disponible. No es lo mismo que ir aprobando de mayor beneficio a menor
+        hasta agotarlo, porque una compra muy rentable y cara puede desplazar a
+        varias algo menos rentables y baratas que juntas rinden mas.
+
+        Sobre esa mochila se imponen los pisos de servicio por criticidad, que
+        existen por coherencia con la etapa anterior: si al calcular el
+        inventario minimo se declaro un 90 % de nivel de servicio para las piezas
+        B, el presupuesto no deberia contradecirlo aplazando la mayoria de ellas.
+
+        Cuando el dinero no da ni para los pisos, se sueltan de menos exigente a
+        mas exigente en lugar de devolver infactible. Aplazar una pieza C antes
+        que una B es la misma jerarquia que declara el resto del sistema, y el
+        nivel de servicio realmente alcanzado queda visible en el informe.
+    """
+    if capacity <= 0 or not pool:
+        return set()
+
+    affordable = [c for c in pool if c["cost"] <= capacity]
+    if not affordable:
+        return set()
+    if sum(c["cost"] for c in pool) <= capacity:
+        return {candidate["key"] for candidate in pool}
+
+    classes = sorted(
+        {c.get("criticality") for c in pool if floors.get(c.get("criticality"), 0.0) > 0},
+        key=lambda name: floors[name],
+    )
+
+    for dropped in range(len(classes) + 1):
+        solution = _solve_knapsack(pool, affordable, capacity, floors, classes[dropped:])
+        if solution is not None:
+            return solution
+    return set()
+
+
+def allocate_budget(
+    candidates: list, budget, overrun_max: float = BUDGET_OVERRUN_MAX_USD, floors: dict = None
+) -> dict:
+    """Elige que compras se financian priorizando la continuidad de produccion.
+
+    Entrada:
+        candidates: lista de diccionarios con key, cost, benefit, criticality y
+            stockout_cost de cada compra que el optimizador recomienda.
+        budget: tope de gasto en USD, o None para no aplicar limite.
+        overrun_max: excedente maximo autorizado para cubrir lo critico.
+        floors: fraccion minima de cada clase de criticidad que debe
+            financiarse. Por defecto la politica del modulo.
+
+    Salida:
+        Diccionario con el conjunto de claves aprobadas y el de las que hay que
+        escalar a gerencia.
+
+    Funcionalidad:
+        Invierte el orden de mando del modelo anterior. Antes el presupuesto
+        mandaba sobre todo y una pieza podia quedar aplazada aunque su quiebre
+        parara una linea, simplemente porque otras rendian mas por dolar. Eso es
+        un mal negocio que la mochila no veia, porque trataba todas las piezas
+        con la misma moneda.
+
+        Ahora las reposiciones de criticidad A no compiten: se financian primero
+        y el presupuesto se estira hasta un excedente autorizado para
+        conseguirlo. Solo el dinero que sobra despues se reparte entre las demas,
+        y el excedente queda reportado en vez de escondido, que es justo el
+        punto: gastar de mas para no parar una linea es una decision legitima
+        siempre que se vea.
+
+        Cuando ni con el excedente alcanza, el modelo no relaja la regla por su
+        cuenta ni falla en silencio. Cubre las criticas que mas quiebre evitan y
+        devuelve el resto para escalar, porque ampliar el presupuesto es una
+        decision de gerencia y no del optimizador.
+    """
+    floors = SERVICE_FLOOR_BY_CRITICALITY if floors is None else floors
+
+    if budget is None:
+        return {"approved": {candidate["key"] for candidate in candidates}, "escalated": set()}
+
+    mandatory = [c for c in candidates if floors.get(c.get("criticality"), 0.0) >= 1.0]
+    mandatory_keys = {c["key"] for c in mandatory}
+    flexible = [c for c in candidates if c["key"] not in mandatory_keys]
+
+    ceiling = budget + max(0.0, overrun_max)
+    committed = sum(c["cost"] for c in mandatory)
+
+    if committed <= ceiling:
+        approved, escalated, spent = set(mandatory_keys), set(), committed
+    else:
+        approved, escalated, spent = set(), set(), 0.0
+        for candidate in sorted(
+            mandatory, key=lambda c: (-float(c.get("stockout_cost", 0.0)), c["cost"])
+        ):
+            if spent + candidate["cost"] <= ceiling:
+                approved.add(candidate["key"])
+                spent += candidate["cost"]
+            else:
+                escalated.add(candidate["key"])
+
+    remaining = max(0.0, budget - spent)
+    return {
+        "approved": approved | allocate_discretionary(flexible, remaining, floors),
+        "escalated": escalated,
+    }
+
+
+def apply_budget(
+    recommendations: pd.DataFrame, budget, overrun_max: float = BUDGET_OVERRUN_MAX_USD
+) -> pd.DataFrame:
+    """Reparte el dinero de la corrida y marca lo que no alcanzo a financiarse.
 
     Entrada:
         recommendations: tabla de decisiones ya resueltas por pieza.
         budget: tope de gasto en USD, o None para no aplicar limite.
+        overrun_max: excedente maximo autorizado para cubrir lo critico.
 
     Salida:
-        La misma tabla con las compras no financiadas marcadas como aplazadas.
+        La misma tabla con las compras no financiadas marcadas como aplazadas y
+        con las criticas que no caben marcadas para escalar.
 
     Funcionalidad:
         Solo compiten por el dinero las filas en COMPRAR. Las que quedan en
@@ -315,6 +495,12 @@ def apply_budget(recommendations: pd.DataFrame, budget) -> pd.DataFrame:
         recomendacion tecnica sigue siendo valida; lo que falta es el dinero, y
         el comprador necesita ver cuanto pediria para poder defender una
         ampliacion del presupuesto, junto con el quiebre que ese dinero evitaria.
+
+        Escalar es distinto de aplazar y por eso lleva estado propio. Una pieza
+        aplazada es una compra que rendia menos que otras; una escalada es una
+        pieza cuyo quiebre para una linea y que ni con el excedente autorizado
+        cabe. La primera la resuelve un comprador la corrida siguiente, la
+        segunda exige que alguien amplie el presupuesto ahora.
     """
     if budget is None or recommendations.empty:
         return recommendations
@@ -328,30 +514,130 @@ def apply_budget(recommendations: pd.DataFrame, budget) -> pd.DataFrame:
             "key": (record["sku_id"], record["city_id"]),
             "cost": float(record["total_cost_usd"]),
             "benefit": float(record["net_benefit_usd"]),
+            "criticality": record["criticality"],
+            "stockout_cost": float(record["stockout_cost_usd"] or 0.0),
         }
         for record in buying.to_dict(orient="records")
     ]
-    approved = allocate_budget(candidates, budget)
+    allocation = allocate_budget(candidates, budget, overrun_max)
+    approved, escalated = allocation["approved"], allocation["escalated"]
 
     result = recommendations.copy()
-    deferred = result.apply(
+    keys = result.apply(lambda row: (row["sku_id"], row["city_id"]), axis=1)
+    purchases = result["decision"] == DECISION_BUY
+
+    to_escalate = purchases & keys.isin(escalated)
+    to_defer = purchases & ~keys.isin(approved) & ~to_escalate
+
+    result.loc[to_escalate, "reason"] = result.loc[to_escalate].apply(
         lambda row: (
-            row["decision"] == DECISION_BUY and (row["sku_id"], row["city_id"]) not in approved
+            f"{REASON_ESCALATE}. Replenishing it needs {row['total_cost_usd']:.2f} USD "
+            f"beyond the {budget:.2f} USD budget and its {overrun_max:.2f} USD authorised "
+            f"overrun. Leaving it uncovered exposes a stockout valued at "
+            f"{row['stockout_cost_usd']:.2f} USD on a criticality "
+            f"{row['criticality']} part"
         ),
         axis=1,
     )
-    result.loc[deferred, "reason"] = result.loc[deferred].apply(
+    result.loc[to_escalate, "decision"] = DECISION_ESCALATE
+    result.loc[to_escalate, "needs_review"] = 1
+
+    result.loc[to_defer, "reason"] = result.loc[to_defer].apply(
         lambda row: (
-            f"{REASON_OVER_BUDGET}. Se necesitan {row['total_cost_usd']:.2f} USD y el "
-            f"presupuesto de la corrida es {budget:.2f} USD, que rinde mas en otras "
-            f"piezas. Aplazarla expone a un quiebre valorado en "
+            f"{REASON_OVER_BUDGET}. It needs {row['total_cost_usd']:.2f} USD and the "
+            f"{budget:.2f} USD of the run go further on other parts once production "
+            f"continuity is covered. Deferring it exposes a stockout valued at "
             f"{row['stockout_cost_usd']:.2f} USD"
         ),
         axis=1,
     )
-    result.loc[deferred, "decision"] = DECISION_DEFERRED
-    result.loc[deferred, "needs_review"] = 1
+    result.loc[to_defer, "decision"] = DECISION_DEFERRED
+    result.loc[to_defer, "needs_review"] = 1
     return result
+
+
+def budget_allocation_summary(
+    recommendations: pd.DataFrame,
+    budget=SCENARIO_BUDGET_USD,
+    overrun_max: float = BUDGET_OVERRUN_MAX_USD,
+    floors: dict = None,
+) -> dict:
+    """Resume como quedo repartido el dinero y que nivel de servicio se alcanzo.
+
+    Entrada:
+        recommendations: tabla de decisiones ya repartidas.
+        budget: presupuesto nominal de la corrida en USD.
+        overrun_max: excedente maximo autorizado.
+        floors: fraccion minima de cada clase que se queria financiar.
+
+    Salida:
+        Diccionario con el gasto, el excedente consumido, lo aplazado, lo
+        escalado y el nivel de servicio conseguido por clase de criticidad
+        frente al que se declaro.
+
+    Funcionalidad:
+        Todo se deriva de la tabla ya resuelta y no de la corrida del solver, de
+        modo que el informe no pueda contradecir a la decision que el comprador
+        tiene delante.
+
+        El nivel de servicio alcanzado se mide sobre las reposiciones que
+        procedian, es decir las que el optimizador resolvio como compra antes de
+        repartir el dinero: comprar, aplazar y escalar. Las filas en revision
+        quedan fuera porque no son gasto aprobado sino una decision pendiente.
+
+        Publicarlo junto al piso declarado es lo que hace auditable la politica.
+        Si el presupuesto obligo a bajar del 80 % en las piezas B, la pantalla lo
+        dice en lugar de dejar creer que la politica se cumplio.
+    """
+    floors = SERVICE_FLOOR_BY_CRITICALITY if floors is None else floors
+    resolved = (DECISION_BUY, DECISION_DEFERRED, DECISION_ESCALATE)
+
+    if recommendations.empty:
+        rows = pd.DataFrame(columns=["criticality", "decision", "total_cost_usd"])
+    else:
+        rows = recommendations[recommendations["decision"].isin(resolved)]
+
+    totals = {
+        decision: (
+            round(float(rows[rows["decision"] == decision]["total_cost_usd"].sum()), 2),
+            int((rows["decision"] == decision).sum()),
+        )
+        for decision in resolved
+    }
+
+    invested, bought = totals[DECISION_BUY]
+    deferred_usd, deferred = totals[DECISION_DEFERRED]
+    escalated_usd, escalated = totals[DECISION_ESCALATE]
+
+    service = []
+    for criticality, floor in sorted(floors.items(), key=lambda item: -item[1]):
+        block = rows[rows["criticality"] == criticality]
+        needed = len(block)
+        funded = int((block["decision"] == DECISION_BUY).sum())
+        service.append(
+            {
+                "criticality": criticality,
+                "needed": needed,
+                "funded": funded,
+                "achieved": round(funded / needed, 3) if needed else None,
+                "floor": floor,
+                "met": needed == 0 or funded >= math.ceil(floor * needed),
+            }
+        )
+
+    return {
+        "budget_usd": budget,
+        "overrun_max_usd": overrun_max,
+        "overrun_usd": round(max(0.0, invested - budget), 2) if budget is not None else 0.0,
+        "invested_usd": invested,
+        "purchases": bought,
+        "deferred_usd": deferred_usd,
+        "deferred": deferred,
+        "escalated_usd": escalated_usd,
+        "escalated": escalated,
+        "service": service,
+        "continuity_protected": escalated == 0,
+    }
 
 
 def consumable_within_shelf_life(monthly_demand: float, shelf_life_days: int, on_hand: int) -> int:
@@ -375,45 +661,140 @@ def consumable_within_shelf_life(monthly_demand: float, shelf_life_days: int, on
     return max(0, math.floor(daily_demand * usable_days) - on_hand)
 
 
-def target_inventory(monthly_demand: float, inventory_min: int) -> int:
-    """Calcula el nivel hasta el que conviene reponer.
+def holding_cost_per_unit_year(unit_cost_usd: float) -> float:
+    """Calcula lo que cuesta tener una unidad parada en bodega durante un año.
 
     Entrada:
-        monthly_demand: demanda mensual proyectada por el modelo.
-        inventory_min: inventario minimo de la pieza.
+        unit_cost_usd: valor unitario de la pieza en el maestro.
 
     Salida:
-        Unidades objetivo tras la compra.
+        Costo de posesion en USD por unidad y año.
 
     Funcionalidad:
-        Reponer justo hasta el minimo deja la pieza al borde del quiebre y obliga
-        a comprar otra vez al mes siguiente, con su flete y su gestion. El
-        objetivo suma al minimo la demanda proyectada de un periodo de
-        cobertura, de modo que **la proyeccion determina cuanto se compra** y el
-        lote minimo del proveedor solo actua como piso.
+        Se aplica una tasa anual sobre el valor de la pieza, que es como se mide
+        el costo de posesion en la practica: no es alquiler de estanteria sino
+        capital inmovilizado, seguro, manejo y el riesgo de que la pieza quede
+        obsoleta antes de usarse. La tasa es un parametro de negocio, no una
+        estimacion del sistema, y su magnitud decide cuanto se pide de una vez.
     """
-    horizon = monthly_demand * TARGET_COVERAGE_MONTHS
-    return max(inventory_min, math.ceil(inventory_min + horizon))
+    return max(0.0, float(unit_cost_usd)) * HOLDING_COST_RATE_ANNUAL
 
 
-def maximum_inventory(monthly_demand: float, inventory_min: int) -> int:
-    """Calcula el techo de inventario de una pieza.
+def economic_order_quantity(
+    monthly_demand: float, unit_cost_usd: float, order_cost_usd: float
+) -> float:
+    """Calcula la cantidad economica de pedido de una pieza.
 
     Entrada:
         monthly_demand: demanda mensual proyectada.
-        inventory_min: inventario minimo calculado para la pieza.
+        unit_cost_usd: valor unitario de la pieza.
+        order_cost_usd: costo fijo de traer un pedido, es decir el flete.
 
     Salida:
-        Unidades maximas que se permite tener en bodega.
+        Cantidad optima por pedido en unidades, sin redondear.
 
     Funcionalidad:
-        Fija el techo como una cobertura objetivo en meses de demanda proyectada
-        en lugar de un numero por pieza, de modo que escale solo cuando la
-        demanda cambia. Nunca queda por debajo del minimo, ya que un maximo
-        menor que el minimo dejaria el problema sin solucion.
+        Es la formula de Wilson, `Q = sqrt(2*K*D/h)`, que sale de igualar las dos
+        mitades del costo anual que el tamaño de pedido mueve en direcciones
+        opuestas: pedir mucho de una vez reparte el flete entre mas unidades pero
+        deja mas capital parado en bodega, y pedir poco hace lo contrario.
+
+        Sustituye a la cobertura en meses fijada por constante que el sistema
+        usaba antes. La diferencia no es de precision sino de defensa: una
+        cobertura de mes y medio no responde a por que mes y medio, mientras que
+        esta cantidad se deriva del flete y del costo unitario que ya estan en
+        los datos.
+
+        Devuelve cero cuando falta cualquiera de los tres insumos. Sin demanda no
+        hay nada que reponer, y sin flete o sin valor unitario la formula no
+        tiene el equilibrio que la justifica, asi que es mas honesto no pedir
+        nada extra que inventar un tamaño de lote.
     """
-    coverage = monthly_demand * MAX_COVERAGE_MONTHS
-    return max(inventory_min, math.ceil(coverage))
+    annual_demand = max(0.0, float(monthly_demand)) * MONTHS_PER_YEAR
+    holding = holding_cost_per_unit_year(unit_cost_usd)
+    order_cost = max(0.0, float(order_cost_usd))
+
+    if annual_demand <= 0 or holding <= 0 or order_cost <= 0:
+        return 0.0
+    return math.sqrt(2.0 * order_cost * annual_demand / holding)
+
+
+def replenishment_level(
+    monthly_demand: float, inventory_min: int, unit_cost_usd: float, order_cost_usd: float
+) -> dict:
+    """Calcula hasta que nivel conviene reponer y con que cifras se justifica.
+
+    Entrada:
+        monthly_demand: demanda mensual proyectada.
+        inventory_min: inventario minimo, que es el punto de reorden.
+        unit_cost_usd: valor unitario de la pieza.
+        order_cost_usd: costo fijo de traer un pedido a esa ciudad.
+
+    Salida:
+        Diccionario con el nivel objetivo y con cada termino que lo compone: la
+        demanda anual, el costo de posesion, el costo de pedir, la cantidad
+        economica antes y despues del tope, y el propio tope.
+
+    Funcionalidad:
+        Es la politica `(s, S)` clasica: se repone cuando el inventario cae al
+        punto de reorden `s` y se pide hasta `S = s + Q`. Como nunca se compra
+        por encima de `S`, ese nivel es a la vez el objetivo de reposicion y el
+        techo de inventario de la pieza. Dejan de ser dos constantes distintas
+        porque en esta politica son el mismo numero.
+
+        El tope de cobertura acota la cantidad economica. Una pieza barata con
+        flete caro puede pedir lotes de mas de un año de consumo, que es optimo
+        en costo y pesimo en obsolescencia porque la formula de Wilson no sabe
+        que las piezas caducan. Recortarlo cuesta poco: la curva de costo total
+        es plana alrededor del optimo, y equivocarse en el doble del lote optimo
+        encarece el total solo un 25 %.
+
+        Devuelve el detalle completo y no solo el nivel porque la interfaz tiene
+        que poder mostrar de donde sale cada cifra: un numero sin sus terminos no
+        se puede auditar.
+    """
+    annual_demand = max(0.0, float(monthly_demand)) * MONTHS_PER_YEAR
+    holding = holding_cost_per_unit_year(unit_cost_usd)
+    raw = economic_order_quantity(monthly_demand, unit_cost_usd, order_cost_usd)
+    cap = math.floor(max(0.0, float(monthly_demand)) * EOQ_MAX_COVERAGE_MONTHS)
+
+    quantity = min(math.ceil(raw), cap) if raw > 0 and cap > 0 else 0
+
+    return {
+        "annual_demand": round(annual_demand, 2),
+        "holding_cost_usd": round(holding, 4),
+        "order_cost_usd": round(max(0.0, float(order_cost_usd)), 2),
+        "eoq_raw": round(raw, 2),
+        "eoq_units": int(quantity),
+        "coverage_cap_units": int(cap),
+        "level": int(max(inventory_min, inventory_min + quantity)),
+    }
+
+
+def planning_order_cost(offers: pd.DataFrame) -> float:
+    """Estima el costo fijo de traer un pedido antes de elegir proveedor.
+
+    Entrada:
+        offers: ofertas aplicables a la pieza en esa ciudad, con su flete ya
+            ajustado al destino.
+
+    Salida:
+        Flete de planificacion en USD por pedido.
+
+    Funcionalidad:
+        La cantidad economica necesita el costo de pedir, pero el proveedor no se
+        conoce hasta que se resuelve el modelo entero, y el modelo entero
+        necesita la cantidad. Se rompe el circulo con el flete medio de las
+        ofertas que podrian surtir el caso.
+
+        La aproximacion es barata precisamente por la forma de la formula: el
+        flete entra bajo una raiz cuadrada, asi que confundirse en el doble mueve
+        la cantidad solo un 41 %, y el costo total todavia menos porque la curva
+        es plana cerca del optimo.
+    """
+    if offers.empty or "freight_cost_usd" not in offers:
+        return 0.0
+    return float(offers["freight_cost_usd"].mean())
 
 
 def candidate_offers(
@@ -588,6 +969,7 @@ def build_recommendations(
     coverage: pd.DataFrame,
     suppliers: pd.DataFrame,
     budget=SCENARIO_BUDGET_USD,
+    overrun_max: float = BUDGET_OVERRUN_MAX_USD,
 ) -> pd.DataFrame:
     """Genera la recomendacion de compra para todo el catalogo.
 
@@ -599,6 +981,7 @@ def build_recommendations(
         coverage: cobertura geografica de los proveedores.
         suppliers: catalogo de proveedores.
         budget: tope de gasto de la corrida en USD. None desactiva el limite.
+        overrun_max: excedente maximo autorizado para cubrir lo critico.
 
     Salida:
         DataFrame con una fila por pieza y ciudad y las columnas declaradas en
@@ -621,9 +1004,17 @@ def build_recommendations(
         de modo que un comprador pueda auditarla sin conocer el modelo por
         dentro.
 
-        Al final se reparte el presupuesto de la corrida entre las compras que
+        La cantidad que se pide sale de la formula de Wilson y no de una
+        cobertura en meses fijada por constante, de modo que el flete y el valor
+        de la pieza —que ya estan en los datos— decidan cuanto se trae de una
+        vez. Como la politica es de reposicion hasta un nivel, ese nivel es
+        tambien el techo de inventario de la pieza.
+
+        Al final se reparte el dinero de la corrida entre las compras que
         procedian. Es el unico paso que mira todas las piezas a la vez: hasta
-        aqui cada decision era independiente de las demas.
+        aqui cada decision era independiente de las demas. Y no reparte por
+        rentabilidad a secas: lo que para una linea se financia primero, y solo
+        despues compite el resto por lo que queda.
     """
     parts_by_sku = parts.set_index("sku_id")
     merged = inventory.merge(forecast, on=["sku_id", "city_id"], suffixes=("", "_fc"))
@@ -638,11 +1029,16 @@ def build_recommendations(
         shelf_life = int(part["shelf_life_days"])
         confidence = float(record["confidence_final"])
 
-        inventory_max = maximum_inventory(monthly_demand, inventory_min)
+        applicable = candidate_offers(sku, city, offers, coverage, suppliers)
+        order_cost = planning_order_cost(applicable)
+        lot = replenishment_level(
+            monthly_demand, inventory_min, float(part["unit_cost_usd"]), order_cost
+        )
+
+        inventory_max = lot["level"]
+        target = lot["level"]
         shelf_limit = consumable_within_shelf_life(monthly_demand, shelf_life, on_hand)
         max_allowed = min(inventory_max - on_hand, shelf_limit)
-        applicable = candidate_offers(sku, city, offers, coverage, suppliers)
-        target = min(target_inventory(monthly_demand, inventory_min), inventory_max)
         need = max(0, inventory_min - on_hand)
         desired = max(0, min(target - on_hand, max_allowed))
 
@@ -660,9 +1056,9 @@ def build_recommendations(
             reason = REASON_NO_SUPPLIER
         elif shelf_limit < smallest_moq:
             reason = (
-                f"{REASON_SHELF_LIFE_BLOCK}. Con vida util de {shelf_life} dias "
-                f"solo se consumirian {shelf_limit} unidades, y el minimo de orden "
-                f"es {smallest_moq}"
+                f"{REASON_SHELF_LIFE_BLOCK}. With a shelf life of {shelf_life} days only "
+                f"{shelf_limit} units would be consumed, and the smallest minimum order "
+                f"quantity is {smallest_moq}"
             )
         elif smallest_moq > max_allowed:
             solution = solve_single_purchase(need, smallest_moq, applicable)
@@ -674,10 +1070,10 @@ def build_recommendations(
                 months = quantity / monthly_demand if monthly_demand > 0 else 0
                 coverage_months = round(months, 1)
                 reason = (
-                    f"El minimo de orden de {chosen['name']} es {int(chosen['moq'])} "
-                    f"unidades y el maximo permitido es {max_allowed}. Comprar el "
-                    f"minimo cuesta {total_cost:.2f} USD y deja inventario para "
-                    f"{months:.1f} meses: requiere decision del comprador"
+                    f"The minimum order quantity at {chosen['name']} is "
+                    f"{int(chosen['moq'])} units and the allowed maximum is {max_allowed}. "
+                    f"Buying the minimum costs {total_cost:.2f} USD and leaves "
+                    f"{months:.1f} months of stock: the buyer has to decide"
                 )
             else:
                 reason = REASON_INFEASIBLE
@@ -693,11 +1089,12 @@ def build_recommendations(
                 months = quantity / monthly_demand if monthly_demand > 0 else 0
                 coverage_months = round(months, 1)
                 reason = (
-                    f"Quedan {on_hand} unidades y el minimo es {inventory_min}. "
-                    f"Con una demanda proyectada de {monthly_demand:.1f} al mes se "
-                    f"repone hasta {target} unidades, equivalente a {months:.1f} "
-                    f"meses de consumo. Se eligio {chosen['name']} por menor costo "
-                    f"total entre {len(applicable)} opciones que surten {city}"
+                    f"{on_hand} units left against a minimum of {inventory_min}. With a "
+                    f"forecast demand of {monthly_demand:.1f} per month, the economic "
+                    f"order quantity of {lot['eoq_units']} units brings stock up to "
+                    f"{target}, about {months:.1f} months of consumption. "
+                    f"{chosen['name']} was chosen on lowest total cost among "
+                    f"{len(applicable)} offers that serve {city}"
                 )
             else:
                 reason = REASON_INFEASIBLE
@@ -714,9 +1111,9 @@ def build_recommendations(
         if decision == DECISION_BUY and net_benefit <= 0:
             decision = DECISION_HOLD
             reason = (
-                f"{REASON_NOT_WORTH_IT}. Reponer cuesta {total_cost:.2f} USD y el "
-                f"quiebre que evita se valora en {exposure:.2f} USD para una pieza "
-                f"de criticidad {part['criticality']}"
+                f"{REASON_NOT_WORTH_IT}. Replenishing costs {total_cost:.2f} USD and the "
+                f"stockout it prevents is valued at {exposure:.2f} USD on a criticality "
+                f"{part['criticality']} part"
             )
             quantity = 0
             chosen = None
@@ -743,6 +1140,9 @@ def build_recommendations(
                 "demand_monthly": round(monthly_demand, 2),
                 "forecast_source": record.get("forecast_source", "estadistico"),
                 "shelf_life_days": shelf_life,
+                "order_cost_usd": lot["order_cost_usd"],
+                "holding_cost_usd": lot["holding_cost_usd"],
+                "eoq_units": lot["eoq_units"],
                 "target_qty": target,
                 "max_allowed_qty": max(0, max_allowed),
                 "coverage_months": coverage_months,
@@ -763,4 +1163,4 @@ def build_recommendations(
             }
         )
 
-    return apply_budget(pd.DataFrame(rows, columns=COLUMNS), budget)
+    return apply_budget(pd.DataFrame(rows, columns=COLUMNS), budget, overrun_max)

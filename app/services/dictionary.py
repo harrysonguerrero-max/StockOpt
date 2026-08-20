@@ -10,6 +10,10 @@ Funcionalidad:
     usa para rotular las columnas del explorador de tablas. Mantener una sola
     definicion evita que el documento y la pantalla se contradigan, que es lo que
     ocurria cuando el diccionario era una cadena de texto suelta.
+
+    El texto esta en ingles porque se ve en pantalla. Los nombres de columna y
+    los codigos de decision no se traducen: viajan dentro de los CSV y cambiarlos
+    romperia todo lo que los consume.
 """
 
 from pathlib import Path
@@ -17,579 +21,660 @@ from pathlib import Path
 DICTIONARY_FILE = "data_dictionary.md"
 
 STAGE_DATASET = "Dataset"
-STAGE_ANALYSIS = "Analisis"
+STAGE_ANALYSIS = "Analysis"
 STAGE_DECISION = "Decision"
-STAGE_QUALITY = "Calidad"
+STAGE_QUALITY = "Quality"
 
-INTRO = """Montos en USD (1 USD = 83 INR).
-Alcance: 20 piezas MRO x 2 ciudades x 5 proveedores, demanda mensual.
-Ciudades: Nava (Coahuila) y Ciudad Obregon (Sonora).
-El historico se desplaza para terminar en el horizonte configurado y se amplia
-hacia atras con meses simulados, marcados con `is_synthetic`, hasta completar 72
-meses."""
+INTRO = """Amounts in USD (1 USD = 83 INR).
+Scope: 20 MRO parts x 2 cities x 5 suppliers, monthly demand.
+Cities: Nava (Coahuila) and Ciudad Obregon (Sonora).
+History is shifted to end at the configured horizon and extended backwards with
+simulated months, flagged with `is_synthetic`, up to 72 months."""
 
 SOURCES = [
     ("parts_master, demand_history, inventory_current", "synthetic_industrial_machine_data.csv"),
     ("suppliers, supplier_offers", "Procurement KPI Analysis Dataset.csv"),
-    ("cities", "mapeo fijo de plant_code"),
+    ("cities", "fixed plant_code mapping"),
 ]
 
 KEYS = [
-    "`sku_id` -> parts_master (PK). Referenciada por inventory, demand, offers.",
-    "`city_id` -> cities (PK). Referenciada por inventory, demand, suppliers.",
-    "`supplier_id` -> suppliers (PK). Referenciada por offers y coverage.",
-    "`offer_id` = `supplier_id` + `_` + `sku_id` (PK de supplier_offers).",
+    "`sku_id` -> parts_master (PK). Referenced by inventory, demand and offers.",
+    "`city_id` -> cities (PK). Referenced by inventory, demand and suppliers.",
+    "`supplier_id` -> suppliers (PK). Referenced by offers and coverage.",
+    "`offer_id` = `supplier_id` + `_` + `sku_id` (PK of supplier_offers).",
 ]
 
 TABLES = {
     "cities.csv": {
-        "title": "Ciudades",
+        "title": "Cities",
         "stage": STAGE_DATASET,
-        "summary": "Las dos plantas del alcance y su bodega asociada.",
+        "summary": "The two plants in scope and the warehouse that serves each one.",
         "columns": [
             (
                 "city_id",
                 "str",
                 "-",
-                "Derivado de plant_code",
-                "Codigo corto de la ciudad. Llave primaria.",
+                "Derived from plant_code",
+                "Short city code. Primary key.",
             ),
-            ("city_name", "str", "-", "Mapeo fijo", "Nombre para mostrar en pantalla."),
-            ("country", "str", "-", "Fijo", "Pais de la planta."),
-            ("warehouse_id", "str", "-", "plant_code", "Bodega que atiende esa ciudad."),
+            ("city_name", "str", "-", "Fixed mapping", "Display name."),
+            ("country", "str", "-", "Fixed", "Country of the plant."),
+            ("warehouse_id", "str", "-", "plant_code", "Warehouse serving that city."),
         ],
         "notes": [
             (
-                "Las 3 plantas del dato crudo se consolidan en 2 ciudades: dos van a "
-                "Nava, que es el complejo mayor, y una a Obregon."
+                "The 3 plants in the raw data are consolidated into 2 cities: two go to "
+                "Nava, the larger complex, and one to Obregon."
             ),
         ],
     },
     "parts_master.csv": {
-        "title": "Maestro de piezas",
+        "title": "Parts master",
         "stage": STAGE_DATASET,
-        "summary": "Catalogo de las 20 refacciones del alcance.",
+        "summary": "Catalogue of the 20 spare parts in scope.",
         "columns": [
-            ("sku_id", "str", "-", "part_no (real)", "Codigo de la pieza. Llave primaria."),
-            ("description", "str", "-", "real", "Descripcion comercial de la pieza."),
-            ("category", "str", "-", "part_family (real)", "Familia a la que pertenece."),
+            ("sku_id", "str", "-", "part_no (real)", "Part code. Primary key."),
+            ("description", "str", "-", "real", "Commercial description of the part."),
+            ("category", "str", "-", "part_family (real)", "Family the part belongs to."),
             (
                 "criticality",
                 "str A/B/C",
                 "-",
                 "real",
-                "Criticidad operativa. Fija el nivel de servicio.",
+                "Operating criticality. Sets the service level and the stockout cost.",
             ),
-            ("uom", "str", "-", "real", "Unidad de medida en que se compra."),
+            ("uom", "str", "-", "real", "Unit of measure it is bought in."),
             (
                 "unit_cost_usd",
                 "float",
                 "USD",
-                "real, convertido de INR",
-                "Costo unitario en libros.",
+                "real, converted from INR",
+                "Book unit cost. Drives the holding cost in the economic order quantity.",
             ),
-            ("currency", "str", "-", "fijo USD", "Moneda de los montos."),
+            ("currency", "str", "-", "fixed USD", "Currency of the amounts."),
             (
                 "shelf_life_days",
                 "int",
-                "dias",
-                "sintetico, por familia",
-                "Vida util. Limita cuanto se puede comprar de una vez.",
+                "days",
+                "synthetic, by family",
+                "Shelf life. Caps how much can be bought at once.",
             ),
         ],
         "notes": [
             (
-                "Vida util por familia: Lubrication 180, Filter 365, Seal & Gasket "
-                "730, Drive Belt 1095, Bearing 1825, Coupling 2555, Electrical 1825, "
-                "Sensor 1825, Fastener 3650."
+                "Shelf life by family: Lubrication 180, Filter 365, Seal & Gasket 730, "
+                "Drive Belt 1095, Bearing 1825, Coupling 2555, Electrical 1825, Sensor "
+                "1825, Fastener 3650."
             ),
         ],
     },
     "inventory_current.csv": {
-        "title": "Inventario actual",
+        "title": "Current inventory",
         "stage": STAGE_DATASET,
-        "summary": "Existencias por pieza y ciudad en el ultimo mes del historico.",
+        "summary": "Stock on hand by part and city at the last month of history.",
         "columns": [
-            ("sku_id", "str", "-", "FK parts_master", "Pieza."),
-            ("city_id", "str", "-", "FK cities", "Ciudad."),
-            ("warehouse_id", "str", "-", "derivado de city_id", "Bodega donde estan las piezas."),
+            ("sku_id", "str", "-", "FK parts_master", "Part."),
+            ("city_id", "str", "-", "FK cities", "City."),
+            ("warehouse_id", "str", "-", "derived from city_id", "Warehouse holding the parts."),
             (
                 "snapshot_date",
                 "str",
-                "fecha",
-                "ultimo mes del historico",
-                "Fecha a la que corresponde el conteo.",
+                "date",
+                "last month of history",
+                "Date the count refers to.",
             ),
-            ("on_hand_qty", "int", "uds", "sintetico", "Unidades disponibles hoy."),
+            ("on_hand_qty", "int", "units", "synthetic", "Units available today."),
             (
                 "reorder_point",
                 "int",
-                "uds",
-                "sintetico",
-                "Nivel a partir del cual conviene reponer.",
+                "units",
+                "synthetic",
+                "Level at which it is worth replenishing.",
             ),
-            ("reorder_qty", "int", "uds", "sintetico", "Cantidad habitual de reposicion."),
-            ("unit_cost_usd", "float", "USD", "real", "Costo unitario de la pieza."),
+            ("reorder_qty", "int", "units", "synthetic", "Usual replenishment quantity."),
+            ("unit_cost_usd", "float", "USD", "real", "Unit cost of the part."),
             (
                 "stock_value_usd",
                 "float",
                 "USD",
                 "on_hand_qty * unit_cost_usd",
-                "Valor inmovilizado en esa combinacion.",
+                "Capital tied up in that combination.",
             ),
             (
                 "below_reorder",
                 "int 0/1",
                 "-",
                 "on_hand_qty < reorder_point",
-                "Marca si ya esta por debajo del punto de reorden.",
+                "Flags whether it is already below the reorder point.",
             ),
         ],
         "notes": [
-            "on_hand_qty = round(reorder_point * cobertura), con cobertura ~ U(0.35, 1.75).",
+            "on_hand_qty = round(reorder_point * coverage), with coverage ~ U(0.35, 1.75).",
             (
-                "reorder_point = ceil(mu + z*sigma), donde mu y sigma son la media y "
-                "la desviacion de qty_issued mensual por sku x ciudad, y z vale 1.65 "
-                "para criticidad A, 1.28 para B y 0.84 para C."
+                "reorder_point = ceil(mu + z*sigma), where mu and sigma are the mean and "
+                "standard deviation of monthly qty_issued per sku x city, and z is 1.65 "
+                "for criticality A, 1.28 for B and 0.84 for C."
             ),
         ],
     },
     "demand_history.csv": {
-        "title": "Demanda historica",
+        "title": "Demand history",
         "stage": STAGE_DATASET,
-        "summary": "Consumo mensual por pieza y ciudad, con la señal operativa que lo acompaña.",
+        "summary": "Monthly consumption by part and city, with the operating signal beside it.",
         "columns": [
-            ("sku_id", "str", "-", "FK parts_master", "Pieza."),
-            ("city_id", "str", "-", "FK cities", "Ciudad."),
-            ("period_month", "str", "YYYY-MM", "real", "Mes al que corresponde el consumo."),
-            ("qty_issued", "int", "uds", "real, suma mensual", "Unidades consumidas en el mes."),
+            ("sku_id", "str", "-", "FK parts_master", "Part."),
+            ("city_id", "str", "-", "FK cities", "City."),
+            ("period_month", "str", "YYYY-MM", "real", "Month the consumption belongs to."),
+            ("qty_issued", "int", "units", "real, monthly sum", "Units consumed in the month."),
             (
                 "issue_events",
                 "int",
-                "dias",
+                "days",
                 "real",
-                "Dias del mes con algun consumo. Mide intermitencia.",
+                "Days in the month with any consumption. Measures intermittency.",
             ),
-            ("breakdown_events", "int", "eventos", "real", "Averias registradas en el mes."),
+            ("breakdown_events", "int", "events", "real", "Breakdowns recorded in the month."),
             (
                 "is_synthetic",
                 "int 0/1",
                 "-",
                 "extend_history",
-                "Marca si el mes fue simulado para alargar la historia.",
+                "Flags whether the month was simulated to lengthen the history.",
             ),
         ],
         "notes": [
             (
-                "La mitad de las filas son meses simulados: los reales terminan en el "
-                "horizonte configurado y la historia se amplia hacia atras para "
-                "alcanzar los 72 meses que exige detectar estacionalidad."
+                "Half of the rows are simulated months: the real ones end at the "
+                "configured horizon and the history is extended backwards to reach the "
+                "72 months that detecting seasonality requires."
             ),
         ],
     },
     "suppliers.csv": {
-        "title": "Proveedores",
+        "title": "Suppliers",
         "stage": STAGE_DATASET,
-        "summary": "Los 5 proveedores con sus plazos de entrega medidos sobre ordenes reales.",
+        "summary": "The 5 suppliers with lead times measured on real purchase orders.",
         "columns": [
-            ("supplier_id", "str", "-", "asignado", "Codigo del proveedor. Llave primaria."),
-            ("name", "str", "-", "real", "Razon social."),
-            ("city_id", "str", "-", "asignado de forma ciclica", "Ciudad donde tiene su base."),
-            ("active", "bool", "-", "fijo True", "Si esta habilitado para recibir ordenes."),
-            ("contact_email", "str", "-", "sintetico", "Correo al que se envia la orden."),
+            ("supplier_id", "str", "-", "assigned", "Supplier code. Primary key."),
+            ("name", "str", "-", "real", "Legal name."),
+            ("city_id", "str", "-", "assigned cyclically", "City where it is based."),
+            ("active", "bool", "-", "fixed True", "Whether it can receive orders."),
+            ("contact_email", "str", "-", "synthetic", "Address the order is sent to."),
             (
                 "base_freight_usd",
                 "float",
                 "USD",
-                "sintetico",
-                "Flete base antes del recargo por ciudad.",
+                "synthetic",
+                "Base freight before the destination-city surcharge.",
             ),
-            ("lead_time_avg_days", "float", "dias", "real", "Plazo medio entre pedido y entrega."),
-            ("lead_time_min_days", "int", "dias", "real", "Mejor plazo observado."),
-            ("lead_time_max_days", "int", "dias", "real", "Peor plazo observado."),
+            (
+                "lead_time_avg_days",
+                "float",
+                "days",
+                "real",
+                "Mean time between order and delivery.",
+            ),
+            ("lead_time_min_days", "int", "days", "real", "Best observed lead time."),
+            ("lead_time_max_days", "int", "days", "real", "Worst observed lead time."),
             (
                 "lead_time_std_days",
                 "float",
-                "dias",
+                "days",
                 "real",
-                "Variabilidad del plazo. Alimenta el colchon de seguridad.",
+                "Lead-time variability. Feeds the safety stock.",
             ),
         ],
         "notes": [
             (
-                "Los cuatro plazos salen de Delivery_Date menos Order_Date sobre las "
-                "ordenes entregadas. La variabilidad es alta: sigma sobre media ronda "
-                "0,53, asi que el colchon por plazo no es cosmetico."
+                "The four lead times come from Delivery_Date minus Order_Date over "
+                "delivered orders. Variability is high: sigma over mean is around 0.53, "
+                "so the lead-time half of the safety stock is not cosmetic."
             ),
         ],
     },
     "supplier_offers.csv": {
-        "title": "Ofertas proveedor-pieza",
+        "title": "Supplier-part offers",
         "stage": STAGE_DATASET,
-        "summary": "Precio, lote minimo y capacidad de cada proveedor para cada pieza.",
+        "summary": "Price, minimum order quantity and capacity of each supplier for each part.",
         "columns": [
-            ("offer_id", "str", "-", "supplier_id + sku_id", "Llave primaria de la oferta."),
-            ("supplier_id", "str", "-", "FK suppliers", "Proveedor que ofrece."),
-            ("sku_id", "str", "-", "FK parts_master", "Pieza ofertada."),
-            ("unit_price_usd", "float", "USD", "sintetico", "Precio por unidad."),
+            ("offer_id", "str", "-", "supplier_id + sku_id", "Primary key of the offer."),
+            ("supplier_id", "str", "-", "FK suppliers", "Supplier making the offer."),
+            ("sku_id", "str", "-", "FK parts_master", "Part being offered."),
+            ("unit_price_usd", "float", "USD", "synthetic", "Price per unit."),
             (
                 "moq",
                 "int",
-                "uds",
-                "sintetico",
-                "Lote minimo. Es la restriccion que produce los casos a revisar.",
+                "units",
+                "synthetic",
+                "Minimum order quantity. It is the constraint that produces review cases.",
             ),
-            ("capacity_per_month", "int", "uds", "sintetico", "Cuanto puede surtir al mes."),
-            ("currency", "str", "-", "fijo USD", "Moneda del precio."),
+            ("capacity_per_month", "int", "units", "synthetic", "How much it can supply per month."),
+            ("currency", "str", "-", "fixed USD", "Currency of the price."),
         ],
         "notes": [
             (
-                "El margen por proveedor va de 1,05 a 1,17 en pasos de 0,03 sobre el "
-                "costo en libros. Cada pieza recibe 2 o 3 ofertas, de modo que el "
-                "optimizador siempre tenga contra que comparar."
+                "The supplier margin runs from 1.05 to 1.17 in steps of 0.03 over book "
+                "cost. Each part gets 2 or 3 offers, so the optimiser always has "
+                "something to compare against."
             ),
             (
-                "El flete no vive aqui sino en supplier_coverage, porque depende de "
-                "la ciudad de destino y no de la pieza."
+                "Freight does not live here but in supplier_coverage, because it depends "
+                "on the destination city and not on the part."
             ),
         ],
     },
     "supplier_coverage.csv": {
-        "title": "Cobertura geografica",
+        "title": "Geographic coverage",
         "stage": STAGE_DATASET,
-        "summary": "Que proveedor puede surtir que ciudad y con que recargo.",
+        "summary": "Which supplier can serve which city, and at what surcharge.",
         "columns": [
-            ("supplier_id", "str", "-", "FK suppliers", "Proveedor."),
-            ("city_id", "str", "-", "FK cities", "Ciudad que atiende."),
-            ("is_home", "int 0/1", "-", "derivado", "Si es su ciudad base."),
+            ("supplier_id", "str", "-", "FK suppliers", "Supplier."),
+            ("city_id", "str", "-", "FK cities", "City it serves."),
+            ("is_home", "int 0/1", "-", "derived", "Whether it is its home city."),
             (
                 "freight_cost_usd",
                 "float",
                 "USD",
-                "derivado del flete base",
-                "Flete hacia esa ciudad.",
+                "derived from base freight",
+                "Freight to that city. It is the fixed order cost in the Wilson formula.",
             ),
             (
                 "lead_time_extra_days",
                 "int",
-                "dias",
-                "derivado",
-                "Dias adicionales cuando surte fuera de su base.",
+                "days",
+                "derived",
+                "Extra days when supplying outside its home city.",
             ),
         ],
         "notes": [
             (
-                "Sin esta tabla el optimizador quedaba infactible para una de cada "
-                "cuatro combinaciones, porque ningun proveedor atendia la ciudad."
+                "Without this table the optimiser was infeasible for one in four "
+                "combinations, because no supplier served the city."
             ),
         ],
     },
     "demand_patterns.csv": {
-        "title": "Patrones de demanda",
+        "title": "Demand patterns",
         "stage": STAGE_ANALYSIS,
-        "summary": "Clasificacion de cada serie y las medidas que la sustentan.",
+        "summary": "Classification of each series and the measurements behind it.",
         "columns": [
-            ("sku_id", "str", "-", "FK parts_master", "Pieza."),
-            ("city_id", "str", "-", "FK cities", "Ciudad."),
-            ("n_periods", "int", "meses", "calculado", "Meses de historia disponibles."),
-            ("mean_monthly", "float", "uds", "calculado", "Consumo medio mensual."),
-            ("std_monthly", "float", "uds", "calculado", "Desviacion tipica mensual."),
+            ("sku_id", "str", "-", "FK parts_master", "Part."),
+            ("city_id", "str", "-", "FK cities", "City."),
+            ("n_periods", "int", "months", "computed", "Months of history available."),
+            ("mean_monthly", "float", "units", "computed", "Mean monthly consumption."),
+            ("std_monthly", "float", "units", "computed", "Monthly standard deviation."),
             (
                 "cv",
                 "float",
                 "-",
                 "std / mean",
-                "Coeficiente de variacion. Decide si la serie es volatil.",
+                "Coefficient of variation. Decides whether the series is volatile.",
             ),
-            ("zero_ratio", "float", "-", "calculado", "Proporcion de meses sin consumo."),
+            ("zero_ratio", "float", "-", "computed", "Share of months with no consumption."),
             (
                 "seasonal_strength",
                 "float",
                 "-",
                 "seasonal_decompose",
-                "Fuerza del componente estacional.",
+                "Strength of the seasonal component.",
             ),
             (
                 "seasonal_pvalue",
                 "float",
                 "-",
                 "Kruskal-Wallis",
-                "Significancia del efecto del mes.",
+                "Significance of the month effect.",
             ),
-            ("trend_tau", "float", "-", "Mann-Kendall", "Direccion y fuerza de la tendencia."),
-            ("trend_pvalue", "float", "-", "Mann-Kendall", "Significancia de la tendencia."),
+            ("trend_tau", "float", "-", "Mann-Kendall", "Direction and strength of the trend."),
+            ("trend_pvalue", "float", "-", "Mann-Kendall", "Significance of the trend."),
             (
                 "pattern",
                 "str",
                 "-",
-                "reglas de clasificacion",
-                "Etiqueta final: Estacional, Tendencia, Estable, Volatil o Insuficiente.",
+                "classification rules",
+                "Final label: Estacional, Tendencia, Estable, Volatil or Insuficiente.",
             ),
-            ("confidence", "float 0-1", "-", "calculado", "Cuanta confianza merece esa etiqueta."),
+            (
+                "confidence",
+                "float 0-1",
+                "-",
+                "computed",
+                "How much confidence that label deserves.",
+            ),
             (
                 "recommended_model",
                 "str",
                 "-",
-                "derivado del patron",
-                "Metodo de proyeccion que corresponde al patron.",
+                "derived from the pattern",
+                "Forecasting method that matches the pattern.",
             ),
         ],
         "notes": [
             (
-                "Se clasifica por pieza y ciudad, no solo por pieza: 8 de 20 piezas "
-                "cambian de patron segun la planta."
+                "Classification is per part and city, not per part alone: 8 of 20 parts "
+                "change pattern depending on the plant."
             ),
             (
-                "Estacional exige dos condiciones a la vez, fuerza mayor o igual a "
-                "0,45 y efecto de mes significativo, porque la fuerza por si sola "
-                "marca como estacional hasta el ruido."
+                "Seasonal requires two conditions at once, strength of at least 0.45 and "
+                "a significant month effect, because strength on its own labels even "
+                "pure noise as seasonal."
             ),
         ],
     },
     "demand_forecast.csv": {
-        "title": "Proyeccion de demanda",
+        "title": "Demand forecast",
         "stage": STAGE_ANALYSIS,
-        "summary": "Lo que sale del modelo por serie, y el inventario minimo que se deriva.",
+        "summary": "What comes out of the model per series, and the reorder point derived from it.",
         "columns": [
-            ("sku_id", "str", "-", "FK parts_master", "Pieza."),
-            ("city_id", "str", "-", "FK cities", "Ciudad."),
-            ("pattern", "str", "-", "demand_patterns", "Patron detectado para la serie."),
-            ("method", "str", "-", "derivado del patron", "Metodo estadistico aplicado."),
-            ("n_periods", "int", "meses", "calculado", "Meses usados para proyectar."),
-            ("forecast_q25", "float", "uds", "calculado", "Escenario bajo de demanda mensual."),
+            ("sku_id", "str", "-", "FK parts_master", "Part."),
+            ("city_id", "str", "-", "FK cities", "City."),
+            ("pattern", "str", "-", "demand_patterns", "Pattern detected for the series."),
+            ("method", "str", "-", "derived from the pattern", "Statistical method applied."),
+            ("n_periods", "int", "months", "computed", "Months used to forecast."),
+            ("forecast_q25", "float", "units", "computed", "Low monthly demand scenario."),
             (
                 "forecast_q50",
                 "float",
-                "uds",
-                "calculado",
-                "Demanda mensual esperada. Es la que entra al optimizador.",
+                "units",
+                "computed",
+                "Expected monthly demand. This is what enters the optimiser.",
             ),
-            ("forecast_q75", "float", "uds", "calculado", "Escenario alto de demanda mensual."),
-            ("wmape_backtest", "float", "-", "backtest", "Error del metodo sobre la propia serie."),
+            ("forecast_q75", "float", "units", "computed", "High monthly demand scenario."),
+            (
+                "wmape_backtest",
+                "float",
+                "-",
+                "backtest",
+                "Error of the method on the series itself.",
+            ),
             (
                 "confidence_pattern",
                 "float 0-1",
                 "-",
                 "demand_patterns",
-                "Confianza que aporta el patron.",
+                "Confidence contributed by the pattern.",
             ),
             (
                 "confidence_final",
                 "float 0-1",
                 "-",
-                "calculado",
-                "Confianza combinada. Por debajo del umbral marca revision.",
+                "computed",
+                "Combined confidence. Below the threshold it flags a review.",
             ),
             (
                 "lead_time_days",
                 "float",
-                "dias",
+                "days",
                 "suppliers",
-                "Plazo de reposicion usado para planificar.",
+                "Replenishment lead time used for planning.",
             ),
             (
                 "demand_lead_time",
                 "float",
-                "uds",
+                "units",
                 "inventory_policy",
-                "Demanda esperada mientras llega la reposicion.",
+                "Expected demand while the replenishment is in transit.",
             ),
             (
                 "safety_stock",
                 "float",
-                "uds",
+                "units",
                 "inventory_policy",
-                "Colchon que absorbe la variabilidad de demanda y de plazo.",
+                "Buffer absorbing both demand and lead-time variability.",
             ),
             (
                 "inventory_min",
                 "int",
-                "uds",
+                "units",
                 "demand_lead_time + safety_stock",
-                "Nivel minimo operativo de la pieza.",
+                "Reorder point: the minimum operating level of the part.",
             ),
             (
                 "issue_rate",
                 "float 0-1",
                 "-",
                 "issue_events / 30",
-                "Con que frecuencia se pide la pieza. Escala el costo de quiebre.",
+                "How often the part is requested. Scales the stockout cost.",
             ),
             (
                 "forecast_model",
                 "float",
-                "uds",
-                "modelo ML",
-                "Proyeccion del modelo global entrenado.",
+                "units",
+                "ML model",
+                "Forecast from the trained global model.",
             ),
             (
                 "forecast_source",
                 "str",
                 "-",
-                "calculado",
-                "Si la cifra final viene del modelo, del metodo estadistico o de ambos.",
+                "computed",
+                "Whether the final figure comes from the model, the statistics or both.",
             ),
             (
                 "needs_review",
                 "int 0/1",
                 "-",
-                "calculado",
-                "Marca las series cuya proyeccion no es confiable.",
+                "computed",
+                "Flags series whose forecast is not reliable.",
             ),
         ],
         "notes": [
             (
-                "El minimo se unifico aqui: antes el dataset cubria un mes completo y "
-                "la proyeccion solo el plazo real, y ambas etapas daban respuestas "
-                "opuestas sobre que reponer."
+                "The minimum was unified here: the dataset used to cover a full month "
+                "and the forecast only the actual lead time, so both stages gave "
+                "opposite answers about what to replenish."
             ),
             (
-                "issue_rate recoge la intermitencia del consumo: la mediana de estas "
-                "series tiene movimiento once dias de cada treinta. Un dia sin "
-                "existencias solo cuesta dinero si ese dia alguien pide la pieza."
+                "issue_rate captures the intermittency of consumption: the median series "
+                "moves on eleven days out of thirty. A day without stock only costs "
+                "money if somebody asks for the part that day."
             ),
         ],
     },
     "purchase_recommendations.csv": {
-        "title": "Recomendaciones de compra",
+        "title": "Purchase recommendations",
         "stage": STAGE_DECISION,
-        "summary": "La decision final por pieza y ciudad, con su motivo.",
+        "summary": "The final decision per part and city, with its reason.",
         "columns": [
-            ("sku_id", "str", "-", "FK parts_master", "Pieza."),
-            ("city_id", "str", "-", "FK cities", "Ciudad."),
-            ("description", "str", "-", "parts_master", "Descripcion de la pieza."),
-            ("criticality", "str A/B/C", "-", "parts_master", "Criticidad operativa."),
-            ("on_hand_qty", "int", "uds", "inventory_current", "Existencias actuales."),
+            ("sku_id", "str", "-", "FK parts_master", "Part."),
+            ("city_id", "str", "-", "FK cities", "City."),
+            ("description", "str", "-", "parts_master", "Description of the part."),
+            ("criticality", "str A/B/C", "-", "parts_master", "Operating criticality."),
+            ("on_hand_qty", "int", "units", "inventory_current", "Stock on hand."),
             (
                 "inventory_min",
                 "int",
-                "uds",
+                "units",
                 "demand_forecast",
-                "Nivel minimo que hay que sostener.",
+                "Reorder point that has to be sustained.",
             ),
             (
                 "inventory_max",
                 "int",
-                "uds",
-                "cobertura objetivo",
-                "Techo de bodega para esa pieza.",
+                "units",
+                "inventory_min + eoq_units",
+                "Order-up-to level. In an (s, S) policy it is also the inventory ceiling.",
             ),
-            ("demand_monthly", "float", "uds", "demand_forecast", "Demanda mensual proyectada."),
+            (
+                "demand_monthly",
+                "float",
+                "units",
+                "demand_forecast",
+                "Forecast monthly demand.",
+            ),
             (
                 "forecast_source",
                 "str",
                 "-",
                 "demand_forecast",
-                "De donde sale la proyeccion usada.",
+                "Where the forecast used comes from.",
             ),
-            ("shelf_life_days", "int", "dias", "parts_master", "Vida util de la pieza."),
-            ("target_qty", "int", "uds", "calculado", "Cantidad que llevaria al nivel objetivo."),
-            ("max_allowed_qty", "int", "uds", "calculado", "Tope por bodega y por vida util."),
+            ("shelf_life_days", "int", "days", "parts_master", "Shelf life of the part."),
+            (
+                "order_cost_usd",
+                "float",
+                "USD",
+                "mean freight of applicable offers",
+                "Fixed cost of bringing one order. It is K in the Wilson formula.",
+            ),
+            (
+                "holding_cost_usd",
+                "float",
+                "USD/unit/year",
+                "annual rate * unit_cost_usd",
+                "Cost of keeping one unit idle for a year. It is h in the Wilson formula.",
+            ),
+            (
+                "eoq_units",
+                "int",
+                "units",
+                "sqrt(2*K*D/h), capped by coverage",
+                "Economic order quantity: what balances freight against holding cost.",
+            ),
+            (
+                "target_qty",
+                "int",
+                "units",
+                "computed",
+                "Level the purchase brings stock up to.",
+            ),
+            (
+                "max_allowed_qty",
+                "int",
+                "units",
+                "computed",
+                "Cap from the order-up-to level and from shelf life.",
+            ),
             (
                 "coverage_months",
                 "float",
-                "meses",
-                "calculado",
-                "Meses de inventario que dejaria la compra.",
+                "months",
+                "computed",
+                "Months of stock the purchase would leave.",
             ),
-            ("decision", "str", "-", "optimizador", "COMPRAR, NO_COMPRAR, REVISAR o APLAZADO."),
-            ("recommended_qty", "int", "uds", "optimizador", "Unidades a pedir."),
-            ("supplier_id", "str", "-", "optimizador", "Proveedor elegido."),
-            ("supplier_name", "str", "-", "suppliers", "Nombre del proveedor elegido."),
-            ("unit_price_usd", "float", "USD", "supplier_offers", "Precio unitario aplicado."),
-            ("freight_cost_usd", "float", "USD", "supplier_coverage", "Flete de la orden."),
-            ("lead_time_days", "float", "dias", "suppliers", "Plazo del proveedor elegido."),
+            (
+                "decision",
+                "str",
+                "-",
+                "optimiser",
+                "COMPRAR, NO_COMPRAR, REVISAR, APLAZADO or ESCALAR.",
+            ),
+            ("recommended_qty", "int", "units", "optimiser", "Units to order."),
+            ("supplier_id", "str", "-", "optimiser", "Chosen supplier."),
+            ("supplier_name", "str", "-", "suppliers", "Name of the chosen supplier."),
+            ("unit_price_usd", "float", "USD", "supplier_offers", "Unit price applied."),
+            ("freight_cost_usd", "float", "USD", "supplier_coverage", "Freight for the order."),
+            ("lead_time_days", "float", "days", "suppliers", "Lead time of the chosen supplier."),
             (
                 "total_cost_usd",
                 "float",
                 "USD",
-                "precio * cantidad + flete",
-                "Costo total de la orden.",
+                "price * quantity + freight",
+                "Total cost of the order.",
             ),
             (
                 "alternatives_evaluated",
                 "int",
-                "ofertas",
-                "optimizador",
-                "Cuantas ofertas compitieron.",
+                "offers",
+                "optimiser",
+                "How many offers competed.",
             ),
             (
                 "confidence",
                 "float 0-1",
                 "-",
                 "demand_forecast",
-                "Confianza de la proyeccion que sustenta la decision.",
+                "Confidence of the forecast the decision rests on.",
             ),
             (
                 "stockout_cost_usd",
                 "float",
                 "USD",
-                "calculado",
-                "Costo del quiebre que evita reponer ahora en lugar de esperar.",
+                "computed",
+                "Cost of the stockout avoided by ordering now instead of waiting.",
             ),
             (
                 "net_benefit_usd",
                 "float",
                 "USD",
-                "quiebre evitado - costo",
-                "Lo que rinde la compra. Si es negativo, no se hace.",
+                "stockout avoided - cost",
+                "What the purchase returns. If negative, it is not made.",
             ),
             (
                 "needs_review",
                 "int 0/1",
                 "-",
-                "calculado",
-                "Marca las filas que exigen criterio humano.",
+                "computed",
+                "Flags rows that require human judgement.",
             ),
-            ("reason", "str", "-", "optimizador", "Motivo explicito de la decision."),
+            ("reason", "str", "-", "optimiser", "Explicit reason for the decision."),
         ],
         "notes": [
             (
-                "REVISAR no es un fallo del solver: aparece cuando el lote minimo del "
-                "proveedor supera el maximo que la pieza admite en bodega, que es una "
-                "tension real de compras y la decide una persona."
+                "REVISAR is not a solver failure: it appears when the supplier minimum "
+                "order quantity exceeds the order-up-to level of the part, which is a "
+                "real purchasing tension and a person decides it."
             ),
             (
-                "APLAZADO marca una reposicion tecnicamente correcta que no cabe en el "
-                "presupuesto de la corrida. Conserva cantidad, proveedor y costo, "
-                "porque es la cifra con la que se pide una ampliacion."
+                "APLAZADO marks a technically correct replenishment that does not fit in "
+                "the discretionary budget. It keeps quantity, supplier and cost, because "
+                "that is the figure a budget increase is asked with."
             ),
             (
-                "El costo de quiebre se estima como los dias que la pieza estaria sin "
-                "existencias por el costo diario de su criticidad, y ese costo diario "
-                "es un parametro de negocio que hay que validar con mantenimiento: su "
-                "magnitud decide por si sola cuanto pesa la criticidad frente al precio."
+                "ESCALAR marks a criticality A replenishment that does not fit even "
+                "after stretching the budget by the authorised overrun. Production "
+                "continuity is a hard constraint, so the model does not silently drop "
+                "it: it reports how much extra money the decision needs."
             ),
             (
-                "La estimacion es deterministica y supone que la demanda ocurre al "
-                "ritmo proyectado, asi que subestima el riesgo en las series volatiles."
+                "The order quantity comes from the Wilson formula and not from a fixed "
+                "coverage in months, so freight and the value of the part decide how "
+                "much is brought in one go. The obsolescence cap keeps a cheap part with "
+                "expensive freight from ordering more than half a year of consumption."
+            ),
+            (
+                "The stockout cost is estimated as the days the part would be out of "
+                "stock times the daily cost of its criticality, and that daily cost is a "
+                "business parameter that has to be validated with maintenance: its "
+                "magnitude alone decides how much criticality weighs against price."
+            ),
+            (
+                "The estimate is deterministic and assumes demand happens at the "
+                "forecast rate, so it understates the risk on volatile series."
             ),
         ],
     },
     "quality/demand_outliers.csv": {
-        "title": "Meses de consumo atipico",
+        "title": "Outlier consumption months",
         "stage": STAGE_QUALITY,
-        "summary": "Meses que se apartan de su propia serie y piden confirmacion de mantenimiento.",
+        "summary": "Months that depart from their own series and need confirmation from maintenance.",
         "columns": [
-            ("sku_id", "str", "-", "FK parts_master", "Pieza."),
-            ("city_id", "str", "-", "FK cities", "Ciudad."),
-            ("period_month", "str", "YYYY-MM", "demand_history", "Mes señalado."),
-            ("qty_issued", "int", "uds", "demand_history", "Consumo observado ese mes."),
-            ("median_series", "float", "uds", "calculado", "Consumo tipico de esa misma serie."),
+            ("sku_id", "str", "-", "FK parts_master", "Part."),
+            ("city_id", "str", "-", "FK cities", "City."),
+            ("period_month", "str", "YYYY-MM", "demand_history", "Flagged month."),
+            ("qty_issued", "int", "units", "demand_history", "Consumption observed that month."),
+            (
+                "median_series",
+                "float",
+                "units",
+                "computed",
+                "Typical consumption of that same series.",
+            ),
             (
                 "ratio_vs_median",
                 "float",
                 "-",
                 "qty_issued / median_series",
-                "Cuantas veces se aparta de lo habitual.",
+                "How many times it departs from the usual level.",
             ),
         ],
         "notes": [
             (
-                "Se evaluan contra la propia serie y no contra el conjunto: una pieza "
-                "de 100 unidades al mes y otra de 2 tienen escalas incomparables."
+                "They are evaluated against their own series and not against the whole "
+                "catalogue: a part moving 100 units a month and one moving 2 have "
+                "incomparable scales."
             ),
-            "Se reportan, no se corrigen. Puede haber sido una parada mayor real.",
+            "They are reported, not corrected. It may have been a real major shutdown.",
         ],
     },
 }
@@ -666,17 +751,17 @@ def render_markdown() -> str:
         el usuario en pantalla.
     """
     lines = [
-        "# Diccionario de datos - MVP SupplyOpt",
+        "# Data dictionary - MRO Spare Parts Optimizer MVP",
         "",
         INTRO,
         "",
-        "## Fuentes",
-        "| Tabla generada | Fuente cruda |",
+        "## Sources",
+        "| Generated table | Raw source |",
         "|---|---|",
     ]
     lines += [f"| {generated} | `{raw}` |" for generated, raw in SOURCES]
 
-    lines += ["", "## Llaves"]
+    lines += ["", "## Keys"]
     lines += [f"- {key}" for key in KEYS]
 
     for name, spec in TABLES.items():
@@ -688,7 +773,7 @@ def render_markdown() -> str:
             "",
             spec["summary"],
             "",
-            "| Columna | Tipo | Unidad | Origen | Descripcion |",
+            "| Column | Type | Unit | Origin | Description |",
             "|---|---|---|---|---|",
         ]
         lines += [

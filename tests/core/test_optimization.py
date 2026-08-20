@@ -1,5 +1,7 @@
 """Tests del optimizador de abastecimiento."""
 
+import math
+
 import pandas as pd
 import pytest
 
@@ -10,7 +12,8 @@ from app.core.optimization import (
     build_recommendations,
     candidate_offers,
     consumable_within_shelf_life,
-    maximum_inventory,
+    economic_order_quantity,
+    replenishment_level,
     solve_single_purchase,
 )
 
@@ -119,12 +122,54 @@ def test_shelf_life_is_stricter_for_perishable_parts():
     assert durable > perishable
 
 
-def test_maximum_inventory_never_falls_below_the_minimum():
-    assert maximum_inventory(monthly_demand=0.1, inventory_min=40) >= 40
+def test_the_replenishment_level_never_falls_below_the_minimum():
+    level = replenishment_level(
+        monthly_demand=0.0, inventory_min=40, unit_cost_usd=10.0, order_cost_usd=30.0
+    )
+    assert level["level"] >= 40
 
 
-def test_maximum_inventory_scales_with_demand():
-    assert maximum_inventory(100.0, 10) > maximum_inventory(10.0, 10)
+def test_the_replenishment_level_scales_with_demand():
+    high = replenishment_level(100.0, 10, 10.0, 30.0)["level"]
+    low = replenishment_level(10.0, 10, 10.0, 30.0)["level"]
+    assert high > low
+
+
+def test_the_economic_quantity_grows_with_freight_and_shrinks_with_value():
+    """Es la tension que la formula de Wilson resuelve: flete contra bodega."""
+    base = economic_order_quantity(monthly_demand=20.0, unit_cost_usd=10.0, order_cost_usd=30.0)
+    pricier_freight = economic_order_quantity(20.0, 10.0, 120.0)
+    pricier_part = economic_order_quantity(20.0, 40.0, 30.0)
+
+    assert pricier_freight > base
+    assert pricier_part < base
+
+
+def test_the_economic_quantity_matches_the_closed_form():
+    """Q* = sqrt(2*K*D/h), con h = tasa anual por el valor de la pieza."""
+    quantity = economic_order_quantity(monthly_demand=20.0, unit_cost_usd=10.0, order_cost_usd=30.0)
+    annual = 20.0 * config.MONTHS_PER_YEAR
+    holding = 10.0 * config.HOLDING_COST_RATE_ANNUAL
+
+    assert quantity == pytest.approx(math.sqrt(2 * 30.0 * annual / holding))
+
+
+def test_without_freight_or_value_there_is_no_economic_quantity():
+    """Sin las dos mitades del equilibrio la formula no significa nada."""
+    assert economic_order_quantity(20.0, 10.0, 0.0) == 0.0
+    assert economic_order_quantity(20.0, 0.0, 30.0) == 0.0
+    assert economic_order_quantity(0.0, 10.0, 30.0) == 0.0
+
+
+def test_the_obsolescence_cap_bounds_the_economic_quantity():
+    """Una pieza barata con flete caro pediria mas de un año de consumo."""
+    level = replenishment_level(
+        monthly_demand=10.0, inventory_min=5, unit_cost_usd=0.10, order_cost_usd=80.0
+    )
+
+    assert level["eoq_raw"] > level["coverage_cap_units"]
+    assert level["eoq_units"] == level["coverage_cap_units"]
+    assert level["eoq_units"] == int(10.0 * config.EOQ_MAX_COVERAGE_MONTHS)
 
 
 def test_candidate_offers_cover_every_city(published):
@@ -201,7 +246,7 @@ def test_dataset_exercises_both_branches_of_the_decision(recommendations):
 def test_review_cases_are_flagged_and_explained(recommendations):
     review = recommendations[recommendations["decision"] == config.DECISION_REVIEW]
     assert (review["needs_review"] == 1).all()
-    assert review["reason"].str.contains("minimo de orden").all()
+    assert review["reason"].str.contains("minimum order quantity").all()
 
 
 def test_low_confidence_purchases_are_flagged(recommendations):

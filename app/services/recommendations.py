@@ -15,11 +15,14 @@ import pandas as pd
 from app.core.dataset import OUT_DIR
 from app.core.explanation import build_explanation
 from app.core.optimization import (
+    BUDGET_OVERRUN_MAX_USD,
     DECISION_BUY,
     DECISION_DEFERRED,
+    DECISION_ESCALATE,
     DECISION_HOLD,
     DECISION_REVIEW,
     SCENARIO_BUDGET_USD,
+    budget_allocation_summary,
     offer_costs,
 )
 from app.services.approvals import (
@@ -200,10 +203,11 @@ def build_queue(refresh: bool = False) -> list:
 
     states = load_states()
     priority = {
-        DECISION_REVIEW: 0,
-        DECISION_BUY: 1,
-        DECISION_DEFERRED: 2,
-        DECISION_HOLD: 3,
+        DECISION_ESCALATE: 0,
+        DECISION_REVIEW: 1,
+        DECISION_BUY: 2,
+        DECISION_DEFERRED: 3,
+        DECISION_HOLD: 4,
     }
 
     queue = []
@@ -257,25 +261,48 @@ def build_summary(queue: list) -> dict:
     to_buy = [item for item in queue if item["decision"] == DECISION_BUY]
     to_review = [item for item in queue if item["decision"] == DECISION_REVIEW]
     deferred = [item for item in queue if item["decision"] == DECISION_DEFERRED]
+    escalated = [item for item in queue if item["decision"] == DECISION_ESCALATE]
+    exposed = deferred + escalated
     approved = [
         item
         for item in queue
         if item["state"] in (STATE_APPROVED, STATE_CONTACTED, STATE_CONFIRMED)
     ]
 
+    frame = pd.DataFrame(
+        [
+            {
+                "criticality": item["criticality"],
+                "decision": item["decision"],
+                "total_cost_usd": item["total_cost_usd"],
+            }
+            for item in queue
+        ]
+    )
+    allocation = budget_allocation_summary(frame, SCENARIO_BUDGET_USD, BUDGET_OVERRUN_MAX_USD)
+
     return {
         "total": len(queue),
         "to_buy": len(to_buy),
         "to_review": len(to_review),
         "deferred": len(deferred),
+        "escalated": len(escalated),
         "no_action": len([i for i in queue if i["decision"] == DECISION_HOLD]),
         "pending_decision": len(pending),
         "approved": len(approved),
         "investment_usd": round(sum(item["total_cost_usd"] for item in to_buy), 2),
         "deferred_usd": round(sum(item["total_cost_usd"] for item in deferred), 2),
+        "escalated_usd": round(sum(item["total_cost_usd"] for item in escalated), 2),
         "budget_usd": SCENARIO_BUDGET_USD,
+        "overrun_max_usd": BUDGET_OVERRUN_MAX_USD,
+        "overrun_usd": allocation["overrun_usd"],
+        "continuity_protected": allocation["continuity_protected"],
+        "service": allocation["service"],
         "stockout_avoided_usd": round(sum(item["stockout_cost_usd"] or 0 for item in to_buy), 2),
-        "stockout_exposed_usd": round(sum(item["stockout_cost_usd"] or 0 for item in deferred), 2),
+        "stockout_exposed_usd": round(sum(item["stockout_cost_usd"] or 0 for item in exposed), 2),
+        "stockout_escalated_usd": round(
+            sum(item["stockout_cost_usd"] or 0 for item in escalated), 2
+        ),
         "units": int(sum(item["recommended_qty"] for item in to_buy)),
         "needs_review": len([i for i in queue if i["needs_review"] == 1]),
     }
@@ -298,7 +325,13 @@ def filter_options(queue: list) -> dict:
     cities = sorted({(item["city_id"], item["city_name"]) for item in queue})
     return {
         "cities": [{"id": city_id, "name": name} for city_id, name in cities],
-        "decisions": [DECISION_BUY, DECISION_REVIEW, DECISION_DEFERRED, DECISION_HOLD],
+        "decisions": [
+            DECISION_ESCALATE,
+            DECISION_REVIEW,
+            DECISION_BUY,
+            DECISION_DEFERRED,
+            DECISION_HOLD,
+        ],
         "states": [*WORKFLOW_STATES, STATE_REJECTED],
         "criticalities": sorted({item["criticality"] for item in queue}),
         "rejection_reasons": REJECTION_REASONS,

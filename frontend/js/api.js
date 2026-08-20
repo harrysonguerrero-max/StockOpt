@@ -32,7 +32,7 @@ export async function api(path, options) {
   const response = await fetch(BASE + path, options);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.detail || "No se pudo completar la operación");
+    throw new Error(payload.detail || "The request could not be completed");
   }
   return payload;
 }

@@ -1684,3 +1684,327 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
   .explorer__index { position: static; }
   .stage__io { flex-direction: column; gap: 8px; }
 }
+
+/* ---------- El quinto estado: escalar ----------
+   No es una banda mas del semaforo. Verde, ambar y rojo son grados de urgencia
+   de una misma persona; escalar cambia de persona. Por eso lleva el azul de la
+   marca y no un rojo mas intenso: no es mas urgente que rojo, es otra cosa. */
+
+.band--escalar .band__head {
+  background: var(--primary-light);
+  border-left-color: var(--primary);
+  color: var(--primary);
+}
+
+.case--escalate { border-color: var(--line); }
+.case--escalate:hover { border-color: var(--primary); }
+.case--escalate .case__mark { background: var(--primary); }
+.case--escalate .case__glyph { color: var(--primary); }
+.case__light--escalate { background: var(--primary); }
+.case__action--escalate { color: var(--primary); }
+.tag__dot--escalate { background: var(--primary); }
+.tag--ESCALAR { color: var(--primary); }
+
+.escalate {
+  border: 1px solid var(--primary);
+  border-left-width: 3px;
+  background: #F4F9FD;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.escalate__title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.escalate__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.escalate__figures span { display: block; }
+
+.escalate__figures b {
+  display: block;
+  font-family: var(--mono);
+  font-size: 17px;
+  color: var(--primary);
+  margin-top: 2px;
+}
+
+/* ---------- De donde sale la cantidad ----------
+   Los dos costos que la formula de Wilson pone a competir, y el resultado. Se
+   dibujan enfrentados porque la formula es literalmente eso: un equilibrio. */
+
+.lot {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 12px 14px;
+  margin-top: 14px;
+}
+
+.lot__title {
+  margin: 0 0 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.lot__terms { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lot__term { display: block; }
+.lot__term b { display: block; font-family: var(--mono); font-size: 15px; margin-top: 2px; }
+.lot__term--out b { color: var(--primary); font-size: 17px; }
+.lot__op { color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+
+/* ---------- Formulas y teoria de cada etapa ----------
+   Una formula sin sus variables definidas es decoracion. De ahi que el glosario
+   no sea opcional ni vaya plegado: es la mitad de la explicacion.
+
+   El MathML lo pinta el navegador sin libreria. Solo hace falta darle tamaño y
+   dejarlo desbordar en horizontal, que es lo que se rompe en un movil cuando la
+   formula es larga. */
+
+.theory { margin: 22px 0 4px; }
+
+.theory__title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.theory__lead {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  max-width: 72ch;
+}
+
+.formula {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--secondary);
+  background: var(--surface);
+  padding: 14px 16px 4px;
+}
+
+.formula__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.formula__name { font-size: 13px; font-weight: 700; letter-spacing: -0.01em; }
+
+.formula__theory {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: right;
+}
+
+.formula__math {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+}
+
+/* El MathML se deja con la fuente matematica del navegador. Forzarle la
+   monoespaciada del resto de la pantalla parecia coherente y rompia el
+   render: el radical, las llaves y los parentesis estirables se dibujan con
+   glifos de una fuente math, y Plex Mono no los tiene, asi que la raiz
+   cuadrada desaparecia y la formula quedaba diciendo otra cosa. */
+.formula__math math {
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.formula__math mtext {
+  font-family: var(--sans);
+  font-size: 0.82em;
+  color: var(--text-secondary);
+}
+
+.glossary { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+/* Solo la cabecera va en versalitas. En el cuerpo no: los simbolos distinguen
+   mayuscula de minuscula —s es el punto de reorden y S el nivel objetivo— y
+   pasarlos todos a mayuscula los volveria el mismo simbolo. */
+.glossary thead th {
+  text-align: left;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.glossary td,
+.glossary tbody th {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  font-weight: 400;
+  text-align: left;
+}
+
+.glossary tbody th { width: 15%; }
+.glossary .sym { font-family: var(--mono); font-weight: 600; color: var(--primary); }
+.glossary .unit { color: var(--text-secondary); white-space: nowrap; width: 22%; }
+
+.formula__note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 76ch;
+  margin: 10px 0 12px;
+}
+
+/* ---------- Criticidad, valor y rotacion ----------
+   Va encima del explorador de tablas porque es el contexto con que se leen: sin
+   saber donde esta el valor y que rota, una tabla de veinte piezas son veinte
+   filas iguales. */
+
+.classify {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 22px 24px;
+  margin-bottom: 26px;
+}
+
+.classify__head h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.classify__head .meta { max-width: 82ch; margin: 0; }
+
+.classify__charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.classify__profiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.classify__profiles .meta { margin: 8px 0 0; }
+
+.chart { width: 100%; height: auto; display: block; }
+
+.classify__matrices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.matrix h4 { margin: 0 0 3px; font-size: 13px; font-weight: 700; }
+.matrix .meta { margin: 0 0 10px; max-width: 52ch; }
+.matrix__grid { border-collapse: collapse; width: 100%; }
+
+.matrix__grid th {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 5px 7px;
+  text-align: center;
+}
+
+.matrix__axis,
+.matrix__key { font-family: var(--mono); font-size: 12px; color: var(--text-primary); }
+
+.matrix__axisrow td {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 0 0 6px 7px;
+}
+
+/* La intensidad del azul codifica el conteo. Una celda vacia no se atenua sino
+   que se deja en blanco: lo que la matriz tiene que hacer ver es la celda
+   ocupada que no deberia estarlo. */
+.matrix__cell {
+  text-align: center;
+  padding: 10px 7px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--primary-light) calc(var(--w) * 100%), var(--surface));
+  cursor: default;
+}
+
+.matrix__cell b {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.matrix__cell--empty { background: var(--surface); }
+
+.matrix__usd {
+  display: block;
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  margin-top: 2px;
+}
+
+.matrix__total {
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: center;
+}
+
+.finding {
+  border-left: 3px solid var(--warning);
+  background: #FEFAF2;
+  padding: 14px 16px;
+  font-size: 13px;
+}
+
+.finding p { margin: 0; max-width: 88ch; }
+
+.finding ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.finding li { margin-bottom: 3px; }
+
+@media (max-width: 980px) {
+  .classify { padding: 18px 16px; }
+  .classify__charts,
+  .classify__profiles,
+  .classify__matrices { grid-template-columns: 1fr; }
+  .formula__head { flex-direction: column; }
+  .formula__theory { text-align: left; }
+}

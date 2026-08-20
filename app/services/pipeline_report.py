@@ -19,6 +19,7 @@ from app.core import pipeline, training
 from app.core.dataset import OUT_DIR
 from app.services.charts import build_pipeline_charts
 from app.services.data_views import json_safe_record, load_table
+from app.services.model_registry import MODEL_WEIGHT
 
 QUALITY_DIR = OUT_DIR / "quality"
 QUALITY_FILE = "data_quality_report.json"
@@ -165,7 +166,9 @@ def build_stages(refresh: bool = False) -> list:
         tables=load_dataset_tables(refresh=refresh),
         patterns=load_table(PATTERNS_TABLE, refresh=refresh),
         training_metrics=load_training_metrics(),
+        forecast=load_table(FORECAST_TABLE, refresh=refresh),
         recommendations=load_table(RECOMMENDATIONS_TABLE, refresh=refresh),
+        blend_weight=MODEL_WEIGHT,
     )
 
 

@@ -18,10 +18,17 @@ import math
 
 import pandas as pd
 
+from app.core.classification import build_classification
 from app.core.dataset import OUT_DIR
 from app.services.dictionary import describe_table, table_names
 
 _cache = {}
+
+CLASSIFICATION_SOURCES = (
+    "parts_master.csv",
+    "demand_forecast.csv",
+    "inventory_current.csv",
+)
 
 
 def is_known_table(name: str) -> bool:
@@ -158,6 +165,46 @@ def table_catalog() -> list:
             entry["column_count"] = int(frame.shape[1])
         catalog.append(entry)
     return catalog
+
+
+def classification_is_available() -> bool:
+    """Indica si estan las tablas que necesita el analisis del catalogo.
+
+    Entrada:
+        Ninguna.
+
+    Salida:
+        True si existen el maestro, la proyeccion y el inventario.
+
+    Funcionalidad:
+        Permite que la pantalla explique que falta correr el pipeline en lugar
+        de fallar con un error de archivo no encontrado.
+    """
+    return all(table_path(name).exists() for name in CLASSIFICATION_SOURCES)
+
+
+def classification_report(refresh: bool = False) -> dict:
+    """Clasifica el catalogo por criticidad, valor y rotacion.
+
+    Entrada:
+        refresh: fuerza releer las tablas desde disco.
+
+    Salida:
+        Diccionario con el catalogo clasificado, el perfil de cada dimension y
+        los cruces entre ellas.
+
+    Funcionalidad:
+        Se resuelve en vivo sobre las tablas cacheadas en lugar de publicarse
+        como artefacto, porque son veinte piezas y el calculo es un agregado.
+        Publicarlo obligaria a acordarse de regenerarlo cada vez que cambia la
+        proyeccion, que es como se producen las pantallas que contradicen al
+        dato que tienen al lado.
+    """
+    return build_classification(
+        parts=load_table("parts_master.csv", refresh=refresh),
+        forecast=load_table("demand_forecast.csv", refresh=refresh),
+        inventory=load_table("inventory_current.csv", refresh=refresh),
+    )
 
 
 def read_table(name: str, refresh: bool = False) -> dict:

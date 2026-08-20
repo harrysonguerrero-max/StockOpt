@@ -23,6 +23,7 @@ const TONE = {
   go: "#2E7D32",
   hold: "#C88700",
   stop: "#C62828",
+  escalate: "#003B70",
 };
 
 let map = null;
@@ -99,7 +100,7 @@ export function drawMap(plants, { selected, onSelect }) {
     }).addTo(layer);
 
     disc.bindTooltip(
-      `<b>${escape(plant.short)}</b><br>${plant.open} por decidir`,
+      `<b>${escape(plant.short)}</b><br>${plant.open} open ${plant.open === 1 ? "case" : "cases"}`,
       { direction: "top", offset: [0, -radius - 2] }
     );
 
@@ -145,14 +146,16 @@ export function plantCard(plant) {
     <div class="pcard">
       <div class="pcard__head">
         <h3>${escape(plant.name)}</h3>
-        <span class="meta mono">${escape(plant.warehouse)} · ${plant.parts} piezas</span>
+        <span class="meta mono">${escape(plant.warehouse)} · ${plant.parts} parts</span>
       </div>
       <div class="pcard__stats">
-        ${stat("Consumo al mes", `${decimal(plant.demand, 0)}`, "unidades")}
-        ${stat("Stock actual", units(plant.stock), `de ${units(plant.capacity)} de capacidad`)}
-        ${stat("Utilización", `${use.toFixed(0)}%`, use > 85 ? "bodega casi llena" : "de la bodega")}
-        ${stat("Por decidir", plant.open, plant.deferred ? `${plant.deferred} sin presupuesto` : "casos abiertos")}
-        ${stat("Compras", `${usdRound(plant.investment)}`, "USD automáticas")}
+        ${stat("Monthly demand", `${decimal(plant.demand, 0)}`, "units")}
+        ${stat("Stock on hand", units(plant.stock), `of ${units(plant.capacity)} refill level`)}
+        ${stat("Utilisation", `${use.toFixed(0)}%`, use > 85 ? "warehouse nearly full" : "of the refill level")}
+        ${stat("Open cases", plant.open, plant.escalated
+          ? `${plant.escalated} need budget`
+          : plant.deferred ? `${plant.deferred} deferred` : "waiting for a decision")}
+        ${stat("Purchases", `${usdRound(plant.investment)}`, "USD automatic")}
       </div>
       <div class="pcard__bar">
         <span class="pcard__fill pcard__fill--${zone}" style="width:${Math.min(100, use)}%"></span>

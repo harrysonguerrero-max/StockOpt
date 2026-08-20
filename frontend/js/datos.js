@@ -14,7 +14,7 @@ import { api, apiUrl, toast } from "./api.js";
 import { escape } from "./format.js";
 
 const el = (id) => document.getElementById(id);
-const count = (value) => Number(value || 0).toLocaleString("es-MX");
+const count = (value) => Number(value || 0).toLocaleString("en-US");
 
 const explorer = { catalog: [], table: null, page: 0, size: 50 };
 
@@ -36,7 +36,7 @@ function paintIndex() {
                   data-table="${escape(table.name)}" ${table.available ? "" : "disabled"}>
             <span>${escape(table.title)}</span>
             <span class="meta mono">${table.available
-              ? `${count(table.row_count)} × ${table.column_count}` : "sin generar"}</span>
+              ? `${count(table.row_count)} × ${table.column_count}` : "not generated"}</span>
           </button>
         </li>`).join("")}</ul>
     </li>`).join("");
@@ -79,7 +79,7 @@ function paintGrid() {
 
   el("t-head").innerHTML = `<tr>${table.columns.map((column) => `
     <th title="${escape(column.description || column.name)}${
-      column.origin ? ` — Origen: ${escape(column.origin)}` : ""}">
+      column.origin ? ` — Origin: ${escape(column.origin)}` : ""}">
       ${escape(column.name)}
       <span class="grid__unit">${escape(
         column.unit && column.unit !== "-" ? column.unit : column.type)}</span>
@@ -93,12 +93,12 @@ function paintGrid() {
   el("t-body").innerHTML = rows.slice(start, start + explorer.size).map((row) =>
     `<tr>${row.map((cell) => `<td class="${typeof cell === "number" ? "num mono" : ""}">${
       cell === null || cell === undefined || cell === ""
-        ? '<span class="rawnull" title="Sin valor">·</span>' : escape(cell)
+        ? '<span class="rawnull" title="No value">·</span>' : escape(cell)
     }</td>`).join("")}</tr>`).join("");
 
   el("t-count").textContent = rows.length === table.rows.length
-    ? `${count(table.rows.length)} filas · ${table.columns.length} columnas`
-    : `${count(rows.length)} de ${count(table.rows.length)} filas`;
+    ? `${count(table.rows.length)} rows · ${table.columns.length} columns`
+    : `${count(rows.length)} of ${count(table.rows.length)} rows`;
   el("t-page").textContent = `${explorer.page + 1} / ${pages}`;
   el("t-prev").disabled = explorer.page === 0;
   el("t-next").disabled = explorer.page >= pages - 1;

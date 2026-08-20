@@ -35,12 +35,12 @@ ALLOWED_TRANSITIONS = {
 }
 
 REJECTION_REASONS = [
-    "Cantidad excesiva para la operacion",
-    "Se prefiere otro proveedor",
-    "Precio fuera de mercado",
-    "Ya existe una orden en curso",
-    "Pieza descontinuada o en cambio de diseno",
-    "Otro motivo",
+    "Quantity too large for the operation",
+    "Another supplier is preferred",
+    "Price is out of market",
+    "An order is already in progress",
+    "Part discontinued or being redesigned",
+    "Other reason",
 ]
 
 SCHEMA = """
@@ -168,11 +168,11 @@ def update_state(
     allowed = ALLOWED_TRANSITIONS.get(current, [])
     if new_state not in allowed:
         raise ValueError(
-            f"Transicion no permitida: {current} -> {new_state}. "
-            f"Desde {current} solo se puede pasar a {allowed}"
+            f"Transition not allowed: {current} -> {new_state}. "
+            f"From {current} the only valid next states are {allowed}"
         )
     if new_state == STATE_REJECTED and not rejection_reason:
-        raise ValueError("Rechazar una recomendacion exige indicar el motivo")
+        raise ValueError("Rejecting a recommendation requires a reason")
 
     timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with closing(_connect(db_path)) as connection, connection:

@@ -1,10 +1,25 @@
-# StockOpt
+# StockOpt — MRO Spare Parts Optimizer
 
 Recomienda qué refacciones comprar, cuántas y a qué proveedor, para las plantas
 de Nava (Coahuila) y Ciudad Obregón (Sonora). Proyecta la demanda con un modelo
 de machine learning, resuelve la compra óptima con programación entera y entrega
 cada decisión con su justificación para que un comprador la apruebe o la
 rechace.
+
+Dos decisiones de política gobiernan el modelo:
+
+- **La continuidad de producción es una restricción dura.** Las reposiciones de
+  criticidad A se financian antes de que compita nada discrecional, y el
+  presupuesto se estira hasta un excedente autorizado para conseguirlo. Lo que
+  no cabe ni así sale con estado `ESCALAR`, no aplazado en silencio.
+- **Cuánto pedir sale de la fórmula de Wilson,** que equilibra el flete contra
+  el costo de mantener en bodega, en lugar de una cobertura en meses fijada a
+  dedo.
+
+La interfaz está en inglés; los códigos internos siguen en español porque
+viajan en los CSV y en la base de aprobaciones. La formulación matemática
+completa, con el glosario de cada símbolo y su referencia bibliográfica, está en
+[`Spec.md` §13](Spec.md).
 
 ---
 

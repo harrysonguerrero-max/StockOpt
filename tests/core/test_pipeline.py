@@ -118,11 +118,41 @@ def catalog():
     )
     suppliers = pd.DataFrame(
         [
-            {"supplier_id": "SUP-01", "name": "Alpha", "active": True, "lead_time_avg_days": 10.0},
-            {"supplier_id": "SUP-02", "name": "Beta", "active": True, "lead_time_avg_days": 12.0},
+            {
+                "supplier_id": "SUP-01",
+                "name": "Alpha",
+                "active": True,
+                "lead_time_avg_days": 10.0,
+                "lead_time_std_days": 4.0,
+            },
+            {
+                "supplier_id": "SUP-02",
+                "name": "Beta",
+                "active": True,
+                "lead_time_avg_days": 12.0,
+                "lead_time_std_days": 6.0,
+            },
         ]
     )
     return offers, coverage, suppliers
+
+
+@pytest.fixture
+def forecast():
+    """Proyeccion minima con lo que la etapa de modelo necesita resumir."""
+    return pd.DataFrame(
+        [
+            {
+                "sku_id": "MRO-1",
+                "city_id": "NAVA",
+                "demand_lead_time": 3.5,
+                "safety_stock": 2.5,
+                "inventory_min": 6,
+                "confidence_final": 0.8,
+                "forecast_source": "modelo+estadistico",
+            }
+        ]
+    )
 
 
 @pytest.fixture
@@ -132,8 +162,10 @@ def recommendations():
             {
                 "sku_id": "MRO-1",
                 "city_id": "NAVA",
+                "criticality": "A",
                 "decision": DECISION_BUY,
-                "reason": "Quedan 3 unidades y el minimo es 10. Se eligio Alpha",
+                "reason": "3 units left against a minimum of 10. Alpha was chosen",
+                "eoq_units": 8,
                 "recommended_qty": 10,
                 "supplier_id": "SUP-01",
                 "total_cost_usd": 110.0,
@@ -144,8 +176,10 @@ def recommendations():
             {
                 "sku_id": "MRO-2",
                 "city_id": "NAVA",
+                "criticality": "B",
                 "decision": DECISION_BUY,
-                "reason": f"Quedan 1 unidades y el minimo es 4. {REASON_LOW_CONFIDENCE}",
+                "reason": f"1 unit left against a minimum of 4. {REASON_LOW_CONFIDENCE}",
+                "eoq_units": 4,
                 "recommended_qty": 5,
                 "supplier_id": "SUP-01",
                 "total_cost_usd": 60.0,
@@ -156,8 +190,10 @@ def recommendations():
             {
                 "sku_id": "MRO-3",
                 "city_id": "NAVA",
+                "criticality": "C",
                 "decision": DECISION_HOLD,
                 "reason": REASON_ABOVE_MINIMUM,
+                "eoq_units": 0,
                 "recommended_qty": 0,
                 "supplier_id": None,
                 "total_cost_usd": 0.0,
@@ -168,8 +204,10 @@ def recommendations():
             {
                 "sku_id": "MRO-4",
                 "city_id": "NAVA",
+                "criticality": "B",
                 "decision": DECISION_REVIEW,
-                "reason": "El minimo de orden de Alpha es 100 unidades y el maximo es 12",
+                "reason": "The minimum order quantity at Alpha is 100 units, the ceiling is 12",
+                "eoq_units": 90,
                 "recommended_qty": 100,
                 "supplier_id": "SUP-01",
                 "total_cost_usd": 1010.0,
@@ -255,8 +293,8 @@ def test_features_are_grouped_into_readable_families():
     )
     by_name = {family["family"]: family["features"] for family in families}
 
-    assert by_name["Rezagos de la propia serie"] == ["lag_1", "lag_12"]
-    assert by_name["Medias y desviaciones moviles"] == ["roll_mean_6"]
+    assert by_name["Lags of the series itself"] == ["lag_1", "lag_12"]
+    assert by_name["Rolling means and deviations"] == ["roll_mean_6"]
     assert by_name[pipeline.OTHER_FAMILY] == ["rareza"]
 
 
@@ -364,7 +402,7 @@ def test_trace_follows_a_piece_through_every_stage(demand, recommendations, cata
 
 
 def test_every_stage_declares_where_its_charts_come_from(
-    quality_report, tables, recommendations, catalog
+    quality_report, tables, recommendations, catalog, forecast
 ):
     patterns = pd.DataFrame(
         [
@@ -384,7 +422,9 @@ def test_every_stage_declares_where_its_charts_come_from(
     tables["supplier_coverage"] = coverage
     tables["suppliers"] = suppliers
 
-    stages = pipeline.build_stages(quality_report, tables, patterns, {}, recommendations)
+    stages = pipeline.build_stages(
+        quality_report, tables, patterns, {}, forecast, recommendations, 0.5
+    )
 
     assert [stage["id"] for stage in stages] == pipeline.STAGE_ORDER
     for stage in stages:

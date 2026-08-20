@@ -18,7 +18,14 @@ from app.core import training
 from app.services import approvals as workflow
 from app.services import pipeline_report
 from app.services.approvals import audit_trail, update_state
-from app.services.data_views import is_known_table, read_table, table_catalog, table_path
+from app.services.data_views import (
+    classification_is_available,
+    classification_report,
+    is_known_table,
+    read_table,
+    table_catalog,
+    table_path,
+)
 from app.services.llm_agent import explain_with_model
 from app.services.recommendations import (
     build_queue,
@@ -104,7 +111,7 @@ def read_recommendations(refresh: bool = False):
     if not dataset_is_available():
         raise HTTPException(
             status_code=503,
-            detail="El dataset no esta generado. Corre el pipeline de app/data.",
+            detail="The dataset has not been generated. Run the pipeline in app/data.",
         )
     queue = build_queue(refresh=refresh)
     return {
@@ -136,7 +143,7 @@ def change_state(change: StateChange):
     if find_recommendation(change.sku_id, change.city_id) is None:
         raise HTTPException(
             status_code=404,
-            detail=f"No existe la recomendacion {change.sku_id} / {change.city_id}",
+            detail=f"No recommendation for {change.sku_id} / {change.city_id}",
         )
 
     try:
@@ -176,7 +183,7 @@ def read_explanation(sku_id: str, city_id: str):
     record = find_recommendation(sku_id, city_id)
     if record is None:
         raise HTTPException(
-            status_code=404, detail=f"No existe la recomendacion {sku_id} / {city_id}"
+            status_code=404, detail=f"No recommendation for {sku_id} / {city_id}"
         )
     return explain_with_model(record)
 
@@ -203,7 +210,7 @@ def read_history(sku_id: str, city_id: str, months: int = 48):
     series = demand_series(sku_id, city_id, months=months)
     if series is None:
         raise HTTPException(
-            status_code=404, detail=f"No hay historico de {sku_id} / {city_id}"
+            status_code=404, detail=f"No history for {sku_id} / {city_id}"
         )
     return series
 
@@ -240,7 +247,7 @@ def export_recommendations():
         al proveedor sin salir de la interfaz.
     """
     if not dataset_is_available():
-        raise HTTPException(status_code=503, detail="El dataset no esta generado.")
+        raise HTTPException(status_code=503, detail="The dataset has not been generated.")
 
     buffer = io.StringIO()
     writer = csv.DictWriter(buffer, fieldnames=EXPORT_COLUMNS, extrasaction="ignore")
@@ -297,7 +304,7 @@ def read_training_metrics():
     if not path.exists():
         raise HTTPException(
             status_code=503,
-            detail="Aun no se ha entrenado el modelo. Corre: python -m app.services.train_model",
+            detail="The model has not been trained yet. Run: python -m app.services.train_model",
         )
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -318,10 +325,10 @@ def read_training_chart(name: str):
     """
     filename = training.CHART_FILES.get(name)
     if not filename:
-        raise HTTPException(status_code=404, detail=f"Grafica desconocida: {name}")
+        raise HTTPException(status_code=404, detail=f"Unknown chart: {name}")
     path = training.ARTIFACT_DIR / filename
     if not path.exists():
-        raise HTTPException(status_code=503, detail="La grafica aun no se ha generado.")
+        raise HTTPException(status_code=503, detail="That chart has not been generated yet.")
     return FileResponse(path, media_type="image/png")
 
 
@@ -342,9 +349,33 @@ def read_table_catalog():
     if not dataset_is_available():
         raise HTTPException(
             status_code=503,
-            detail="El dataset no esta generado. Corre: python -m app.services.build_dataset",
+            detail="The dataset has not been generated. Run: python -m app.services.build_dataset",
         )
     return {"tables": table_catalog()}
+
+
+@router.get("/data/classification")
+def read_classification(refresh: bool = False):
+    """Clasifica el catalogo por criticidad, valor y rotacion.
+
+    Entrada:
+        refresh: vuelve a leer las tablas desde disco si es verdadero.
+
+    Salida:
+        Diccionario con el catalogo clasificado, el perfil de cada dimension,
+        los cruces entre ellas y los umbrales aplicados.
+
+    Funcionalidad:
+        Da a la pantalla de datos en crudo el contexto con que se leen las
+        decisiones: que piezas concentran el valor, cuales rotan poco y donde
+        esas dos lecturas contradicen a la criticidad.
+    """
+    if not classification_is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Missing tables. Run: python -m app.services.build_forecast",
+        )
+    return classification_report(refresh=refresh)
 
 
 @router.get("/data/tables/{name:path}")
@@ -364,9 +395,9 @@ def read_data_table(name: str, refresh: bool = False):
         ruta no pueda usarse para leer archivos arbitrarios del disco.
     """
     if not is_known_table(name):
-        raise HTTPException(status_code=404, detail=f"Tabla desconocida: {name}")
+        raise HTTPException(status_code=404, detail=f"Unknown table: {name}")
     if not table_path(name).exists():
-        raise HTTPException(status_code=503, detail=f"La tabla {name} aun no se ha generado.")
+        raise HTTPException(status_code=503, detail=f"Table {name} has not been generated yet.")
     return read_table(name, refresh=refresh)
 
 
@@ -385,10 +416,10 @@ def download_data_table(name: str):
         Aplica la misma lista blanca que la lectura.
     """
     if not is_known_table(name):
-        raise HTTPException(status_code=404, detail=f"Tabla desconocida: {name}")
+        raise HTTPException(status_code=404, detail=f"Unknown table: {name}")
     path = table_path(name)
     if not path.exists():
-        raise HTTPException(status_code=503, detail=f"La tabla {name} aun no se ha generado.")
+        raise HTTPException(status_code=503, detail=f"Table {name} has not been generated yet.")
     return FileResponse(path, media_type="text/csv", filename=path.name)
 
 
@@ -411,7 +442,7 @@ def read_pipeline_stages():
     if not pipeline_report.report_is_available():
         raise HTTPException(
             status_code=503,
-            detail="Aun no se ha publicado el recorrido. Corre: "
+            detail="The pipeline report has not been published yet. Run: "
             "python -m app.services.build_pipeline_report",
         )
     return pipeline_report.load_report()
@@ -433,9 +464,9 @@ def read_pipeline_chart(name: str):
     """
     path = pipeline_report.chart_path(name)
     if path is None:
-        raise HTTPException(status_code=404, detail=f"Grafica desconocida: {name}")
+        raise HTTPException(status_code=404, detail=f"Unknown chart: {name}")
     if not path.exists():
-        raise HTTPException(status_code=503, detail="La grafica aun no se ha generado.")
+        raise HTTPException(status_code=503, detail="That chart has not been generated yet.")
     return FileResponse(path, media_type="image/png")
 
 
@@ -457,10 +488,10 @@ def read_pipeline_trace(sku_id: str, city_id: str):
         detalle de las cuarenta series no cabe en el informe publicado.
     """
     if not dataset_is_available():
-        raise HTTPException(status_code=503, detail="El dataset no esta generado.")
+        raise HTTPException(status_code=503, detail="The dataset has not been generated.")
     trace = pipeline_report.trace_part(sku_id, city_id)
     if trace is None:
         raise HTTPException(
-            status_code=404, detail=f"No existe la combinacion {sku_id} / {city_id}"
+            status_code=404, detail=f"No such combination: {sku_id} / {city_id}"
         )
     return trace

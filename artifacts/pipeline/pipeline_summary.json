@@ -2,9 +2,15 @@
   "stages": [
     {
       "id": "limpieza",
-      "title": "Limpieza de fuentes",
-      "input": "Fuentes crudas tal como llegaron",
-      "output": "Las mismas fuentes, sin las filas que no evidencian nada",
+      "title": "Source cleaning",
+      "input": "Raw sources exactly as they arrived",
+      "output": "The same sources, without the rows that evidence nothing",
+      "parameters": {
+        "iqr_factor": 1.5,
+        "mad_threshold": 3.5,
+        "mad_scale": 0.6745,
+        "min_days_per_month": 20
+      },
       "sources": [
         {
           "key": "spine",
@@ -96,9 +102,9 @@
     },
     {
       "id": "dataset",
-      "title": "Dataset relacional",
-      "input": "Fuentes limpias",
-      "output": "Tablas relacionadas y validadas por pieza, ciudad y proveedor",
+      "title": "Relational dataset",
+      "input": "Clean sources",
+      "output": "Related, validated tables by part, city and supplier",
       "tables": [
         {
           "name": "parts_master",
@@ -510,9 +516,9 @@
     },
     {
       "id": "patrones",
-      "title": "Patrones de demanda",
-      "input": "72 meses de consumo por serie",
-      "output": "Una etiqueta de patron y una confianza por serie",
+      "title": "Demand patterns",
+      "input": "72 months of consumption per series",
+      "output": "One pattern label and one confidence score per series",
       "counts": {
         "Estable": 26,
         "Volatil": 9,
@@ -885,6 +891,16 @@
         "seasonal_strength": 0.45,
         "seasonal_pvalue": 0.05
       },
+      "parameters": {
+        "cv_volatile": 0.5,
+        "seasonal_strength_min": 0.45,
+        "seasonal_pvalue_max": 0.05,
+        "seasonal_period": 12,
+        "min_periods": 6,
+        "weight_volume": 0.3,
+        "weight_volatility": 0.45,
+        "weight_recent": 0.25
+      },
       "charts": [
         {
           "source": "pipeline",
@@ -894,9 +910,9 @@
     },
     {
       "id": "modelo",
-      "title": "Modelo de proyeccion",
-      "input": "18 variables derivadas de cada serie y su pieza",
-      "output": "Una proyeccion de consumo por serie y mes",
+      "title": "Demand forecast",
+      "input": "18 features derived from each series and its part",
+      "output": "A monthly demand forecast and a reorder point per series",
       "features": [
         "is_synthetic",
         "lag_1",
@@ -919,7 +935,7 @@
       ],
       "families": [
         {
-          "family": "Rezagos de la propia serie",
+          "family": "Lags of the series itself",
           "features": [
             "lag_1",
             "lag_2",
@@ -929,7 +945,7 @@
           ]
         },
         {
-          "family": "Medias y desviaciones moviles",
+          "family": "Rolling means and deviations",
           "features": [
             "roll_mean_3",
             "roll_std_3",
@@ -938,21 +954,21 @@
           ]
         },
         {
-          "family": "Señal operativa",
+          "family": "Operating signal",
           "features": [
             "issue_events_lag_1",
             "breakdown_lag_1"
           ]
         },
         {
-          "family": "Calendario",
+          "family": "Calendar",
           "features": [
             "month_sin",
             "month_cos"
           ]
         },
         {
-          "family": "Atributos de la pieza",
+          "family": "Part attributes",
           "features": [
             "unit_cost_usd",
             "shelf_life_days",
@@ -960,13 +976,13 @@
           ]
         },
         {
-          "family": "Ubicacion",
+          "family": "Location",
           "features": [
             "is_nava"
           ]
         },
         {
-          "family": "Origen del dato",
+          "family": "Data origin",
           "features": [
             "is_synthetic"
           ]
@@ -1084,6 +1100,29 @@
       "validation_months": "2025-08 a 2026-01",
       "rows_train": 2160,
       "rows_validation": 240,
+      "policy": {
+        "lead_time_days": 10.58,
+        "lead_time_std_days": 5.65,
+        "demand_lead_time_avg": 6.69,
+        "safety_stock_avg": 5.19,
+        "inventory_min_total": 495,
+        "confidence_avg": 0.79,
+        "sources": {
+          "modelo+estadistico": 40
+        }
+      },
+      "parameters": {
+        "days_per_month": 30,
+        "z_by_criticality": {
+          "A": 1.65,
+          "B": 1.28,
+          "C": 0.84
+        },
+        "quantile_z": 0.674,
+        "blend_weight": 0.5,
+        "lead_time_days": 10.58,
+        "lead_time_std_days": 5.65
+      },
       "charts": [
         {
           "source": "training",
@@ -1109,198 +1148,266 @@
     },
     {
       "id": "optimizacion",
-      "title": "Optimizacion de compra",
-      "input": "Proyeccion, existencias, ofertas, reglas y presupuesto",
-      "output": "Una decision por pieza y ciudad, con su motivo",
+      "title": "Replenishment optimisation",
+      "input": "Forecast, stock on hand, offers, business rules and budget",
+      "output": "One decision per part and city, with its reason",
       "counts": {
-        "COMPRAR": 7,
-        "REVISAR": 7,
-        "APLAZADO": 3,
-        "NO_COMPRAR": 23
+        "COMPRAR": 5,
+        "REVISAR": 3,
+        "APLAZADO": 7,
+        "ESCALAR": 0,
+        "NO_COMPRAR": 25
       },
       "budget_usd": 2500.0,
-      "deferred_usd": 1116.94,
-      "stockout_avoided_usd": 12485.8,
-      "stockout_exposed_usd": 3152.08,
-      "stockout_return": 5.1,
+      "deferred_usd": 5169.89,
+      "escalated_usd": 0.0,
+      "stockout_avoided_usd": 10090.0,
+      "stockout_exposed_usd": 9387.86,
+      "stockout_return": 2.7,
       "reasons": [
         {
           "decision": "NO_COMPRAR",
-          "reason": "Inventario por encima del minimo: no requiere reposicion",
+          "reason": "Stock is above the operating minimum: no replenishment needed",
           "count": 21,
           "examples": [
             {
               "sku_id": "MRO-10045",
               "city_id": "NAVA",
-              "reason": "Inventario por encima del minimo: no requiere reposicion"
+              "reason": "Stock is above the operating minimum: no replenishment needed"
             },
             {
               "sku_id": "MRO-10046",
               "city_id": "NAVA",
-              "reason": "Inventario por encima del minimo: no requiere reposicion"
+              "reason": "Stock is above the operating minimum: no replenishment needed"
             },
             {
               "sku_id": "MRO-10047",
               "city_id": "OBRE",
-              "reason": "Inventario por encima del minimo: no requiere reposicion"
-            }
-          ]
-        },
-        {
-          "decision": "REVISAR",
-          "reason": "El lote minimo del proveedor supera el maximo de bodega",
-          "count": 7,
-          "examples": [
-            {
-              "sku_id": "MRO-10045",
-              "city_id": "OBRE",
-              "reason": "El minimo de orden de Beta_Supplies es 20 unidades y el maximo permitido es 19. Comprar el minimo cuesta 236.20 USD y deja inventario para 2.5 meses: requiere decision del comprador"
-            },
-            {
-              "sku_id": "MRO-20032",
-              "city_id": "NAVA",
-              "reason": "El minimo de orden de Alpha_Inc es 100 unidades y el maximo permitido es 47. Comprar el minimo cuesta 25.00 USD y deja inventario para 5.9 meses: requiere decision del comprador"
-            },
-            {
-              "sku_id": "MRO-20032",
-              "city_id": "OBRE",
-              "reason": "El minimo de orden de Alpha_Inc es 100 unidades y el maximo permitido es 18. Comprar el minimo cuesta 40.00 USD y deja inventario para 14.3 meses: requiere decision del comprador"
-            }
-          ]
-        },
-        {
-          "decision": "COMPRAR",
-          "reason": "Las existencias no alcanzan el minimo operativo",
-          "count": 7,
-          "examples": [
-            {
-              "sku_id": "MRO-10046",
-              "city_id": "OBRE",
-              "reason": "Quedan 3 unidades y el minimo es 6. Con una demanda proyectada de 6.3 al mes se repone hasta 16 unidades, equivalente a 2.1 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 2 opciones que surten OBRE"
-            },
-            {
-              "sku_id": "MRO-10047",
-              "city_id": "NAVA",
-              "reason": "Quedan 10 unidades y el minimo es 12. Con una demanda proyectada de 15.1 al mes se repone hasta 35 unidades, equivalente a 1.7 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 3 opciones que surten NAVA"
-            },
-            {
-              "sku_id": "MRO-40021",
-              "city_id": "NAVA",
-              "reason": "Quedan 14 unidades y el minimo es 17. Con una demanda proyectada de 24.8 al mes se repone hasta 55 unidades, equivalente a 1.7 meses de consumo. Se eligio Alpha_Inc por menor costo total entre 2 opciones que surten NAVA"
+              "reason": "Stock is above the operating minimum: no replenishment needed"
             }
           ]
         },
         {
           "decision": "APLAZADO",
-          "reason": "No cabe en el presupuesto de la corrida",
+          "reason": "Does not fit in the discretionary budget of this run",
+          "count": 7,
+          "examples": [
+            {
+              "sku_id": "MRO-20032",
+              "city_id": "NAVA",
+              "reason": "Does not fit in the discretionary budget of this run. It needs 26.05 USD and the 2500.00 USD of the run go further on other parts once production continuity is covered. Deferring it exposes a stockout valued at 150.69 USD"
+            },
+            {
+              "sku_id": "MRO-30011",
+              "city_id": "OBRE",
+              "reason": "Does not fit in the discretionary budget of this run. It needs 494.80 USD and the 2500.00 USD of the run go further on other parts once production continuity is covered. Deferring it exposes a stockout valued at 1470.00 USD"
+            },
+            {
+              "sku_id": "MRO-30012",
+              "city_id": "NAVA",
+              "reason": "Does not fit in the discretionary budget of this run. It needs 1438.68 USD and the 2500.00 USD of the run go further on other parts once production continuity is covered. Deferring it exposes a stockout valued at 1791.20 USD"
+            }
+          ]
+        },
+        {
+          "decision": "COMPRAR",
+          "reason": "Stock is below the operating minimum",
+          "count": 5,
+          "examples": [
+            {
+              "sku_id": "MRO-10045",
+              "city_id": "OBRE",
+              "reason": "6 units left against a minimum of 7. With a forecast demand of 8.1 per month, the economic order quantity of 48 units brings stock up to 55, about 6.0 months of consumption. Alpha_Inc was chosen on lowest total cost among 3 offers that serve OBRE"
+            },
+            {
+              "sku_id": "MRO-10046",
+              "city_id": "OBRE",
+              "reason": "3 units left against a minimum of 6. With a forecast demand of 6.3 per month, the economic order quantity of 30 units brings stock up to 36, about 5.3 months of consumption. Alpha_Inc was chosen on lowest total cost among 2 offers that serve OBRE"
+            },
+            {
+              "sku_id": "MRO-10047",
+              "city_id": "NAVA",
+              "reason": "10 units left against a minimum of 12. With a forecast demand of 15.1 per month, the economic order quantity of 56 units brings stock up to 68, about 3.8 months of consumption. Alpha_Inc was chosen on lowest total cost among 3 offers that serve NAVA"
+            }
+          ]
+        },
+        {
+          "decision": "REVISAR",
+          "reason": "The supplier minimum order quantity exceeds the warehouse ceiling",
           "count": 3,
           "examples": [
             {
-              "sku_id": "MRO-30012",
-              "city_id": "NAVA",
-              "reason": "No cabe en el presupuesto de la corrida. Se necesitan 604.92 USD y el presupuesto de la corrida es 2500.00 USD, que rinde mas en otras piezas. Aplazarla expone a un quiebre valorado en 1791.20 USD"
-            },
-            {
-              "sku_id": "MRO-30012",
+              "sku_id": "MRO-20032",
               "city_id": "OBRE",
-              "reason": "No cabe en el presupuesto de la corrida. Se necesitan 350.82 USD y el presupuesto de la corrida es 2500.00 USD, que rinde mas en otras piezas. Aplazarla expone a un quiebre valorado en 1091.78 USD"
+              "reason": "The minimum order quantity at Alpha_Inc is 100 units and the allowed maximum is 43. Buying the minimum costs 40.00 USD and leaves 14.3 months of stock: the buyer has to decide"
             },
             {
-              "sku_id": "MRO-90011",
+              "sku_id": "MRO-20033",
               "city_id": "NAVA",
-              "reason": "No cabe en el presupuesto de la corrida. Se necesitan 161.20 USD y el presupuesto de la corrida es 2500.00 USD, que rinde mas en otras piezas. Aplazarla expone a un quiebre valorado en 269.10 USD"
+              "reason": "The minimum order quantity at Delta_Logistics is 90 units and the allowed maximum is 89. Buying the minimum costs 243.20 USD and leaves 6.1 months of stock: the buyer has to decide"
+            },
+            {
+              "sku_id": "MRO-50008",
+              "city_id": "OBRE",
+              "reason": "The minimum order quantity at Delta_Logistics is 39 units and the allowed maximum is 12. Buying the minimum costs 274.25 USD and leaves 20.4 months of stock: the buyer has to decide"
             }
           ]
         },
         {
           "decision": "NO_COMPRAR",
-          "reason": "Vida util no permite consumir ni la cantidad minima de orden",
+          "reason": "Shelf life does not allow consuming even the minimum order quantity",
           "count": 1,
           "examples": [
             {
               "sku_id": "MRO-70004",
               "city_id": "OBRE",
-              "reason": "Vida util no permite consumir ni la cantidad minima de orden. Con vida util de 180 dias solo se consumirian 47 unidades, y el minimo de orden es 100"
+              "reason": "Shelf life does not allow consuming even the minimum order quantity. With a shelf life of 180 days only 47 units would be consumed, and the smallest minimum order quantity is 100"
             }
           ]
         },
         {
           "decision": "NO_COMPRAR",
-          "reason": "Reponer cuesta mas que el quiebre que evita. Reponer cuesta 455.55 USD y el quiebre que evita se valora en 289.50 USD para una pieza de criticidad C",
+          "reason": "Replenishing costs more than the stockout it prevents. Replenishing costs 1084.99 USD and the stockout it prevents is valued at 289.50 USD on a criticality C part",
           "count": 1,
           "examples": [
             {
               "sku_id": "MRO-70005",
               "city_id": "NAVA",
-              "reason": "Reponer cuesta mas que el quiebre que evita. Reponer cuesta 455.55 USD y el quiebre que evita se valora en 289.50 USD para una pieza de criticidad C"
+              "reason": "Replenishing costs more than the stockout it prevents. Replenishing costs 1084.99 USD and the stockout it prevents is valued at 289.50 USD on a criticality C part"
+            }
+          ]
+        },
+        {
+          "decision": "NO_COMPRAR",
+          "reason": "Replenishing costs more than the stockout it prevents. Replenishing costs 456.40 USD and the stockout it prevents is valued at 269.10 USD on a criticality C part",
+          "count": 1,
+          "examples": [
+            {
+              "sku_id": "MRO-90011",
+              "city_id": "NAVA",
+              "reason": "Replenishing costs more than the stockout it prevents. Replenishing costs 456.40 USD and the stockout it prevents is valued at 269.10 USD on a criticality C part"
+            }
+          ]
+        },
+        {
+          "decision": "NO_COMPRAR",
+          "reason": "The model found no feasible solution",
+          "count": 1,
+          "examples": [
+            {
+              "sku_id": "MRO-90012",
+              "city_id": "NAVA",
+              "reason": "The model found no feasible solution"
             }
           ]
         }
       ],
       "savings": [
         {
-          "sku_id": "MRO-40022",
-          "city_id": "NAVA",
-          "chosen_cost_usd": 616.06,
-          "worst_cost_usd": 720.22,
-          "saving_usd": 104.16,
-          "offers": 3
-        },
-        {
           "sku_id": "MRO-10047",
           "city_id": "NAVA",
-          "chosen_cost_usd": 468.5,
-          "worst_cost_usd": 560.5,
-          "saving_usd": 92.0,
+          "chosen_cost_usd": 1073.72,
+          "worst_cost_usd": 1217.86,
+          "saving_usd": 144.14,
           "offers": 3
         },
         {
           "sku_id": "MRO-50009",
           "city_id": "NAVA",
-          "chosen_cost_usd": 267.4,
-          "worst_cost_usd": 342.01,
-          "saving_usd": 74.61,
-          "offers": 3
-        },
-        {
-          "sku_id": "MRO-90012",
-          "city_id": "NAVA",
-          "chosen_cost_usd": 85.24,
-          "worst_cost_usd": 144.34,
-          "saving_usd": 59.1,
+          "chosen_cost_usd": 782.2,
+          "worst_cost_usd": 901.03,
+          "saving_usd": 118.83,
           "offers": 3
         },
         {
           "sku_id": "MRO-10046",
           "city_id": "OBRE",
-          "chosen_cost_usd": 370.41,
-          "worst_cost_usd": 415.04,
-          "saving_usd": 44.63,
+          "chosen_cost_usd": 901.81,
+          "worst_cost_usd": 976.64,
+          "saving_usd": 74.83,
           "offers": 2
         },
         {
-          "sku_id": "MRO-40022",
+          "sku_id": "MRO-10045",
           "city_id": "OBRE",
-          "chosen_cost_usd": 332.84,
-          "worst_cost_usd": 375.44,
-          "saving_usd": 42.6,
+          "chosen_cost_usd": 551.75,
+          "worst_cost_usd": 607.13,
+          "saving_usd": 55.38,
           "offers": 3
         },
         {
-          "sku_id": "MRO-40021",
-          "city_id": "NAVA",
-          "chosen_cost_usd": 290.44,
-          "worst_cost_usd": 316.43,
-          "saving_usd": 25.99,
-          "offers": 2
+          "sku_id": "MRO-80001",
+          "city_id": "OBRE",
+          "chosen_cost_usd": 415.68,
+          "worst_cost_usd": 461.88,
+          "saving_usd": 46.2,
+          "offers": 3
         }
       ],
-      "investment_usd": 2430.89,
-      "units": 317,
-      "saving_usd": 443.09,
-      "max_coverage_months": 3,
-      "needs_review": 14,
-      "low_confidence": 0,
+      "investment_usd": 3725.16,
+      "units": 201,
+      "saving_usd": 439.38,
+      "allocation": {
+        "budget_usd": 2500.0,
+        "overrun_max_usd": 1500.0,
+        "overrun_usd": 1225.16,
+        "invested_usd": 3725.16,
+        "purchases": 5,
+        "deferred_usd": 5169.89,
+        "deferred": 7,
+        "escalated_usd": 0.0,
+        "escalated": 0,
+        "service": [
+          {
+            "criticality": "A",
+            "needed": 5,
+            "funded": 5,
+            "achieved": 1.0,
+            "floor": 1.0,
+            "met": true
+          },
+          {
+            "criticality": "B",
+            "needed": 6,
+            "funded": 0,
+            "achieved": 0.0,
+            "floor": 0.8,
+            "met": false
+          },
+          {
+            "criticality": "C",
+            "needed": 1,
+            "funded": 0,
+            "achieved": 0.0,
+            "floor": 0.5,
+            "met": false
+          }
+        ],
+        "continuity_protected": true
+      },
+      "eoq_units_avg": 38.2,
+      "parameters": {
+        "budget_usd": 2500.0,
+        "overrun_max_usd": 1500.0,
+        "service_floor": {
+          "A": 1.0,
+          "B": 0.8,
+          "C": 0.5
+        },
+        "stockout_cost_per_day_usd": {
+          "A": 400.0,
+          "B": 80.0,
+          "C": 10.0
+        },
+        "planning_period_days": 30,
+        "holding_cost_rate_annual": 0.25,
+        "months_per_year": 12,
+        "eoq_max_coverage_months": 6.0,
+        "shelf_life_safety_ratio": 0.8,
+        "days_per_month": 30
+      },
+      "needs_review": 15,
+      "low_confidence": 1,
       "charts": [
         {
           "source": "pipeline",
@@ -1314,10 +1421,10 @@
     }
   ],
   "charts": {
-    "limpieza": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\limpieza_descartes.png",
-    "dataset": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\dataset_historia.png",
-    "patrones": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\patrones_mapa.png",
-    "decisiones": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\optimizacion_decisiones.png",
-    "ahorro": "C:\\Users\\HarrysonDanielGuerre\\Documents\\Coe\\StockOpt\\artifacts\\pipeline\\optimizacion_ahorro.png"
+    "limpieza": "C:\\Users\\HarrysonDanielGuerre\\Documents\\stock\\StockOpt\\artifacts\\pipeline\\limpieza_descartes.png",
+    "dataset": "C:\\Users\\HarrysonDanielGuerre\\Documents\\stock\\StockOpt\\artifacts\\pipeline\\dataset_historia.png",
+    "patrones": "C:\\Users\\HarrysonDanielGuerre\\Documents\\stock\\StockOpt\\artifacts\\pipeline\\patrones_mapa.png",
+    "decisiones": "C:\\Users\\HarrysonDanielGuerre\\Documents\\stock\\StockOpt\\artifacts\\pipeline\\optimizacion_decisiones.png",
+    "ahorro": "C:\\Users\\HarrysonDanielGuerre\\Documents\\stock\\StockOpt\\artifacts\\pipeline\\optimizacion_ahorro.png"
   }
 }

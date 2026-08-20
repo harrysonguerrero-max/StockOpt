@@ -1,9 +1,9 @@
 {
-  "name": "supplyopt-frontend",
+  "name": "mro-parts-optimizer-frontend",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Interfaz de SupplyOpt. HTML y modulos ES nativos; Vite solo empaqueta y versiona los archivos.",
+  "description": "Interfaz del optimizador de refacciones MRO. HTML y modulos ES nativos; Vite solo empaqueta y versiona los archivos.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

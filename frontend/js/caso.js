@@ -18,13 +18,13 @@ import { critChip, gauge, runway } from "./ui.js";
 import { spark } from "./spark.js";
 
 const FLOW = ["Pendiente aprobacion", "Aprobado", "Contactado proveedor", "Orden confirmada"];
-const FLOW_SHORT = ["Pendiente", "Aprobado", "Contactado", "Confirmada"];
+const FLOW_SHORT = ["Pending", "Approved", "Contacted", "Confirmed"];
 
 const ACTION_LABEL = {
-  "Aprobado": "Aprobar",
-  "Contactado proveedor": "Marcar proveedor contactado",
-  "Orden confirmada": "Confirmar orden",
-  "Pendiente aprobacion": "Reabrir",
+  "Aprobado": "Approve",
+  "Contactado proveedor": "Mark supplier contacted",
+  "Orden confirmada": "Confirm order",
+  "Pendiente aprobacion": "Reopen",
 };
 
 let onChange = () => {};
@@ -47,9 +47,9 @@ export function openCase(item) {
 
   host.innerHTML = `
     <div class="scrim"></div>
-    <aside class="panel" role="dialog" aria-modal="true" aria-label="Detalle de ${escape(item.sku_id)}">
+    <aside class="panel" role="dialog" aria-modal="true" aria-label="Detail for ${escape(item.sku_id)}">
       <div class="panel__head">
-        <button class="panel__close" type="button" aria-label="Cerrar">×</button>
+        <button class="panel__close" type="button" aria-label="Close">×</button>
         <div class="panel__where">
           <span class="panel__sku">${escape(item.sku_id)}</span>
           ${critChip(item)}
@@ -99,16 +99,16 @@ function flowBlock(item) {
     .join("");
 
   const rejectButton = (item.next_states || []).includes("Rechazado")
-    ? '<button class="btn btn--stop" type="button" data-reject="1">Rechazar</button>' : "";
+    ? '<button class="btn btn--stop" type="button" data-reject="1">Reject</button>' : "";
 
   const done = !buttons && !rejectButton
-    ? `<p class="meta">${rejected ? "Rechazada." : "Esta orden ya está confirmada."}</p>` : "";
+    ? `<p class="meta">${rejected ? "Rejected." : "This order is already confirmed."}</p>` : "";
 
   return `
     <div class="flow ${rejected ? "flow--rejected" : ""}">
       <div class="flow__track">${steps}</div>
       ${rejected && item.rejection_reason
-        ? `<p class="step__aside">Rechazado: ${escape(item.rejection_reason)}${
+        ? `<p class="step__aside">Rejected: ${escape(item.rejection_reason)}${
             item.comment ? ` — ${escape(item.comment)}` : ""}</p>` : ""}
       <div class="flow__actions">${buttons}${rejectButton}${done}</div>
       <div class="reject" data-open="false">
@@ -116,8 +116,8 @@ function flowBlock(item) {
           ${(state.filters?.rejection_reasons || [])
             .map((r) => `<option value="${escape(r)}">${escape(r)}</option>`).join("")}
         </select>
-        <textarea data-field="comment" placeholder="Detalle opcional para el registro"></textarea>
-        <button class="btn btn--stop" type="button" data-confirm-reject="1">Confirmar rechazo</button>
+        <textarea data-field="comment" placeholder="Optional detail for the record"></textarea>
+        <button class="btn btn--stop" type="button" data-confirm-reject="1">Confirm rejection</button>
       </div>
     </div>`;
 }
@@ -133,51 +133,52 @@ function step(n, title, body) {
 }
 
 function stepConsume(item) {
-  return step(1, "Qué consume", `
+  return step(1, "What it consumes", `
     <div data-spark>&nbsp;</div>
     <p class="step__read">
-      <b>${decimal(item.demand_monthly)}</b> unidades al mes de media.
-      Con lo que hay en bodega, ${runway(item)} de consumo.
+      <b>${decimal(item.demand_monthly)}</b> units per month on average.
+      At that rate, what is on the shelf lasts ${runway(item)}.
     </p>
-    <p class="step__aside">Patrón ${pattern(item.pattern)}.</p>`);
+    <p class="step__aside">${pattern(item.pattern)} pattern.</p>`);
 }
 
 function stepForecast(item) {
   const c = confidence(item.confidence);
-  return step(2, "Qué va a consumir", `
+  return step(2, "What it will consume", `
     <p class="step__read" data-forecast>
-      Proyección de <b>${units(item.demand_monthly)}</b> unidades para el próximo mes.
+      Forecast of <b>${units(item.demand_monthly)}</b> units for next month.
     </p>
     <span class="pill-row">
-      <span class="pill">Patrón ${pattern(item.pattern)}</span>
-      <span class="pill pill--${c.tone}">Confianza ${c.word}</span>
+      <span class="pill">${pattern(item.pattern)} pattern</span>
+      <span class="pill pill--${c.tone}">${c.word} confidence</span>
       <span class="pill">${source(item.forecast_source)}</span>
     </span>
     <p class="step__aside" style="margin-top:12px">
-      <button class="figure-link" data-goto-model>¿Confío en esta proyección?</button>
+      <button class="figure-link" data-goto-model>Can I trust this forecast?</button>
     </p>`);
 }
 
 function stepStock(item) {
   const gap = item.inventory_min - item.on_hand_qty;
   const read = gap > 0
-    ? `Faltan <b>${units(gap)}</b> ${gap === 1 ? "unidad" : "unidades"} para llegar al mínimo.`
-    : `Está <b>${units(-gap)}</b> por encima del mínimo.`;
+    ? `<b>${units(gap)}</b> ${gap === 1 ? "unit" : "units"} short of the reorder point.`
+    : `<b>${units(-gap)}</b> above the reorder point.`;
 
-  return step(3, "Cuánto necesita en bodega", `
+  return step(3, "How much it needs on the shelf", `
     ${gauge(item, "gauge--lg")}
     <p class="step__read">${read}</p>
     <p class="step__aside" data-policy>
-      El mínimo cubre el consumo durante el plazo de entrega más un colchón de seguridad.
-    </p>`);
+      The reorder point covers consumption during the lead time plus a safety buffer.
+    </p>
+    ${lotBlock(item)}`);
 }
 
 function stepSupplier(item) {
   if (item.decision === "NO_COMPRAR") {
-    return step(4, "A quién comprarle", `
-      <p class="step__read">Todavía no hace falta.</p>
-      <p class="step__aside">Habrá que reponer cuando el stock baje de
-        ${units(item.inventory_min)} unidades, a este ritmo dentro de
+    return step(4, "Who to buy from", `
+      <p class="step__read">Not needed yet.</p>
+      <p class="step__aside">A replenishment is due when stock falls below
+        ${units(item.inventory_min)} units, which at this rate happens in
         ${months(Math.max(0, item.on_hand_qty - item.inventory_min)
                  / Math.max(item.demand_monthly, 0.01))}.</p>`);
   }
@@ -185,23 +186,91 @@ function stepSupplier(item) {
   const offers = (item.alternatives || []).map((offer) => `
     <div class="offer ${offer.chosen ? "offer--chosen" : ""}">
       <span class="offer__name">${escape(offer.supplier_name)}${
-        offer.chosen ? '<span class="offer__tag">elegido</span>' : ""}</span>
+        offer.chosen ? '<span class="offer__tag">chosen</span>' : ""}</span>
       <span class="offer__total">${usd(offer.total_cost_usd)} USD</span>
       <span class="offer__meta">
-        ${price(offer.unit_price_usd)} por unidad · lote mínimo ${units(offer.moq)}
-        <span class="synthetic" title="Campo generado por el build">gen</span>
-        · flete ${usd(offer.freight_cost_usd)} USD · entrega en ${leadTime(offer.lead_time_days)}
+        ${price(offer.unit_price_usd)} per unit · minimum lot ${units(offer.moq)}
+        <span class="synthetic" title="Field generated by the build">gen</span>
+        · freight ${usd(offer.freight_cost_usd)} USD · delivery in ${leadTime(offer.lead_time_days)}
       </span>
     </div>`).join("");
 
   const gain = item.alternatives && item.alternatives.length > 1
-    ? `<p class="step__aside">Gana por ${usd(
+    ? `<p class="step__aside">It wins by ${usd(
         item.alternatives[1].total_cost_usd - item.alternatives[0].total_cost_usd
-      )} USD sobre el siguiente.</p>` : "";
+      )} USD over the next best.</p>` : "";
 
-  return step(4, "A quién comprarle",
+  return step(4, "Who to buy from",
     (item.decision === "REVISAR" ? fork(item) : "")
+    + (item.decision === "ESCALAR" ? escalateBlock(item) : "")
     + `<div class="offers">${offers}</div>${gain}`);
+}
+
+/* ---------- De donde sale la cantidad ----------
+ * El nivel de reposicion no es una cobertura en meses elegida a dedo sino la
+ * cantidad economica de pedido. Mostrarla descompuesta es lo que permite
+ * defenderla: se ve que el flete tira hacia arriba y el valor de la pieza hacia
+ * abajo, y que el tope de obsolescencia esta ahi para cuando la formula se pasa.
+ */
+
+function lotBlock(item) {
+  if (!item.eoq_units) return "";
+
+  const capped = item.eoq_units >= Math.floor(item.demand_monthly * 6);
+  return `
+    <div class="lot">
+      <p class="lot__title">Where the order quantity comes from</p>
+      <div class="lot__terms">
+        <span class="lot__term">
+          <span class="label">Freight per order</span>
+          <b>${usd(item.order_cost_usd)} USD</b>
+        </span>
+        <span class="lot__op">vs</span>
+        <span class="lot__term">
+          <span class="label">Holding cost</span>
+          <b>${price(item.holding_cost_usd)} USD</b>
+          <span class="meta">per unit and year</span>
+        </span>
+        <span class="lot__op">→</span>
+        <span class="lot__term lot__term--out">
+          <span class="label">Economic order quantity</span>
+          <b>${units(item.eoq_units)} units</b>
+        </span>
+      </div>
+      <p class="step__aside">
+        Wilson's formula balances paying freight more often against leaving capital
+        idle on the shelf. Refill level = reorder point ${units(item.inventory_min)}
+        + lot ${units(item.eoq_units)} = <b>${units(item.inventory_max)}</b> units.
+        ${capped ? "The six-month obsolescence cap is what limits this lot." : ""}
+      </p>
+    </div>`;
+}
+
+/* ---------- La escalada ----------
+ * No es una recomendacion sino una peticion. El optimizador ya resolvio que
+ * comprar y a quien; lo que falta es dinero que solo puede autorizar alguien
+ * mas, y la pantalla tiene que decir cuanto y contra que riesgo.
+ */
+
+function escalateBlock(item) {
+  return `
+    <div class="escalate">
+      <p class="escalate__title">This one needs a budget decision</p>
+      <p class="step__read">
+        Criticality <b>${escape(item.criticality)}</b>: running out stops a line.
+        The model funds every critical replenishment before anything else and
+        stretches the budget by the authorised overrun to do it. This one still
+        does not fit.
+      </p>
+      <div class="escalate__figures">
+        <span><span class="label">Extra budget needed</span>
+          <b>${usd(item.total_cost_usd)} USD</b></span>
+        <span><span class="label">Stockout it prevents</span>
+          <b>${usd(item.stockout_cost_usd)} USD</b></span>
+        <span><span class="label">Net if approved</span>
+          <b>${usd(item.net_benefit_usd)} USD</b></span>
+      </div>
+    </div>`;
 }
 
 /* ---------- La bifurcacion de REVISAR ----------
@@ -217,29 +286,29 @@ function fork(item) {
 
   return `
     <p class="step__read" style="margin-bottom:14px">
-      El sistema no puede resolverlo: el lote mínimo de
-      ${escape(item.supplier_name)} es <b>${units(item.recommended_qty)}</b>
-      y el máximo permitido es <b>${units(item.max_allowed_qty)}</b>.
+      The system cannot settle this one: the minimum lot at
+      ${escape(item.supplier_name)} is <b>${units(item.recommended_qty)}</b>
+      and the allowed maximum is <b>${units(item.max_allowed_qty)}</b>.
     </p>
     <div class="fork">
       <div class="fork__opt fork__opt--warn">
-        <p class="fork__title">Comprar ${units(item.recommended_qty)}</p>
+        <p class="fork__title">Buy ${units(item.recommended_qty)}</p>
         <span class="fork__figure">${usd(item.total_cost_usd)} USD</span>
         <ul class="fork__list">
-          <li>Deja ${months(item.coverage_months)} de inventario</li>
-          <li>Sobran ${units(Math.max(0, item.recommended_qty - item.max_allowed_qty))} sobre el máximo permitido</li>
+          <li>Leaves ${months(item.coverage_months)} of stock</li>
+          <li>${units(Math.max(0, item.recommended_qty - item.max_allowed_qty))} over the allowed maximum</li>
           <li>${caduca
-            ? `Caduca antes de consumirse (vida útil ${months(shelfMonths)})`
-            : `Vida útil de ${months(shelfMonths)}: no caduca`}</li>
+            ? `Expires before it is consumed (shelf life ${months(shelfMonths)})`
+            : `Shelf life of ${months(shelfMonths)}: it does not expire`}</li>
         </ul>
       </div>
       <div class="fork__opt">
-        <p class="fork__title">No comprar</p>
+        <p class="fork__title">Do not buy</p>
         <span class="fork__figure">${gap ? `−${units(gap)}` : "0"}</span>
         <ul class="fork__list">
-          <li>${gap ? `Por debajo del mínimo operativo` : "En el mínimo operativo"}</li>
-          <li>Criticidad ${escape(item.criticality)}</li>
-          <li>Al ritmo actual se agota en ${agota}</li>
+          <li>${gap ? "Below the reorder point" : "At the reorder point"}</li>
+          <li>Criticality ${escape(item.criticality)}</li>
+          <li>At the current rate it runs out in ${agota}</li>
         </ul>
       </div>
     </div>`;
@@ -252,7 +321,7 @@ function foldAssumptions(item) {
     .map((text) => `<li>${escape(text)}</li>`).join("");
   return `<div class="fold" data-open="false">
     <button class="fold__head" type="button"><span class="fold__caret">▶</span>
-      Supuestos aplicados <span class="band__n">${item.explanation.assumptions.length}</span></button>
+      Assumptions applied <span class="band__n">${item.explanation.assumptions.length}</span></button>
     <div class="fold__body"><ul class="assumptions">${list}</ul></div>
   </div>`;
 }
@@ -260,7 +329,7 @@ function foldAssumptions(item) {
 function foldExplanation(item) {
   return `<div class="fold" data-open="false" data-explain="1">
     <button class="fold__head" type="button"><span class="fold__caret">▶</span>
-      Cómo lo explicaría el sistema</button>
+      How the system would explain it</button>
     <div class="fold__body">
       <p class="prose"><strong>${escape(item.explanation.headline)}</strong></p>
       <p class="prose" data-body>${escape(item.explanation.body)}</p>
@@ -338,17 +407,17 @@ async function fillHistory(host, item) {
     const f = data.forecast;
     const target = host.querySelector("[data-forecast]");
     if (target && f.q50 != null) {
-      target.innerHTML = `Proyección de <b>${units(f.q50)}</b> unidades para el próximo mes`
+      target.innerHTML = `Forecast of <b>${units(f.q50)}</b> units for next month`
         + (f.q25 != null && f.q75 != null
-          ? `, entre <b>${units(f.q25)}</b> y <b>${units(f.q75)}</b> en el rango probable.` : ".");
+          ? `, between <b>${units(f.q25)}</b> and <b>${units(f.q75)}</b> in the likely range.` : ".");
     }
 
     const policy = host.querySelector("[data-policy]");
     if (policy && data.policy.demand_lead_time != null) {
-      policy.innerHTML = `El mínimo de ${units(data.policy.inventory_min)} son `
-        + `${units(data.policy.demand_lead_time)} unidades de consumo durante el plazo de entrega `
-        + `(${leadTime(data.policy.lead_time_days)}) más ${units(data.policy.safety_stock)} `
-        + `de colchón para la variabilidad.`;
+      policy.innerHTML = `The reorder point of ${units(data.policy.inventory_min)} is `
+        + `${units(data.policy.demand_lead_time)} units of consumption during the lead time `
+        + `(${leadTime(data.policy.lead_time_days)}) plus ${units(data.policy.safety_stock)} `
+        + `of buffer for the variability.`;
     }
   } catch (error) {
     if (slot.isConnected) slot.innerHTML = `<p class="step__aside">${escape(error.message)}</p>`;
@@ -366,7 +435,7 @@ async function requestExplanation(fold) {
   const body = fold.querySelector("[data-body]");
   const flag = document.createElement("span");
   flag.className = "writing";
-  flag.textContent = "Redactando con el modelo";
+  flag.textContent = "Writing with the model";
   body.after(flag);
 
   try {

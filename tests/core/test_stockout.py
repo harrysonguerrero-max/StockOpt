@@ -77,8 +77,8 @@ def test_a_purchase_that_costs_more_than_the_stockout_is_dropped(monkeypatch):
 
 
 def test_the_reason_names_the_economics():
-    assert "cuesta" in REASON_NOT_WORTH_IT
-    assert "quiebre" in REASON_NOT_WORTH_IT
+    assert "costs" in REASON_NOT_WORTH_IT
+    assert "stockout" in REASON_NOT_WORTH_IT
 
 
 def test_the_recommendation_carries_both_sides_of_the_decision():

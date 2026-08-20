@@ -65,20 +65,29 @@ def main() -> None:
     hold = recommendations[recommendations["decision"] == config.DECISION_HOLD]
     review = recommendations[recommendations["decision"] == config.DECISION_REVIEW]
     deferred = recommendations[recommendations["decision"] == config.DECISION_DEFERRED]
+    escalated = recommendations[recommendations["decision"] == config.DECISION_ESCALATE]
 
     print(f"Recomendaciones generadas en {OUT_DIR / OUTPUT_NAME}")
     print(f"  {len(recommendations)} combinaciones evaluadas\n")
     print(f"  {config.DECISION_BUY:<12} {len(buy):>3}")
     print(f"  {config.DECISION_HOLD:<12} {len(hold):>3}")
     print(f"  {config.DECISION_REVIEW:<12} {len(review):>3}")
-    print(f"  {config.DECISION_DEFERRED:<12} {len(deferred):>3}\n")
+    print(f"  {config.DECISION_DEFERRED:<12} {len(deferred):>3}")
+    print(f"  {config.DECISION_ESCALATE:<12} {len(escalated):>3}\n")
 
     if config.SCENARIO_BUDGET_USD is not None:
+        allocation = config.budget_allocation_summary(recommendations)
         print(f"Presupuesto de la corrida: {config.SCENARIO_BUDGET_USD:,.2f} USD")
         print(
             f"  comprometido {buy['total_cost_usd'].sum():,.2f} USD "
             f"({buy['total_cost_usd'].sum() / config.SCENARIO_BUDGET_USD:.0%})"
         )
+        if allocation["overrun_usd"] > 0:
+            print(
+                f"  excedente consumido {allocation['overrun_usd']:,.2f} USD de los "
+                f"{config.BUDGET_OVERRUN_MAX_USD:,.2f} USD autorizados, para no dejar "
+                f"sin reponer una pieza que para linea"
+            )
         if len(buy):
             avoided = buy["stockout_cost_usd"].sum()
             print(
@@ -90,6 +99,19 @@ def main() -> None:
                 f"  aplazado {deferred['total_cost_usd'].sum():,.2f} USD en "
                 f"{len(deferred)} reposiciones que exponen "
                 f"{deferred['stockout_cost_usd'].sum():,.2f} USD de quiebre"
+            )
+        if len(escalated):
+            print(
+                f"  ESCALAR {escalated['total_cost_usd'].sum():,.2f} USD en "
+                f"{len(escalated)} piezas criticas que no caben ni con el excedente"
+            )
+        print("\n  Nivel de servicio conseguido por criticidad:")
+        for level in allocation["service"]:
+            achieved = "sin casos" if level["achieved"] is None else f"{level['achieved']:.0%}"
+            print(
+                f"    {level['criticality']}: {level['funded']}/{level['needed']} "
+                f"({achieved}) contra un piso de {level['floor']:.0%}"
+                f"{'' if level['met'] else '  <- no alcanzado'}"
             )
         print()
 

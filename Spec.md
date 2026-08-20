@@ -12,7 +12,7 @@
 
 ## 0. Estado actual de la implementación
 
-**Última actualización:** 2026-08-18
+**Última actualización:** 2026-08-20
 
 ### Qué está hecho
 
@@ -28,15 +28,45 @@
 | **2.c · Historia sintética** | ✅ | `app/core/synthesis.py` |
 | 3 · Optimización MILP | ✅ | `app/core/optimization.py` |
 | **3.b · Presupuesto y costo de quiebre** | ✅ | mochila en `app/core/optimization.py` |
+| **3.c · Continuidad como restricción dura (§14)** | ✅ | `allocate_budget` en `app/core/optimization.py` |
+| **3.d · Lote económico (EOQ) para las cotas** | ✅ | `replenishment_level` en `app/core/optimization.py` |
 | 4 · Reglas de negocio | ✅ | dentro del optimizador |
 | 5 · Explicación con LLM | ✅ código listo, ⏸️ sin clave | `app/services/llm_agent.py` |
 | 6 · Interfaz | ✅ reescrita | `app/api/` + `frontend/` |
 | **6.b · Recorrido del pipeline y explorador de datos** | ✅ | `app/services/pipeline_report.py`, `data_views.py` |
+| **6.c · Fórmulas y teoría por etapa en la interfaz** | ✅ | `frontend/js/formulas.js` |
+| **6.d · Clasificación Criticidad-Valor-Rotación** | ✅ | `app/core/classification.py`, `frontend/js/clasificacion.js` |
 | 9 · Feedback y reentrenamiento | ⬜ | — |
 
-**284 tests** en `tests/core/`.
+**303 tests** en `tests/core/`.
 
 ### Lo que cambió desde la versión anterior de este documento
+
+**La continuidad de producción dejó de ser una idea y es una restricción dura.**
+El diseño de §14 está implementado: las reposiciones de criticidad A se financian
+antes de que compita nada discrecional, el presupuesto se vuelve elástico hasta un
+excedente autorizado (`BUDGET_OVERRUN_MAX_USD = 1 500`) para conseguirlo, y lo que no
+cabe ni así sale con un quinto estado, `ESCALAR`, en vez de aplazarse en silencio.
+Sobre esa base se imponen pisos de servicio por clase (`SERVICE_FLOOR_BY_CRITICALITY`:
+A 1,00 · B 0,80 · C 0,50) que se sueltan de menos exigente a más exigente cuando el
+dinero no llega, y el nivel realmente alcanzado se publica junto al declarado.
+
+**Las cotas de inventario ya no son constantes de cobertura.** `Imax` y `Itgt` salen
+de la cantidad económica de pedido de Wilson, que equilibra el flete contra el costo
+de mantener. Con eso desaparecen los `3,0` y `1,5` meses fijados a dedo que §13.5
+señalaba como no derivados, y entran tres columnas nuevas —`order_cost_usd`,
+`holding_cost_usd`, `eoq_units`— que hacen la cifra auditable.
+
+**La interfaz declara la teoría de cada paso.** Cada etapa del recorrido publica sus
+fórmulas en MathML con el glosario de todos sus símbolos, su unidad y la referencia
+bibliográfica de la que sale. Los valores de los parámetros llegan del informe, que
+los lee del código, de modo que pantalla y código no puedan discrepar.
+
+**La pantalla está en inglés** y el producto pasó a llamarse *MRO Spare Parts
+Optimizer*. Los códigos internos —`COMPRAR`, `Estable`, `Pendiente aprobacion`— siguen
+en español porque viajan en los CSV y en la base de aprobaciones; se traducen en la
+capa de presentación.
+
 
 **El presupuesto ya no es una idea pendiente.** El optimizador resuelve una
 mochila sobre todas las piezas a la vez: reparte el presupuesto de la corrida
@@ -96,13 +126,14 @@ glosario completo de símbolos en §13; aquí va la declaración y el enlace.
 | **2.b** | Modelo ML | Corrección del punto central | `g* = argmin Σ (y − g(X))²`, gradient boosting sobre rezagos 1/2/3/6/12 + ventanas + mes cíclico + atributos | [§13.3.2](#1332-estimador-y-objetivo) |
 | **2.b** | Combinación | Proyección final | `D50_final = 0,5·M + 0,5·D50` (Bates & Granger, 1969) | [§13.3.4](#1334-combinación-con-la-proyección-estadística) |
 | **3** | **Inventario mínimo** | **Cuándo reponer** | `Imin = ceil( d·L + z(k)·sqrt( L·sigma_d² + d²·sigma_L² ) )` | [§13.4](#134-etapa-23--política-de-inventario-el-inventario-mínimo) |
-| **3** | Inventario máximo | Techo de bodega | `Imax = max( Imin , ceil( D50·3 ) )` | [§13.5](#135-etapa-3--niveles-derivados-y-cotas) |
-| **3** | Nivel objetivo | Cuánto reponer | `Itgt = min( max(Imin, ceil(Imin + D50·1,5)) , Imax )` | [§13.5](#135-etapa-3--niveles-derivados-y-cotas) |
+| **3** | **Lote económico** | Cuánto pedir de una vez | `Q* = sqrt( 2·K·D / h )` con `h = i·c` | [§13.5](#135-etapa-3--niveles-derivados-y-cotas) |
+| **3** | Nivel de reposición | Techo y objetivo, que son el mismo | `S = Imin + Q` · `Imax = Itgt = S` | [§13.5](#135-etapa-3--niveles-derivados-y-cotas) |
 | **3** | Tope por vida útil | Antiobsolescencia | `Ivida = max( 0 , floor( d·0,80·V ) − q )` | [§13.5](#135-etapa-3--niveles-derivados-y-cotas) |
 | **3** | Selección de proveedor | A quién comprar | `min Σ (p_o·x_o + f_o·u_o)` s.a. cobertura, techo, `Σu ≤ 1`, `x_o ≥ m_o·u_o`, `x_o ≤ U_o·u_o` | [§13.6](#136-etapa-3--milp-de-selección-de-proveedor) |
 | **3.b** | Costo de quiebre | Cuánto vale no tenerla | `Cq = dias_expuestos · r · c_dia(k)` | [§13.7](#137-etapa-3b--valoración-del-quiebre) |
-| **3.b** | Reparto de presupuesto | Qué se financia | `max Σ b_s·v_s` s.a. `Σ Ctot_s·v_s ≤ B`, `v_s ∈ {0,1}` | [§13.8](#138-etapa-3b--mochila-de-presupuesto) |
-| **4** | Decisión final | COMPRAR / REVISAR / APLAZADO / NO_COMPRAR | Árbol de 7 reglas en orden estricto | [§13.9](#139-árbol-de-decisión-completo) |
+| **3.b** | Reparto de presupuesto | Qué se financia | `max Σ_flex b_s·v_s` s.a. `v_s = 1 ∀ s crítico`, `Σ Ctot_s·v_s ≤ B + E`, `E ≤ E_max` | [§13.8](#138-etapa-3b--mochila-de-presupuesto) |
+| **3.b** | Piso de servicio | Coherencia con los `z` | `Σ_{Clase_k} v_s ≥ ceil( θ_k·|Clase_k| )` | [§13.8](#138-etapa-3b--mochila-de-presupuesto) |
+| **4** | Decisión final | ESCALAR / REVISAR / COMPRAR / APLAZADO / NO_COMPRAR | Árbol de 8 reglas en orden estricto | [§13.9](#139-árbol-de-decisión-completo) |
 
 **Las tres fórmulas que hay que saber defender en una presentación:**
 
@@ -112,11 +143,17 @@ glosario completo de símbolos en §13; aquí va la declaración y el enlace.
           lo que consumo         colchón que absorbe que la demanda
           mientras espero        suba Y que el proveedor se retrase
 
-2)  min Σ_o ( p_o·x_o  +  f_o·u_o )      ← precio por unidad + flete por activar
+2)  Q* = sqrt( 2·K·D / h )   con  h = i·c      ← flete contra costo de mantener
+    S  = Imin + Q*                             ← hasta aquí se repone, y este
+                                                  es también el techo de la pieza
+
+3)  min Σ_o ( p_o·x_o  +  f_o·u_o )      ← precio por unidad + flete por activar
         con  x_o ≥ m_o·u_o                 ← el MOQ solo aplica si le compro
 
-3)  max Σ_s ( Cq_s − Ctot_s )·v_s        ← beneficio neto en USD
-        s.a. Σ_s Ctot_s·v_s ≤ B            ← sin pasarse del presupuesto
+4)  max Σ_flex ( Cq_s − Ctot_s )·v_s     ← beneficio neto de lo discrecional
+        s.a. v_s = 1   ∀ s de criticidad A ← lo que para una línea no compite
+             Σ_s Ctot_s·v_s ≤ B + E        ← presupuesto elástico
+             E ≤ E_max                     ← con el excedente acotado y visible
 ```
 
 | Símbolo | Qué es | Unidad |
@@ -131,7 +168,9 @@ glosario completo de símbolos en §13; aquí va la declaración y el enlace.
 | `Cq_s` | Costo del quiebre que se evita | USD |
 | `Ctot_s` | Costo total de la reposición | USD |
 | `v_s` | Si la compra se financia esta corrida | 0/1 |
-| `B` | Presupuesto de la corrida | USD (hoy 2 500) |
+| `K`, `D`, `h`, `i`, `c` | Flete por pedido, demanda anual, costo de mantener, tasa anual de posesión y valor unitario | USD/pedido, u/año, USD/u/año, fracción, USD/u |
+| `B`, `E`, `E_max` | Presupuesto nominal, excedente consumido y excedente máximo autorizado | USD (hoy 2 500 y 1 500) |
+| `θ_k` | Fracción mínima de la clase `k` que debe financiarse | A 1,00 · B 0,80 · C 0,50 |
 
 ### Archivos generados en `app/data/mvp/`
 
@@ -153,14 +192,26 @@ glosario completo de símbolos en §13; aquí va la declaración y el enlace.
 
 | Decisión | Casos |
 |---|---|
-| COMPRAR | 7 · 2.430,89 USD · 317 unidades |
-| REVISAR | 7 |
-| **APLAZADO** | 3 · 1.116,94 USD sin financiar |
-| NO_COMPRAR | 23 |
+| COMPRAR | 5 · 3.725,16 USD · 201 unidades |
+| REVISAR | 3 |
+| **APLAZADO** | 7 · 5.169,89 USD sin financiar |
+| **ESCALAR** | 0 |
+| NO_COMPRAR | 25 |
 
-Presupuesto de la corrida: **2.500 USD**. Evita 12.485,80 USD de quiebre, un
-retorno de 5,1×, y deja 3.152,08 USD de riesgo sin cubrir en las tres
-reposiciones aplazadas.
+Presupuesto nominal: **2.500 USD**, más **1.225,16 USD** de los 1.500 USD de
+excedente autorizado. Es lo que costó no dejar sin reponer ninguna pieza de
+criticidad A. Evita 10.090 USD de quiebre, un retorno de 2,7×, y deja 9.387,86
+USD de riesgo sin cubrir en las siete reposiciones aplazadas.
+
+Nivel de servicio alcanzado frente al declarado: **A 5/5 (100 % contra un piso
+de 100 %)** · B 0/6 (0 % contra 80 %) · C 0/1 (0 % contra 50 %). Los dos pisos
+discrecionales se soltaron porque el dinero no llegaba, y la pantalla lo dice.
+
+**Cómo se lee el cambio frente a la corrida anterior.** Hay menos compras y más
+aplazadas, y las dos cosas tienen la misma causa: el lote económico pide más
+unidades por pedido que la cobertura de mes y medio que había antes, así que cada
+compra cuesta más y caben menos en la corrida. A cambio se paga menos flete al
+año y ninguna pieza crítica queda esperando dinero.
 
 Patrones: 26 Estable · 9 Volátil · 5 Estacional.
 Modelo: **WMAPE 21,1 %**, mejora 28,2 % sobre repetir el último mes y 3,2 %
@@ -784,6 +835,9 @@ El MVP se considera exitoso si logra demostrar que, para un conjunto acotado de 
 | 2 | **Servidor MLflow** (`MLFLOW_TRACKING_URI`) | minutos | Hoy los runs quedan en disco local y no se comparan entre sí |
 | 3 | **Feedback loop** (§9) | alto | Es la mitad del valor del sistema y hoy no existe nada |
 | 4 | **Detección de outliers** (§1.1) | bajo | Un consumo atípico hoy entra al modelo sin marcarse |
+| 4.b | ~~Derivar el inventario máximo de un costo~~ | — | ✅ **Hecho.** Cantidad económica de pedido en §13.5.1 |
+| 4.c | ~~Continuidad de producción como restricción dura~~ | — | ✅ **Hecho.** §13.8, con estado `ESCALAR` |
+| 4.d | **Validar `i_h` y `c_dia(k)` con mantenimiento y finanzas** | bajo | Son los dos parámetros que más mueven la decisión y ninguno está medido |
 | 5 | ~~Presupuesto de escenario~~ | — | ✅ **Hecho.** Mochila sobre el presupuesto de la corrida, con decisión `APLAZADO` |
 | 6 | **Ingesta manual de proveedores** (§1.2) | medio | Depende de mover la persistencia a base de datos |
 | 7 | **Reentrenamiento periódico** | medio | Hoy el modelo se entrena a mano |
@@ -929,9 +983,11 @@ medido es *stock por encima del mínimo*, así que moverlo entero dejaría a la
 planta de origen sin colchón; el modelo tiene que respetar el mínimo de las dos.
 *Esfuerzo: medio-alto.*
 
-**6 · Invertir la jerarquía: continuidad de producción primero, presupuesto
-después.** Ver [§14](#14-diseño--continuidad-de-producción-como-restricción-dura).
-*Esfuerzo: medio.*
+**6 · ~~Invertir la jerarquía: continuidad de producción primero, presupuesto
+después.~~** ✅ **Hecho el 2026-08-20.** Ver
+[§13.8](#138-etapa-3b--reparto-con-la-continuidad-como-restricción-dura) para la
+formulación y [§14](#14-diseño--continuidad-de-producción-como-restricción-dura)
+para el registro de por qué se hizo.
 
 **7 · Chat con LLM sobre el estado del sistema.** Ver
 [§15](#15-diseño--chat-de-explicabilidad-y-trazabilidad). *Esfuerzo: medio.*
@@ -941,7 +997,9 @@ después.** Ver [§14](#14-diseño--continuidad-de-producción-como-restricción
 1. Configurar `GEMINI_API_KEY` y `MLFLOW_TRACKING_URI` — desbloquea lo ya escrito.
 2. Sacar `approvals.db` de la imagen: hoy el sistema pierde su auditoría cada noche.
 3. Autenticación antes de publicar en Amplify.
-4. `run_id` en cada decisión — es barato y sin él la mochila no es reconstruible.
+4. `run_id` en cada decisión — es barato y sin él el reparto no es reconstruible.
+4.b Validar con negocio `i_h` (25 %) y `c_dia(k)` (400/80/10): son los dos números
+   que más mueven la decisión y hoy ninguno está medido sobre esta operación.
 5. Feedback loop (§9): es lo que convierte el MVP en un sistema que aprende.
 6. Traslado entre plantas: el ahorro está medido y supera el presupuesto de la corrida.
 7. Variables externas en el modelo: la única vía para que el forecast mejore.
@@ -1492,12 +1550,58 @@ del nominal. El sistema no corrige esto.
 
 ---
 
-### 13.5 Etapa 3 — Niveles derivados y cotas
+### 13.5 Etapa 3 — Lote económico, niveles derivados y cotas
+
+El nivel hasta el que se repone ya no es una cobertura en meses fijada por
+constante. Sale de la **cantidad económica de pedido**, formulación de Harris
+(1913) popularizada por Wilson (1934), y su enlace con el punto de reorden es la
+política `(s, S)` de Hadley & Whitin (1963).
+
+#### 13.5.1 La cantidad económica
 
 ```
-Imax[s]  = max( Imin[s] ,  ceil( D50_final[s] * 3.0 ) )
+h[i]  = i_h * c[i]                         costo de mantener
 
-Itgt[s]  = min(  max( Imin[s] , ceil( Imin[s] + D50_final[s] * 1.5 ) )  ,  Imax[s]  )
+D[s]  = D50_final[s] * 12                  demanda anual
+
+Q*[s] = sqrt( 2 * K[s] * D[s] / h[i] )     fórmula de Wilson
+
+Q[s]  = min( ceil(Q*[s]) , floor( D50_final[s] * 6.0 ) )
+```
+
+| Símbolo | Qué es | Unidad | Constante |
+|---|---|---|---|
+| `K[s]` | Costo fijo de traer un pedido: el flete medio de las ofertas aplicables | USD/pedido | `planning_order_cost` |
+| `c[i]` | Valor unitario de la pieza en el maestro | USD/unidad | `unit_cost_usd` |
+| `i_h` | Tasa anual de posesión: capital, bodega, seguro y riesgo de obsolescencia | fracción | `HOLDING_COST_RATE_ANNUAL = 0.25` |
+| `h[i]` | Costo de mantener una unidad parada un año | USD/unidad/año | — |
+| `D[s]` | Demanda anual proyectada | unidades/año | `MONTHS_PER_YEAR = 12` |
+| `Q*[s]` | Cantidad que minimiza el costo anual de pedir más mantener | unidades | — |
+| `Q[s]` | La misma, recortada por el tope de obsolescencia | unidades enteras | `EOQ_MAX_COVERAGE_MONTHS = 6.0` |
+
+**De dónde sale la fórmula.** El costo anual total es `K·D/Q + h·Q/2`: el primer
+término es lo que se paga en fletes al año, que cae al pedir lotes grandes; el
+segundo es el costo de mantener el inventario medio, que sube. Derivando e
+igualando a cero sale `Q* = sqrt(2KD/h)`. Es el único punto del sistema donde dos
+costos con signos opuestos se equilibran de forma cerrada.
+
+**Por qué el flete es el medio de las ofertas.** `K` debería ser el flete del
+proveedor que finalmente gane, pero ese proveedor lo elige el MILP de §13.6, que
+a su vez necesita la cantidad. Se rompe el círculo con el flete medio de las
+ofertas aplicables. La aproximación es barata por la forma de la fórmula: el
+flete entra bajo una raíz, así que equivocarse en el doble mueve `Q*` solo un
+41 %, y el costo total todavía menos.
+
+**Por qué el tope de cobertura.** Wilson no sabe que las piezas caducan. Una
+pieza barata con flete caro puede pedir lotes de más de un año de consumo, que es
+óptimo en costo y pésimo en obsolescencia. Recortarlo cuesta poco: la curva de
+costo total es **plana alrededor del óptimo** (Silver, Pyke & Peterson, 1998), y
+equivocarse en el doble del lote óptimo encarece el total solo un 25 %.
+
+#### 13.5.2 Niveles y cotas
+
+```
+Itgt[s] = Imax[s] = S[s] = Imin[s] + Q[s]
 
 Ivida[s] = max( 0 ,  floor( d[s] * 0.80 * V[i] )  -  q[s] )
 
@@ -1510,19 +1614,24 @@ des[s]   = max( 0 ,  min( Itgt[s] - q[s] ,  Amax[s] ) )
 
 | Símbolo | Qué es | Unidad | Constante |
 |---|---|---|---|
-| `Imax[s]` | Inventario máximo: cobertura de 3 meses, nunca menor que el mínimo | unidades | `MAX_COVERAGE_MONTHS = 3` |
-| `Itgt[s]` | Nivel objetivo de reposición: mínimo + 1,5 meses de consumo | unidades | `TARGET_COVERAGE_MONTHS = 1.5` |
+| `S[s]` | Nivel de reposición. En una política `(s, S)` es a la vez el objetivo y el techo | unidades | — |
 | `Ivida[s]` | Unidades consumibles antes del vencimiento, descontando lo que ya hay | unidades | `SHELF_LIFE_SAFETY_RATIO = 0.80` |
 | `Amax[s]` | Techo efectivo de compra | unidades | El más restrictivo de los dos |
-| `need[s]` | Faltante hasta el mínimo — **restricción dura** del MILP | unidades | — |
-| `des[s]` | Cantidad deseada hasta el objetivo — **lo que se pide** | unidades | — |
+| `need[s]` | Faltante hasta el punto de reorden — **restricción dura** del MILP | unidades | — |
+| `des[s]` | Cantidad deseada hasta el nivel de reposición — **lo que se pide** | unidades | — |
 
-**Fundamento y su límite.** `Itgt` implementa una política **order-up-to**: no se
-repone hasta el mínimo (eso dejaría la pieza al borde y obligaría a recomprar el
-mes siguiente pagando otro flete) sino hasta un nivel objetivo. El parámetro 1,5
-meses es **fijo por constante**; la teoría clásica lo derivaría equilibrando
+**Por qué el techo y el objetivo son el mismo número.** Nunca se compra por
+encima de `S`, así que `S` es el inventario máximo que la pieza puede llegar a
+tener. Mantenerlos como dos constantes distintas —una cobertura de 3 meses y otra
+de 1,5— era una duplicación sin fundamento: la política solo tiene un nivel.
+
+**Lo que esto cerró y lo que no.** Cierra el punto que la versión anterior de este
+documento declaraba explícitamente: «la teoría clásica lo derivaría equilibrando
 costo de ordenar contra costo de mantener (fórmula de Wilson / EOQ), usando el
-flete que ya está en los datos. Esa derivación no está implementada.
+flete que ya está en los datos. Esa derivación no está implementada». Ya lo está.
+No cierra que `i_h = 0,25` sigue siendo un parámetro de negocio sin validar, del
+mismo tipo que `c_dia(k)` en §13.7: es un valor típico de la práctica (20–30 %),
+no una medición de esta operación.
 
 ---
 
@@ -1616,17 +1725,33 @@ y **triplica el riesgo**.
 
 ---
 
-### 13.8 Etapa 3.b — Mochila de presupuesto
+### 13.8 Etapa 3.b — Reparto con la continuidad como restricción dura
 
 **Es el único paso que acopla las piezas entre sí.** Hasta aquí cada serie se
 resolvía por separado.
 
+El presupuesto **dejó de mandar sobre todo**. Antes maximizaba beneficio neto
+sujeto a `B`, y una pieza podía quedar aplazada aunque su quiebre parara una
+línea, simplemente porque otras rendían más por dólar. Es un mal negocio que la
+mochila no veía, porque trataba todas las piezas con la misma moneda. Ahora el
+presupuesto es una restricción sobre *lo discrecional*, y la continuidad de
+producción sube a restricción dura.
+
 ```
-maximizar     sum_{s in Cand}  b[s] * v[s]
+Cand_dura = { s : theta( k[i] ) = 1 }      criticidad A: paran una línea
+Cand_flex = el resto
 
-sujeto a      sum_{s in Cand}  Ctot[s] * v[s]  <=  B
+maximizar     sum_{s in Cand_flex}  b[s] * v[s]
 
-              v[s]  in  {0,1}
+sujeto a      v[s] = 1                     para todo s in Cand_dura       (R1)
+
+              sum_{s in Cand}  Ctot[s] * v[s]  <=  B + E                  (R2)
+
+              E  <=  E_max                                                (R3)
+
+              sum_{s in Clase_k}  v[s]  >=  ceil( theta[k] * |Clase_k| )  (R4)
+
+              v[s] in {0,1} ,  E >= 0
 ```
 
 | Símbolo | Qué es | Unidad | Origen |
@@ -1635,20 +1760,48 @@ sujeto a      sum_{s in Cand}  Ctot[s] * v[s]  <=  B
 | `v[s]` | Si la compra `s` se financia en esta corrida | 0/1 | Variable de decisión |
 | `Ctot[s]` | Costo total de la compra ya resuelta (`total_cost_usd`) | USD | Salida del MILP |
 | `b[s]` | Beneficio neto: `Cq[s] - Ctot[s]` (`net_benefit_usd`) | USD | §13.7 |
-| `B` | Presupuesto de la corrida | USD | 2 500 |
+| `B` | Presupuesto nominal de la corrida | USD | `SCENARIO_BUDGET_USD = 2500` |
+| `E` | **Excedente autorizado** consumido para cubrir lo crítico | USD | Reportado, no oculto |
+| `E_max` | Tope del excedente | USD | `BUDGET_OVERRUN_MAX_USD = 1500` |
+| `theta[k]` | Fracción mínima de la clase `k` que debe financiarse | fracción 0–1 | `SERVICE_FLOOR_BY_CRITICALITY` = A 1,00 · B 0,80 · C 0,50 |
 
-**Es el problema de la mochila 0/1**, linaje Lorie & Savage (1955) y Weingartner
-(1963) en racionamiento de capital.
+**Cómo se lee (R1).** Toda pieza de criticidad A bajo su punto de reorden se
+repone, sin competir. El optimizador ya no puede aplazarla.
+
+**Cómo se lee (R2) y (R3).** El presupuesto se vuelve elástico hasta `E_max`. Si
+lo crítico cabe en `B`, `E = 0` y nada cambia. Si no cabe, el modelo consume
+excedente **y lo reporta explícitamente**, que es el punto: la decisión de gastar
+de más queda visible y justificada. El excedente solo financia lo crítico; lo
+discrecional compite por `max(0, B − gasto crítico)`.
+
+**Cómo se lee (R4).** Es coherencia con §13.4.2. Si ya se declaró un 90 % de
+nivel de servicio para las piezas B al calcular el punto de reorden, el
+presupuesto no debería contradecirlo aplazando la mayoría de ellas. `theta_A = 1`
+es exactamente (R1), de modo que las dos restricciones son un mismo mecanismo con
+tres umbrales.
+
+**Escalera de relajación.** Cuando el dinero no alcanza ni para los pisos, el
+modelo no devuelve infactible: suelta el piso de la clase menos exigente, y si
+sigue sin caber, el de la siguiente. Aplazar una pieza C antes que una B es la
+misma jerarquía que declara el resto del sistema. El nivel de servicio realmente
+alcanzado se publica junto al declarado (`budget_allocation_summary`), de modo
+que soltar un piso sea visible y no un silencio.
+
+**Es el problema de la mochila 0/1** con cardinalidad por clase, linaje Lorie &
+Savage (1955) y Weingartner (1963) en racionamiento de capital.
 
 **Por qué exacto y no voraz.** El algoritmo voraz —ordenar por `b[s]/Ctot[s]` y
 llenar— es óptimo solo si las compras fueran fraccionables. Con decisiones
 indivisibles puede fallar: una compra muy rentable y cara desplaza a varias menos
 rentables y baratas que juntas rinden más. Con ~10–15 candidatos,
-*branch-and-bound* resuelve en milisegundos, así que no hay razón para la
-aproximación.
+*branch-and-bound* resuelve en milisegundos.
 
-**Atajos implementados:** si `sum Ctot <= B` se aprueban todas sin resolver; los
-candidatos con `Ctot[s] > B` se descartan antes de plantear el modelo.
+**El caso infactible.** Si `sum_{Cand_dura} Ctot > B + E_max`, no se relaja (R1)
+ni se falla en silencio. Se ordenan las piezas de `Cand_dura` por `Cq[s]`
+descendente —el quiebre que evitan—, se cubren las que caben, y las que no salen
+con decisión `ESCALAR` y el texto que dice cuánto dinero adicional hace falta y
+contra qué riesgo. Es el mismo principio de `REVISAR`: cuando el sistema no puede
+decidir, lo dice.
 
 **Solo compiten las filas `COMPRAR`.** Las de `REVISAR` no son gasto aprobado
 sino decisión pendiente de una persona; descontarlas reservaría dinero para
@@ -1665,7 +1818,7 @@ porque la valoración de §13.7 ya puso ambas mitades en la misma moneda.
 Orden estricto de evaluación por serie `s`:
 
 ```
-1.  need[s] = 0                  ->  NO_COMPRAR   "por encima del mínimo"
+1.  need[s] = 0                  ->  NO_COMPRAR   "por encima del punto de reorden"
 2.  O(s) = vacío                 ->  NO_COMPRAR   "sin proveedor para la ciudad"
 3.  Ivida[s] < min_o m[o]        ->  NO_COMPRAR   "vida útil no admite ni el MOQ"
 4.  min_o m[o] > Amax[s]         ->  REVISAR      resolver con R_sup = min_o m[o]
@@ -1674,14 +1827,24 @@ Orden estricto de evaluación por serie `s`:
 6.  post-MILP:     si COMPRAR y b[s] <= 0
                                  ->  NO_COMPRAR   "reponer cuesta más que el quiebre"
 
-7.  post-mochila:  si COMPRAR y v[s] = 0
-                                 ->  APLAZADO     "no cabe en el presupuesto"
+7.  post-reparto:  si COMPRAR, criticidad A y no cabe ni con E_max
+                                 ->  ESCALAR      "requiere ampliar el presupuesto"
+
+8.  post-reparto:  si COMPRAR y v[s] = 0
+                                 ->  APLAZADO     "no cabe en el presupuesto discrecional"
 ```
 
 **Bandera de revisión humana** `needs_review = 1` si: la serie ya venía marcada
 del forecast (`gamma_final < 0.5` o patrón Insuficiente), o la decisión es
 `REVISAR`, o la decisión es `COMPRAR` con `gamma_final < 0.5`, o la decisión es
-`APLAZADO`.
+`APLAZADO`, o la decisión es `ESCALAR`.
+
+**`ESCALAR` no es «más urgente que `APLAZADO`»: es de otra persona.** Una pieza
+aplazada es una compra que rendía menos que otras y la resuelve un comprador la
+corrida siguiente. Una escalada es una pieza cuyo quiebre para una línea y que ni
+con el excedente autorizado cabe: exige que alguien amplíe el presupuesto ahora.
+Por eso la interfaz le da banda propia y color de marca en lugar de un rojo más
+intenso.
 
 **El estado `REVISAR` no es un fallo del solver.** Es una tensión real de
 compras: el lote mínimo del proveedor supera el máximo que la pieza admite en
@@ -1744,11 +1907,14 @@ determinista anterior a 1985.
 | 13.4.1 | Conversión diaria | `app/core/inventory.py` | `monthly_to_daily`, `DAYS_PER_MONTH` |
 | 13.4.2 | Stock de seguridad | `app/core/inventory.py` | `safety_stock`, `Z_BY_CRITICALITY` |
 | 13.4.3 | Inventario mínimo | `app/core/inventory.py` | `inventory_minimum` |
-| 13.5 | Niveles derivados | `app/core/optimization.py` | `target_inventory`, `maximum_inventory`, `consumable_within_shelf_life` |
+| 13.5.1 | Cantidad económica | `app/core/optimization.py` | `economic_order_quantity`, `holding_cost_per_unit_year`, `planning_order_cost`, `HOLDING_COST_RATE_ANNUAL`, `EOQ_MAX_COVERAGE_MONTHS` |
+| 13.5.2 | Niveles y cotas | `app/core/optimization.py` | `replenishment_level`, `consumable_within_shelf_life` |
 | 13.6 | MILP de proveedor | `app/core/optimization.py` | `solve_single_purchase` |
 | 13.7 | Valoración del quiebre | `app/core/optimization.py` | `days_of_cover`, `stockout_days_avoided`, `stockout_cost` |
-| 13.8 | Mochila | `app/core/optimization.py` | `allocate_budget`, `apply_budget` |
-| 13.9 | Árbol de decisión | `app/core/optimization.py` | `build_recommendations` |
+| 13.8 | Reparto y continuidad dura | `app/core/optimization.py` | `allocate_budget`, `allocate_discretionary`, `apply_budget`, `budget_allocation_summary`, `BUDGET_OVERRUN_MAX_USD`, `SERVICE_FLOOR_BY_CRITICALITY` |
+| 13.9 | Árbol de decisión | `app/core/optimization.py` | `build_recommendations`, `DECISION_ESCALATE` |
+| 13.13 | Clasificación del catálogo | `app/core/classification.py` | `classify_parts`, `cross_matrix`, `build_classification` |
+| §13 entero | Fórmulas en pantalla | `frontend/js/formulas.js` | `FORMULAS`, `renderTheory` |
 
 ---
 
@@ -1771,6 +1937,10 @@ concluirse del sistema.
 | 10 | Los tres `z` reflejan la política de servicio deseada | §13.4.2 | Fijados por constante, no derivados de un costo de faltante |
 | 11 | Cada serie se optimiza independientemente | §13.6 | No modela consolidación de órdenes (un flete por proveedor) ni traslado entre plantas |
 | 12 | Los errores de ambos estimadores tienen igual varianza y son incorrelados | `lambda = 0.5` (§13.3.4) | El peso óptimo de la combinación no está estimado sobre los datos |
+| 13 | La tasa anual de posesión es del 25 % del valor de la pieza | `h = i·c` (§13.5.1) | Es un valor típico de la práctica (20–30 %), no una medición de esta operación. Sube la tasa y los lotes se encogen; bájala y crece el inventario |
+| 14 | La demanda es constante dentro del año | Fórmula de Wilson (§13.5.1) | EOQ supone demanda uniforme; con estacionalidad marcada el lote óptimo varía por mes y esta versión no lo recoge |
+| 15 | El flete medio de las ofertas aproxima el del proveedor que gane | `K` en §13.5.1 | Amortiguado por la raíz cuadrada: errar en el doble mueve `Q*` un 41 % y el costo total mucho menos |
+| 16 | La etiqueta de criticidad del maestro es correcta | Restricción dura (§13.8) | Si una pieza está mal etiquetada como A, el modelo gasta excedente real protegiendo la pieza equivocada |
 
 **La relación de dualidad que cerraría los supuestos 9 y 10.** Fijar `z` y fijar
 un costo de faltante son el mismo acto. Para un modelo `(R,Q)`:
@@ -1841,7 +2011,11 @@ llega a esa conclusión.
 
 ## 14. Diseño — Continuidad de producción como restricción dura
 
-> **Estado: ⬜ propuesto, no implementado.** Diseño corto para retomar después.
+> **Estado: ✅ IMPLEMENTADO el 2026-08-20.** La formulación operativa vive ahora
+> en [§13.8](#138-etapa-3b--reparto-con-la-continuidad-como-restricción-dura) y
+> el árbol de decisión con `ESCALAR` en
+> [§13.9](#139-árbol-de-decisión-completo). Esta sección se conserva como el
+> registro de por qué se hizo y qué se decidió, que es lo que §13 no cuenta.
 
 ### 14.1 El problema con el modelo actual
 
@@ -1934,16 +2108,19 @@ nivel de servicio por criticidad al calcular `Imin`, el presupuesto no debería
 contradecir esa política aplazando justo las críticas. Hoy hay una incoherencia
 declarada entre las dos etapas y esta restricción la cierra.
 
-### 14.5 Qué habría que tocar
+### 14.5 Qué se tocó
 
-| Archivo | Cambio |
-|---|---|
-| `app/core/optimization.py` | `allocate_budget`: partir candidatos, añadir `v[s] = 1` forzado y la variable `E` |
-| `app/core/optimization.py` | Nuevo estado `DECISION_ESCALATE = "ESCALAR"` y su motivo |
-| `app/core/optimization.py` | Constantes `BUDGET_OVERRUN_MAX_USD`, `SERVICE_FLOOR_BY_CRITICALITY` |
-| `app/services/pipeline_report.py` | Reportar `E` consumido y déficit si lo hay |
-| `frontend/` | Banda propia para `ESCALAR` — es acción de gerencia, no de comprador |
-| `tests/core/` | Caso: crítica que no cabe → `ESCALAR`, no `APLAZADO` |
+| Archivo | Cambio | Estado |
+|---|---|---|
+| `app/core/optimization.py` | `allocate_budget`: parte candidatos, fuerza `v[s] = 1` en criticidad A y estira el presupuesto hasta `E_max` | ✅ |
+| `app/core/optimization.py` | `allocate_discretionary` y `_solve_knapsack`: mochila de lo flexible con pisos de servicio y escalera de relajación | ✅ |
+| `app/core/optimization.py` | `DECISION_ESCALATE = "ESCALAR"` y `REASON_ESCALATE` | ✅ |
+| `app/core/optimization.py` | `BUDGET_OVERRUN_MAX_USD = 1500`, `SERVICE_FLOOR_BY_CRITICALITY = {A: 1.00, B: 0.80, C: 0.50}` | ✅ |
+| `app/core/optimization.py` | `budget_allocation_summary`: excedente consumido, déficit y nivel de servicio alcanzado por clase | ✅ |
+| `app/core/pipeline.py`, `app/services/recommendations.py` | Publican el reparto y el nivel de servicio junto al declarado | ✅ |
+| `frontend/js/turno.js` | La apertura abre por continuidad, no por presupuesto; banda propia `ESCALAR` con color de marca | ✅ |
+| `frontend/js/caso.js` | Bloque de escalada con el dinero adicional que pide y el quiebre que evita | ✅ |
+| `tests/core/test_budget.py` | 9 casos nuevos: crítica que no cabe → `ESCALAR`; excedente reportado; pisos que ceden antes de declarar infactible | ✅ |
 
 ### 14.6 Lo que este diseño NO resuelve
 
@@ -1955,6 +2132,14 @@ declarada entre las dos etapas y esta restricción la cierra.
 - **No sustituye al traslado entre plantas** (§11.4 mejora 5). Mover stock sigue
   siendo más barato que comprar, y debería resolverse *antes* de consumir
   excedente presupuestal.
+- **`E_max` es un parámetro de negocio.** 1 500 USD sobre 2 500 es un 60 % de
+  elasticidad, un número elegido para el MVP y no negociado con finanzas. Su
+  magnitud decide cuántas piezas críticas caben antes de escalar.
+- **Los pisos discrecionales rara vez se cumplen con este presupuesto.** En la
+  corrida actual B y C quedan en 0 % contra pisos de 80 % y 50 %. La restricción
+  no es decorativa —cede de forma ordenada y lo reporta— pero con este dinero
+  casi nunca llega a morder, y eso es en sí mismo el hallazgo: el presupuesto de
+  la corrida es incoherente con la política de servicio declarada en §13.4.2.
 
 ---
 

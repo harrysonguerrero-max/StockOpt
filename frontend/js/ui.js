@@ -5,37 +5,42 @@ import { decimal, escape, leadTime, months, pattern, units, usd } from "./format
 export const PENDING = "Pendiente aprobacion";
 export const ADVANCED = ["Aprobado", "Contactado proveedor", "Orden confirmada"];
 
-/* El semaforo de la pantalla. Las cuatro decisiones no piden lo mismo y la
+/* El semaforo de la pantalla. Las cinco decisiones no piden lo mismo y la
    interfaz tiene que decirlo antes que ninguna otra cosa:
 
-     COMPRAR      el solver la resolvio sin ambigüedad; no requiere criterio
+     ESCALAR      pieza critica que no cabe ni con el excedente; decide gerencia
      REVISAR      hay una tension que el solver no puede zanjar; decide alguien
-     APLAZADO     procedia y la freno el presupuesto; decide alguien con dinero
+     APLAZADO     procedia y la freno el presupuesto discrecional
+     COMPRAR      el solver la resolvio sin ambigüedad; no requiere criterio
      NO_COMPRAR   no hay nada que hacer
 
-   De ahi que el verde sea el color mas callado de los tres: marca lo que ya
-   esta resuelto. El ambar y el rojo son los que reclaman. */
+   De ahi que el verde sea el color mas callado: marca lo que ya esta resuelto.
+   El ambar y el rojo son los que reclaman, y el azul de ESCALAR se separa de
+   los tres porque no es trabajo de comprador sino de quien firma presupuesto. */
 const SEMAPHORE = {
-  COMPRAR: { level: "go", label: "Automática" },
-  REVISAR: { level: "hold", label: "Tu decisión" },
-  APLAZADO: { level: "stop", label: "Sin presupuesto" },
-  NO_COMPRAR: { level: "off", label: "Sin acción" },
+  ESCALAR: { level: "escalate", label: "Needs budget" },
+  COMPRAR: { level: "go", label: "Automatic" },
+  REVISAR: { level: "hold", label: "Your call" },
+  APLAZADO: { level: "stop", label: "Deferred" },
+  NO_COMPRAR: { level: "off", label: "No action" },
 };
 
 export const semaphore = (item) => SEMAPHORE[item.decision] || SEMAPHORE.NO_COMPRAR;
 
-/** Medidor de existencias: stock sobre la escala del maximo, con marca en el
- *  minimo. Codifica en una sola lectura la tension que decide cada caso. */
+/** Medidor de existencias: stock sobre la escala del nivel de reposicion, con
+ *  marca en el punto de reorden. Codifica en una sola lectura la tension que
+ *  decide cada caso. */
 export function gauge(item, size = "") {
   const g = item.gauge;
   return `
     <span class="gauge ${size}">
       <span class="gauge__track">
         <span class="gauge__fill gauge__fill--${g.zone}" style="width:${g.fill_pct}%"></span>
-        <span class="gauge__min" style="left:${g.minimum_pct}%" title="Mínimo operativo"></span>
+        <span class="gauge__min" style="left:${g.minimum_pct}%" title="Reorder point"></span>
       </span>
       <span class="gauge__read">
-        <b>${units(item.on_hand_qty)}</b> en bodega · mínimo <b>${units(item.inventory_min)}</b> · caben <b>${units(item.inventory_max)}</b>
+        <b>${units(item.on_hand_qty)}</b> on hand · reorder at <b>${units(item.inventory_min)}</b>
+        · refill to <b>${units(item.inventory_max)}</b>
       </span>
     </span>`;
 }
@@ -43,16 +48,19 @@ export function gauge(item, size = "") {
 /** La accion en forma de verbo. La etiqueta COMPRAR / REVISAR es el nombre
  *  interno de la decision, no lo que la persona tiene que hacer. */
 export function actionLine(item) {
+  if (item.decision === "ESCALAR") {
+    return { text: `Escalate: ${usd(item.total_cost_usd)} USD of extra budget`, tone: "escalate" };
+  }
   if (item.decision === "COMPRAR") {
-    return { text: `Comprar ${units(item.recommended_qty)} — automática`, tone: "go" };
+    return { text: `Buy ${units(item.recommended_qty)} — automatic`, tone: "go" };
   }
   if (item.decision === "REVISAR") {
-    return { text: `Decidir: lote mínimo de ${units(item.recommended_qty)}`, tone: "hold" };
+    return { text: `Decide: minimum lot of ${units(item.recommended_qty)}`, tone: "hold" };
   }
   if (item.decision === "APLAZADO") {
-    return { text: `Aplazado: ${usd(item.total_cost_usd)} USD`, tone: "stop" };
+    return { text: `Deferred: ${usd(item.total_cost_usd)} USD`, tone: "stop" };
   }
-  return { text: "Sin acción", tone: "none" };
+  return { text: "No action", tone: "none" };
 }
 
 /* En los casos que exigen criterio, el sistema no se calla: dice que haria y
@@ -71,24 +79,24 @@ export function recommendation(item) {
   if (expires) {
     return {
       buy: false,
-      headline: "Yo no compraría",
-      why: `El lote deja ${months(item.coverage_months)} de inventario y la pieza `
-        + `caduca a los ${months(shelfMonths)}.`,
+      headline: "I would not buy",
+      why: `The lot leaves ${months(item.coverage_months)} of stock and the part expires `
+        + `after ${months(shelfMonths)}.`,
     };
   }
   if (benefit > 0) {
     return {
       buy: true,
-      headline: "Yo compraría",
-      why: `Evita ${usd(item.stockout_cost_usd)} USD de quiebre y cuesta `
-        + `${usd(item.total_cost_usd)}: ${usd(benefit)} USD a favor.`,
+      headline: "I would buy",
+      why: `It prevents ${usd(item.stockout_cost_usd)} USD of stockout and costs `
+        + `${usd(item.total_cost_usd)}: ${usd(benefit)} USD in favour.`,
     };
   }
   return {
     buy: false,
-    headline: "Yo no compraría",
-    why: `Cuesta ${usd(item.total_cost_usd)} USD y solo evita `
-      + `${usd(item.stockout_cost_usd)} de quiebre: ${usd(Math.abs(benefit))} USD en contra.`,
+    headline: "I would not buy",
+    why: `It costs ${usd(item.total_cost_usd)} USD and only prevents `
+      + `${usd(item.stockout_cost_usd)} of stockout: ${usd(Math.abs(benefit))} USD against.`,
   };
 }
 
@@ -98,23 +106,27 @@ export function whyLine(item) {
 
   // El limite que bloquea no es la capacidad de la bodega sino el maximo
   // permitido, que ya descuenta lo que caducaria antes de consumirse.
+  if (item.decision === "ESCALAR") {
+    return `Criticality ${escape(item.criticality)}: running out stops a line. `
+      + `Covering it needs ${usd(item.total_cost_usd)} USD beyond the authorised budget.`;
+  }
   if (item.decision === "REVISAR") {
-    return `${escape(item.supplier_name || "El proveedor")} no vende menos de `
-      + `${units(item.recommended_qty)} y el máximo permitido es `
+    return `${escape(item.supplier_name || "The supplier")} does not sell fewer than `
+      + `${units(item.recommended_qty)} and the allowed maximum is `
       + `${units(item.max_allowed_qty)}.`;
   }
   if (item.decision === "APLAZADO") {
     const risk = item.stockout_cost_usd
-      ? ` Deja ${usd(item.stockout_cost_usd)} USD de riesgo de quiebre sin cubrir.` : "";
-    return `El presupuesto de la corrida ya está comprometido.${risk}`;
+      ? ` It leaves ${usd(item.stockout_cost_usd)} USD of stockout risk uncovered.` : "";
+    return `Production continuity took the budget of this run first.${risk}`;
   }
   if (item.decision === "COMPRAR") {
     const short = gap > 0
-      ? `Faltan ${units(gap)} para el mínimo.`
-      : "Está en el punto de reposición.";
-    return `${short} Al ritmo actual quedan ${runway(item)} en bodega.`;
+      ? `${units(gap)} short of the reorder point.`
+      : "Right at the reorder point.";
+    return `${short} At the current rate there is ${runway(item)} left on the shelf.`;
   }
-  return `Cubre el mínimo con ${units(item.on_hand_qty)} en bodega; aguanta ${runway(item)}.`;
+  return `Covers its minimum with ${units(item.on_hand_qty)} on hand; lasts ${runway(item)}.`;
 }
 
 /** Cuanto dura el stock actual al consumo proyectado. */
@@ -125,7 +137,7 @@ export function runway(item) {
 /** Pie de la tarjeta: a quien, cuanto y en cuanto tiempo. */
 export function footLine(item) {
   if (!item.supplier_id) {
-    return `<span>${decimal(item.demand_monthly)} u/mes</span>`
+    return `<span>${decimal(item.demand_monthly)} u/month</span>`
       + `<span>${pattern(item.pattern)}</span>`;
   }
   return `
@@ -135,7 +147,7 @@ export function footLine(item) {
 }
 
 export function critChip(item) {
-  return `<span class="crit crit--${item.criticality}" title="Criticidad ${item.criticality}">${item.criticality}</span>`;
+  return `<span class="crit crit--${item.criticality}" title="Criticality ${item.criticality}">${item.criticality}</span>`;
 }
 
 /** Ordena poniendo delante lo que mas duele: criticidad, despues cuanto le

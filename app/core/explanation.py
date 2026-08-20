@@ -16,9 +16,18 @@ Funcionalidad:
     Redactarlo primero de forma deterministica tiene una ventaja adicional: deja
     fijado que evidencia debe aparecer si o si en la explicacion, que es
     exactamente el contrato que despues hay que exigirle al modelo.
+
+    El texto sale en ingles porque es lo que se ve en pantalla. Los codigos de
+    decision siguen en español porque viajan en los CSV y en la base de estados,
+    y traducirlos ahi obligaria a migrar dato ya guardado.
 """
 
-from app.core.optimization import DECISION_BUY, DECISION_DEFERRED, DECISION_REVIEW
+from app.core.optimization import (
+    DECISION_BUY,
+    DECISION_DEFERRED,
+    DECISION_ESCALATE,
+    DECISION_REVIEW,
+)
 
 CONFIDENCE_HIGH = 0.75
 CONFIDENCE_LOW = 0.50
@@ -38,10 +47,10 @@ def confidence_label(confidence: float) -> str:
         interpretar la escala.
     """
     if confidence >= CONFIDENCE_HIGH:
-        return "alta"
+        return "high"
     if confidence >= CONFIDENCE_LOW:
-        return "media"
-    return "baja"
+        return "medium"
+    return "low"
 
 
 def build_assumptions(record: dict) -> list:
@@ -55,28 +64,35 @@ def build_assumptions(record: dict) -> list:
 
     Funcionalidad:
         Hace visible lo que el sistema dio por sentado: el patron de demanda
-        detectado, la confianza de la proyeccion, el plazo de entrega asumido y
-        el margen de vida util. Son los mismos puntos que el spec exige
-        comunicar y los que despues debera cubrir la version con modelo de
-        lenguaje.
+        detectado, la confianza de la proyeccion, el plazo de entrega asumido,
+        de donde sale la cantidad que se pide y el margen de vida util. Son los
+        mismos puntos que el spec exige comunicar y los que despues debera
+        cubrir la version con modelo de lenguaje.
     """
     assumptions = [
         (
-            f"Demanda proyectada de {record['demand_monthly']:.1f} unidades al mes, "
-            f"con patron {record['pattern'].lower()}"
+            f"Forecast demand of {record['demand_monthly']:.1f} units per month, "
+            f"{record['pattern'].lower()} pattern"
         ),
         (
-            f"Confianza {confidence_label(record['confidence'])} "
-            f"({record['confidence']:.2f}) en la proyeccion"
+            f"{confidence_label(record['confidence']).capitalize()} confidence "
+            f"({record['confidence']:.2f}) in the forecast"
         ),
     ]
 
     if record.get("lead_time_days"):
-        assumptions.append(f"Plazo de entrega asumido de {record['lead_time_days']:.1f} dias")
+        assumptions.append(f"Assumed lead time of {record['lead_time_days']:.1f} days")
+
+    if record.get("eoq_units"):
+        assumptions.append(
+            f"Economic order quantity of {int(record['eoq_units'])} units, balancing "
+            f"{record['order_cost_usd']:.2f} USD of freight per order against "
+            f"{record['holding_cost_usd']:.2f} USD of holding cost per unit and year"
+        )
 
     assumptions.append(
-        f"Vida util de {record['shelf_life_days']} dias: admite hasta "
-        f"{record['max_allowed_qty']} unidades sin riesgo de obsolescencia"
+        f"Shelf life of {record['shelf_life_days']} days: allows up to "
+        f"{record['max_allowed_qty']} units with no obsolescence risk"
     )
 
     alternatives = record.get("alternatives") or []
@@ -87,20 +103,20 @@ def build_assumptions(record: dict) -> list:
             nearest = rejected[0]
             gap = nearest["total_cost_usd"] - chosen["total_cost_usd"]
             assumptions.append(
-                f"Se evaluaron {len(alternatives)} proveedores que surten esta "
-                f"ciudad. El siguiente en costo es {nearest['supplier_name']}, "
-                f"{gap:.2f} USD mas caro"
+                f"{len(alternatives)} suppliers serving this city were evaluated. The "
+                f"next cheapest is {nearest['supplier_name']}, {gap:.2f} USD more "
+                f"expensive"
             )
         else:
             cheapest = alternatives[0]
             assumptions.append(
-                f"Se evaluaron {len(alternatives)} proveedores que surten esta "
-                f"ciudad. Si hubiera que reponer, el mas conveniente seria "
-                f"{cheapest['supplier_name']} a {cheapest['unit_price_usd']:.2f} "
-                f"USD por unidad"
+                f"{len(alternatives)} suppliers serving this city were evaluated. If a "
+                f"replenishment were needed, the best option would be "
+                f"{cheapest['supplier_name']} at {cheapest['unit_price_usd']:.2f} USD "
+                f"per unit"
             )
     elif record["alternatives_evaluated"]:
-        assumptions.append("Unico proveedor disponible para esta pieza en esta ciudad")
+        assumptions.append("Only one supplier available for this part in this city")
     return assumptions
 
 
@@ -118,8 +134,10 @@ def build_explanation(record: dict) -> dict:
     Funcionalidad:
         Compone el texto segun la decision. Una compra explica el faltante, el
         proveedor elegido y el costo. Un caso en revision expone la tension que
-        obliga a decidir a una persona. Una no compra dice por que no hace falta
-        actuar. Esta es la funcion que reemplazara el modelo de lenguaje.
+        obliga a decidir a una persona. Una escalada dice cuanto dinero adicional
+        hace falta para no arriesgar un paro de linea. Una no compra dice por que
+        no hace falta actuar. Esta es la funcion que reemplazara el modelo de
+        lenguaje.
     """
     decision = record["decision"]
     sku = record["sku_id"]
@@ -127,72 +145,88 @@ def build_explanation(record: dict) -> dict:
 
     if decision == DECISION_BUY:
         headline = (
-            f"Comprar {record['recommended_qty']} unidades a "
-            f"{record['supplier_name']} por {record['total_cost_usd']:.2f} USD"
+            f"Buy {record['recommended_qty']} units from "
+            f"{record['supplier_name']} for {record['total_cost_usd']:.2f} USD"
         )
         body = (
-            f"En {city} quedan {record['on_hand_qty']} unidades de {sku} y el "
-            f"minimo operativo es {record['inventory_min']}. Con la demanda "
-            f"proyectada, esas existencias no cubren los {record['lead_time_days']:.1f} "
-            f"dias que tarda la reposicion, asi que se recomienda reponer ahora. "
-            f"Entre las {record['alternatives_evaluated']} opciones que surten "
-            f"{city}, {record['supplier_name']} resulta la mas economica "
-            f"considerando precio unitario y flete."
+            f"{city} holds {record['on_hand_qty']} units of {sku} against an operating "
+            f"minimum of {record['inventory_min']}. At the forecast demand, that stock "
+            f"does not cover the {record['lead_time_days']:.1f} days a replenishment "
+            f"takes, so it is worth ordering now. Among the "
+            f"{record['alternatives_evaluated']} offers that serve {city}, "
+            f"{record['supplier_name']} is the cheapest once unit price and freight are "
+            f"added together."
         )
         if record.get("stockout_cost_usd"):
             body += (
-                f" La compra evita un quiebre valorado en "
-                f"{record['stockout_cost_usd']:.2f} USD para una pieza de "
-                f"criticidad {record['criticality']}, asi que rinde "
-                f"{record['net_benefit_usd']:.2f} USD netos."
+                f" The order prevents a stockout valued at "
+                f"{record['stockout_cost_usd']:.2f} USD on a criticality "
+                f"{record['criticality']} part, so it returns "
+                f"{record['net_benefit_usd']:.2f} USD net."
             )
+    elif decision == DECISION_ESCALATE:
+        missing = max(0, record["inventory_min"] - record["on_hand_qty"])
+        headline = (
+            f"Management decision: {record['total_cost_usd']:.2f} USD are needed to "
+            f"keep a criticality {record['criticality']} part in stock"
+        )
+        body = (
+            f"{city} holds {record['on_hand_qty']} units of {sku} against a minimum of "
+            f"{record['inventory_min']}, so {missing} are missing. This part stops a "
+            f"line when it runs out, so the model funds it before anything "
+            f"discretionary. It does not fit even after stretching the budget by the "
+            f"authorised overrun. The replenishment itself is settled: "
+            f"{record['recommended_qty']} units from {record['supplier_name']} for "
+            f"{record['total_cost_usd']:.2f} USD, against a stockout valued at "
+            f"{record['stockout_cost_usd']:.2f} USD. Approving the extra budget is a "
+            f"management call, not one the optimiser can make on its own."
+        )
     elif decision == DECISION_DEFERRED:
         missing = max(0, record["inventory_min"] - record["on_hand_qty"])
         headline = (
-            f"Reposicion necesaria aplazada: {record['total_cost_usd']:.2f} USD "
-            f"no caben en el presupuesto"
+            f"Replenishment deferred: {record['total_cost_usd']:.2f} USD do not fit in "
+            f"the discretionary budget"
         )
         body = (
-            f"En {city} quedan {record['on_hand_qty']} unidades de {sku} frente a un "
-            f"minimo de {record['inventory_min']}, asi que faltan {missing}. La "
-            f"reposicion es tecnicamente correcta: {record['recommended_qty']} "
-            f"unidades a {record['supplier_name']} por "
-            f"{record['total_cost_usd']:.2f} USD. Lo que falta es dinero: el "
-            f"presupuesto de esta corrida rinde mas en otras piezas. Dejarla "
-            f"fuera expone a un quiebre valorado en "
-            f"{record['stockout_cost_usd']:.2f} USD, asi que financiarla "
-            f"rendiria {record['net_benefit_usd']:.2f} USD netos. Es la cifra "
-            f"con la que se pide una ampliacion del presupuesto."
+            f"{city} holds {record['on_hand_qty']} units of {sku} against a minimum of "
+            f"{record['inventory_min']}, so {missing} are missing. The replenishment is "
+            f"technically correct: {record['recommended_qty']} units from "
+            f"{record['supplier_name']} for {record['total_cost_usd']:.2f} USD. What is "
+            f"missing is money. Production continuity is funded first, and what is left "
+            f"goes further on other parts. Leaving it out exposes a stockout valued at "
+            f"{record['stockout_cost_usd']:.2f} USD, so funding it would return "
+            f"{record['net_benefit_usd']:.2f} USD net. That is the figure to take into "
+            f"a budget request."
         )
     elif decision == DECISION_REVIEW:
         missing = max(0, record["inventory_min"] - record["on_hand_qty"])
         shortfall = (
-            f"faltan {missing} unidades"
+            f"{missing} units are missing"
             if missing > 1
-            else f"falta {missing} unidad"
+            else "1 unit is missing"
             if missing == 1
-            else "no falta nada"
+            else "nothing is missing"
         )
         headline = (
-            f"No se recomienda comprar {record['recommended_qty']} unidades: "
-            f"es el lote minimo de {record['supplier_name']}"
+            f"Buying {record['recommended_qty']} units is not recommended: it is the "
+            f"minimum order quantity at {record['supplier_name']}"
         )
         body = (
-            f"En {city} quedan {record['on_hand_qty']} unidades de {sku} y el "
-            f"minimo operativo es {record['inventory_min']}, asi que {shortfall} "
-            f"para cubrirlo. El problema es que {record['supplier_name']} no vende "
-            f"menos de {record['recommended_qty']} unidades, y en bodega solo caben "
-            f"{record['inventory_max']}. Aceptar ese lote cuesta "
-            f"{record['total_cost_usd']:.2f} USD y deja "
-            f"{record['coverage_months']} meses de inventario. La cifra que ves no "
-            f"es una recomendacion del sistema sino la condicion del proveedor: "
-            f"decide si prefieres el exceso de existencias o quedarte sin la pieza."
+            f"{city} holds {record['on_hand_qty']} units of {sku} against an operating "
+            f"minimum of {record['inventory_min']}, so {shortfall} to cover it. The "
+            f"problem is that {record['supplier_name']} does not sell fewer than "
+            f"{record['recommended_qty']} units, and the replenishment level for this "
+            f"part is {record['inventory_max']}. Taking that lot costs "
+            f"{record['total_cost_usd']:.2f} USD and leaves "
+            f"{record['coverage_months']} months of stock. The figure you see is not a "
+            f"recommendation from the system but the supplier's condition: decide "
+            f"whether you prefer the excess stock or the risk of running out."
         )
     else:
-        headline = "Sin accion requerida"
+        headline = "No action required"
         body = (
-            f"En {city} hay {record['on_hand_qty']} unidades de {sku} frente a un "
-            f"minimo de {record['inventory_min']}. {record['reason']}."
+            f"{city} holds {record['on_hand_qty']} units of {sku} against a minimum of "
+            f"{record['inventory_min']}. {record['reason']}."
         )
 
     return {

@@ -41,6 +41,14 @@ INSUFFICIENT = "Insuficiente"
 
 PRECEDENCE = [INSUFFICIENT, SEASONAL, TREND, VOLATILE, STABLE]
 
+PATTERN_LABELS = {
+    SEASONAL: "Seasonal",
+    TREND: "Trending",
+    STABLE: "Stable",
+    VOLATILE: "Volatile",
+    INSUFFICIENT: "Insufficient",
+}
+
 RECOMMENDED_MODEL = {
     SEASONAL: "holt_winters",
     TREND: "linear_regression",

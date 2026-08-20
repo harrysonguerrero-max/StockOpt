@@ -3,6 +3,7 @@
 import { apiUrl, loadQueue, state, toast } from "./api.js";
 import { openCase, closeCase, setCaseListener } from "./caso.js";
 import { initDatos, loadCatalog } from "./datos.js";
+import { loadClassification } from "./clasificacion.js";
 import { initPipeline, loadPipeline, refreshTracer } from "./pipeline.js";
 import { fillTableFilters, initTable, renderTable, setTableListener } from "./tabla.js";
 import { renderTurno } from "./turno.js";
@@ -21,7 +22,10 @@ function show(view) {
       link.dataset.view === view || (view === "datos" && link.dataset.view === "modelo"));
   });
   if (view === "modelo") loadPipeline();
-  if (view === "datos") loadCatalog();
+  if (view === "datos") {
+    loadCatalog();
+    loadClassification();
+  }
   window.scrollTo({ top: 0 });
 }
 
@@ -51,7 +55,7 @@ document.getElementById("back-modelo").addEventListener("click", () => show("mod
 document.getElementById("refresh").addEventListener("click", async () => {
   closeCase();
   await refresh(true);
-  toast("Datos recargados");
+  toast("Data reloaded");
 });
 
 setCaseListener(() => refresh(false));

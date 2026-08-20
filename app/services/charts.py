@@ -19,6 +19,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from app.core.optimization import DECISION_LABELS
+from app.core.patterns import PATTERN_LABELS
 from app.core.pipeline import (
     ARTIFACT_DIR as PIPELINE_DIR,
 )
@@ -110,16 +112,16 @@ def chart_model_vs_baselines(metrics: dict, baselines: dict):
         Es la grafica que responde a la pregunta de si el modelo aporta algo
         sobre lo que ya habia.
     """
-    labels = ["Modelo global"] + [name.replace("_", " ").capitalize() for name in baselines]
+    labels = ["Global model"] + [name.replace("_", " ").capitalize() for name in baselines]
     values = [metrics["wmape"]] + [reference["wmape"] for reference in baselines.values()]
     colors = [SUCCESS if values[0] == min(values) else WARNING] + [MUTED] * len(baselines)
 
     figure, axes = plt.subplots(figsize=(7.2, 2.6 + 0.4 * len(labels)))
     bars = axes.barh(labels, values, color=colors, height=0.55)
     axes.invert_yaxis()
-    axes.set_xlabel("WMAPE en validación (menor es mejor)")
+    axes.set_xlabel("WMAPE on validation (lower is better)")
     axes.set_title(
-        "Error del modelo frente a las referencias", fontsize=12, fontweight="bold", loc="left"
+        "Model error against the baselines", fontsize=12, fontweight="bold", loc="left"
     )
     axes.xaxis.set_major_formatter(lambda x, _: f"{x:.0%}")
 
@@ -171,9 +173,9 @@ def chart_predicted_vs_actual(actual, predicted):
         linewidth=0.4,
         zorder=2,
     )
-    axes.set_xlabel("Consumo real (unidades/mes)")
-    axes.set_ylabel("Proyección del modelo")
-    axes.set_title("Proyección frente a consumo real", fontsize=12, fontweight="bold", loc="left")
+    axes.set_xlabel("Actual consumption (units/month)")
+    axes.set_ylabel("Model forecast")
+    axes.set_title("Forecast against actual consumption", fontsize=12, fontweight="bold", loc="left")
     axes.set_xlim(0, top)
     axes.set_ylim(0, top)
     _style(axes)
@@ -205,11 +207,11 @@ def chart_error_distribution(actual, predicted):
         color=DANGER,
         linewidth=1.4,
         linestyle="--",
-        label=f"Sesgo medio {error.mean():+.2f}",
+        label=f"Mean bias {error.mean():+.2f}",
     )
-    axes.set_xlabel("Error de proyección (unidades)")
-    axes.set_ylabel("Casos")
-    axes.set_title("Distribución del error", fontsize=12, fontweight="bold", loc="left")
+    axes.set_xlabel("Forecast error (units)")
+    axes.set_ylabel("Cases")
+    axes.set_title("Error distribution", fontsize=12, fontweight="bold", loc="left")
     axes.legend(frameon=False, fontsize=9, labelcolor=TEXT)
     _style(axes)
     return _save(figure, CHART_FILES["errors"])
@@ -233,8 +235,8 @@ def chart_feature_importance(importance, top: int = 12):
 
     figure, axes = plt.subplots(figsize=(7.2, 0.34 * len(data) + 1.9))
     axes.barh(data["variable"], data["aporte"], color=SECONDARY, height=0.6)
-    axes.set_xlabel("Deterioro del error al barajar la variable")
-    axes.set_title("Qué sostiene la proyección", fontsize=12, fontweight="bold", loc="left")
+    axes.set_xlabel("Error increase when the feature is shuffled")
+    axes.set_title("What holds the forecast up", fontsize=12, fontweight="bold", loc="left")
     _style(axes)
     return _save(figure, CHART_FILES["importance"])
 
@@ -275,7 +277,7 @@ def chart_validation_series(validation, predicted, series_count: int = 4):
             markersize=4,
             color=PRIMARY,
             linewidth=1.6,
-            label="Real",
+            label="Actual",
         )
         axes.plot(
             months,
@@ -285,7 +287,7 @@ def chart_validation_series(validation, predicted, series_count: int = 4):
             color=WARNING,
             linewidth=1.6,
             linestyle="--",
-            label="Modelo",
+            label="Model",
         )
         axes.set_title(f"{sku} · {city}", fontsize=10, fontweight="600", loc="left")
         axes.legend(frameon=False, fontsize=8, labelcolor=TEXT)
@@ -295,7 +297,7 @@ def chart_validation_series(validation, predicted, series_count: int = 4):
         grid[empty // 2][empty % 2].axis("off")
 
     figure.suptitle(
-        "Proyección mes a mes en validación",
+        "Month by month forecast on validation",
         fontsize=12,
         fontweight="bold",
         color=TEXT,
@@ -389,14 +391,14 @@ def chart_cleaning_funnel(cleaning: dict):
         axes.text(
             0.5,
             0.5,
-            "Ninguna regla descarto filas",
+            "No rule discarded any rows",
             ha="center",
             va="center",
             color=MUTED,
             transform=axes.transAxes,
         )
 
-    axes.set_xlabel("Filas descartadas")
+    axes.set_xlabel("Rows discarded")
     axes.tick_params(axis="y", labelsize=8)
     _style(axes)
     _headline(
@@ -439,7 +441,7 @@ def chart_demand_history(dataset: dict):
         axes.text(
             months[0],
             max(values) * 0.95,
-            " Meses simulados",
+            " Simulated months",
             color=WARNING,
             fontsize=9,
             fontweight="600",
@@ -448,7 +450,7 @@ def chart_demand_history(dataset: dict):
         axes.text(
             months[boundary],
             max(values) * 0.95,
-            " Meses observados",
+            " Observed months",
             color=PRIMARY,
             fontsize=9,
             fontweight="600",
@@ -458,9 +460,9 @@ def chart_demand_history(dataset: dict):
     step = max(1, len(months) // 12)
     axes.set_xticks(months[::step])
     axes.set_xticklabels(months[::step], rotation=45, ha="right", fontsize=8)
-    axes.set_ylabel("Unidades consumidas")
+    axes.set_ylabel("Units consumed")
     axes.set_title(
-        f"{dataset['months']} meses de demanda · {dataset['series']} series",
+        f"{dataset['months']} months of demand · {dataset['series']} series",
         fontsize=12,
         fontweight="bold",
         loc="left",
@@ -501,7 +503,7 @@ def chart_pattern_map(patterns: dict):
             [point["seasonal_strength"] for point in subset],
             s=44,
             alpha=0.75,
-            label=f"{label} ({len(subset)})",
+            label=f"{PATTERN_LABELS.get(label, label)} ({len(subset)})",
             color=colors.get(label, MUTED),
             edgecolor=SURFACE,
             linewidth=0.6,
@@ -513,7 +515,7 @@ def chart_pattern_map(patterns: dict):
     axes.text(
         thresholds["cv_volatile"],
         axes.get_ylim()[1],
-        f" volatil si CV > {thresholds['cv_volatile']}",
+        f" volatile if CV > {thresholds['cv_volatile']}",
         color=MUTED,
         fontsize=8,
         va="top",
@@ -521,17 +523,17 @@ def chart_pattern_map(patterns: dict):
     axes.text(
         axes.get_xlim()[0],
         thresholds["seasonal_strength"],
-        f" estacional si fuerza ≥ {thresholds['seasonal_strength']} y p < "
+        f" seasonal if strength >= {thresholds['seasonal_strength']} and p < "
         f"{thresholds['seasonal_pvalue']}",
         color=MUTED,
         fontsize=8,
         va="bottom",
     )
 
-    axes.set_xlabel("Coeficiente de variacion (σ/μ)")
-    axes.set_ylabel("Fuerza estacional")
+    axes.set_xlabel("Coefficient of variation (sigma/mu)")
+    axes.set_ylabel("Seasonal strength")
     axes.set_title(
-        "Por que cada serie cayo en su patron", fontsize=12, fontweight="bold", loc="left"
+        "Why each series landed in its pattern", fontsize=12, fontweight="bold", loc="left"
     )
     axes.legend(frameon=False, fontsize=8, labelcolor=TEXT, loc="upper right")
     _style(axes)
@@ -553,10 +555,19 @@ def chart_decision_breakdown(optimization: dict):
         dice nada, saber que todas lo son por estar por encima del minimo si.
         Cada barra es un motivo, coloreado segun la decision a la que lleva.
     """
-    colors = {"COMPRAR": SUCCESS, "REVISAR": WARNING, "APLAZADO": DANGER, "NO_COMPRAR": MUTED}
+    colors = {
+        "COMPRAR": SUCCESS,
+        "REVISAR": WARNING,
+        "APLAZADO": DANGER,
+        "ESCALAR": PRIMARY,
+        "NO_COMPRAR": MUTED,
+    }
     reasons = list(reversed(optimization["reasons"]))
 
-    labels = [f"{_wrap(item['reason'], 46)}\n{item['decision']}" for item in reasons]
+    labels = [
+        f"{_wrap(item['reason'], 46)}\n{DECISION_LABELS.get(item['decision'], item['decision'])}"
+        for item in reasons
+    ]
     values = [item["count"] for item in reasons]
     bar_colors = [colors.get(item["decision"], MUTED) for item in reasons]
 
@@ -576,10 +587,10 @@ def chart_decision_breakdown(optimization: dict):
 
     total = sum(optimization["counts"].values())
     axes.set_xlim(0, max(values) * 1.15)
-    axes.set_xlabel("Combinaciones pieza-ciudad")
+    axes.set_xlabel("Part-city combinations")
     axes.tick_params(axis="y", labelsize=8)
     _style(axes)
-    _headline(figure, f"De donde salen las {total} decisiones")
+    _headline(figure, f"Where the {total} decisions come from")
     return _save(figure, PIPELINE_CHART_FILES["decisiones"], PIPELINE_DIR)
 
 
@@ -608,8 +619,8 @@ def chart_optimizer_saving(optimization: dict):
         worst = [item["worst_cost_usd"] for item in savings]
         positions = range(len(savings))
 
-        axes.barh(list(positions), worst, color=LIGHT, height=0.62, label="Peor oferta aplicable")
-        axes.barh(list(positions), chosen, color=SECONDARY, height=0.62, label="Oferta elegida")
+        axes.barh(list(positions), worst, color=LIGHT, height=0.62, label="Worst applicable offer")
+        axes.barh(list(positions), chosen, color=SECONDARY, height=0.62, label="Chosen offer")
         axes.set_yticks(list(positions))
         axes.set_yticklabels(labels, fontsize=8)
         axes.invert_yaxis()
@@ -632,16 +643,16 @@ def chart_optimizer_saving(optimization: dict):
         axes.text(
             0.5,
             0.5,
-            "Ninguna compra tuvo mas de una oferta aplicable",
+            "No purchase had more than one applicable offer",
             ha="center",
             va="center",
             color=MUTED,
             transform=axes.transAxes,
         )
 
-    axes.set_xlabel("Costo total de la orden (USD)")
+    axes.set_xlabel("Total order cost (USD)")
     axes.set_title(
-        f"El optimizador evita {optimization['saving_usd']:,.0f} USD de sobrecosto".replace(
+        f"Supplier choice avoids {optimization['saving_usd']:,.0f} USD of overspend".replace(
             ",", "."
         ),
         fontsize=12,

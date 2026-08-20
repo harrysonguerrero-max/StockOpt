@@ -7,21 +7,25 @@ from app.core.optimization import (
     COLUMNS,
     DECISION_BUY,
     DECISION_DEFERRED,
+    DECISION_ESCALATE,
     DECISION_HOLD,
     DECISION_REVIEW,
+    REASON_ESCALATE,
     REASON_OVER_BUDGET,
     allocate_budget,
     apply_budget,
+    budget_allocation_summary,
 )
 
 
-def candidate(key, cost, benefit):
+def candidate(key, cost, benefit, criticality=None):
     """Arma un candidato a compra para la mochila.
 
     Entrada:
         key: identificador de la combinacion pieza-ciudad.
         cost: costo total de la orden.
         benefit: beneficio neto de hacerla.
+        criticality: clase de criticidad de la pieza, si el caso la necesita.
 
     Salida:
         Diccionario con la forma que espera allocate_budget.
@@ -29,7 +33,13 @@ def candidate(key, cost, benefit):
     Funcionalidad:
         Evita repetir la construccion en cada caso de prueba.
     """
-    return {"key": key, "cost": cost, "benefit": benefit}
+    return {
+        "key": key,
+        "cost": cost,
+        "benefit": benefit,
+        "criticality": criticality,
+        "stockout_cost": cost + benefit,
+    }
 
 
 def recommendation(sku, decision, cost, benefit, **extra):
@@ -92,19 +102,19 @@ def test_the_knapsack_maximises_the_benefit_it_buys():
     ]
     chosen = allocate_budget(candidates, 600.0)
 
-    assert chosen == {"b", "c"}
+    assert chosen["approved"] == {"b", "c"}
 
 
 def test_without_a_budget_every_purchase_is_approved():
     candidates = [candidate("a", 1000.0, 0.9), candidate("b", 2000.0, 0.5)]
 
-    assert allocate_budget(candidates, None) == {"a", "b"}
+    assert allocate_budget(candidates, None)["approved"] == {"a", "b"}
 
 
 def test_a_budget_that_covers_everything_approves_everything():
     candidates = [candidate("a", 100.0, 0.9), candidate("b", 200.0, 0.5)]
 
-    assert allocate_budget(candidates, 500.0) == {"a", "b"}
+    assert allocate_budget(candidates, 500.0)["approved"] == {"a", "b"}
 
 
 def test_the_knapsack_beats_taking_the_most_valuable_first():
@@ -115,13 +125,13 @@ def test_the_knapsack_beats_taking_the_most_valuable_first():
     ]
     chosen = allocate_budget(candidates, 100.0)
 
-    assert chosen == {"barata_1", "barata_2"}
+    assert chosen["approved"] == {"barata_1", "barata_2"}
 
 
 def test_a_purchase_bigger_than_the_whole_budget_is_left_out():
     candidates = [candidate("gigante", 5000.0, 0.99), candidate("normal", 80.0, 0.10)]
 
-    assert allocate_budget(candidates, 100.0) == {"normal"}
+    assert allocate_budget(candidates, 100.0)["approved"] == {"normal"}
 
 
 def test_the_approved_purchases_never_exceed_the_budget(table):
@@ -146,7 +156,7 @@ def test_a_deferred_row_explains_that_the_money_is_what_is_missing(table):
     deferred = result[result.decision == DECISION_DEFERRED].iloc[0]
 
     assert REASON_OVER_BUDGET in deferred.reason
-    assert "presupuesto" in deferred.reason
+    assert "budget" in deferred.reason
     assert deferred.needs_review == 1
 
 
@@ -186,3 +196,119 @@ def test_the_most_valuable_piece_can_be_left_out_if_it_blocks_two_others(table):
 
     assert valiosa.decision == DECISION_DEFERRED
     assert REASON_OVER_BUDGET in valiosa.reason
+
+
+def critical_table():
+    """Arma una corrida donde lo critico no cabe en el presupuesto nominal.
+
+    Entrada:
+        Ninguna.
+
+    Salida:
+        DataFrame de recomendaciones con dos piezas A y dos discrecionales.
+
+    Funcionalidad:
+        Es el caso que separa el modelo nuevo del anterior: las piezas A rinden
+        menos por dolar que las B, asi que una mochila que solo mirara el
+        beneficio neto las dejaria fuera.
+    """
+    return pd.DataFrame(
+        [
+            recommendation("CRIT-1", DECISION_BUY, 900.0, 400.0, criticality="A"),
+            recommendation("CRIT-2", DECISION_BUY, 800.0, 300.0, criticality="A"),
+            recommendation("FLEX-1", DECISION_BUY, 400.0, 900.0, criticality="B"),
+            recommendation("FLEX-2", DECISION_BUY, 400.0, 850.0, criticality="B"),
+        ],
+        columns=COLUMNS,
+    )
+
+
+def test_a_critical_part_is_funded_even_when_it_yields_less_per_dollar():
+    """La continuidad de produccion no compite: se financia primero."""
+    result = apply_budget(critical_table(), 1000.0, overrun_max=1000.0)
+    decisions = dict(zip(result.sku_id, result.decision, strict=False))
+
+    assert decisions["CRIT-1"] == DECISION_BUY
+    assert decisions["CRIT-2"] == DECISION_BUY
+
+
+def test_the_discretionary_purchases_yield_to_the_critical_ones():
+    """Lo que rinde mas por dolar cede cuando lo otro para una linea."""
+    result = apply_budget(critical_table(), 1000.0, overrun_max=1000.0)
+    decisions = dict(zip(result.sku_id, result.decision, strict=False))
+
+    assert decisions["FLEX-1"] == DECISION_DEFERRED
+    assert decisions["FLEX-2"] == DECISION_DEFERRED
+
+
+def test_the_authorised_overrun_is_what_makes_the_critical_purchase_fit():
+    """1.700 USD de compras criticas contra 1.000 de presupuesto nominal."""
+    result = apply_budget(critical_table(), 1000.0, overrun_max=1000.0)
+    bought = result[result.decision == DECISION_BUY]
+
+    assert bought.total_cost_usd.sum() == 1700.0
+    assert budget_allocation_summary(result, 1000.0, 1000.0)["overrun_usd"] == 700.0
+
+
+def test_a_critical_purchase_that_does_not_fit_is_escalated_not_deferred():
+    """Escalar y aplazar son decisiones de personas distintas."""
+    result = apply_budget(critical_table(), 1000.0, overrun_max=0.0)
+    escalated = result[result.decision == DECISION_ESCALATE]
+
+    assert len(escalated) == 1
+    assert REASON_ESCALATE in escalated.iloc[0].reason
+    assert escalated.iloc[0].needs_review == 1
+
+
+def test_the_escalated_critical_part_is_the_one_that_prevents_less_stockout():
+    """Cuando no caben todas, se cubre primero la que mas quiebre evita."""
+    result = apply_budget(critical_table(), 1000.0, overrun_max=0.0)
+    decisions = dict(zip(result.sku_id, result.decision, strict=False))
+
+    assert decisions["CRIT-1"] == DECISION_BUY
+    assert decisions["CRIT-2"] == DECISION_ESCALATE
+
+
+def test_the_summary_reports_the_service_level_reached_by_class():
+    """La politica declarada y la conseguida se publican juntas."""
+    result = apply_budget(critical_table(), 1000.0, overrun_max=1000.0)
+    service = {
+        level["criticality"]: level
+        for level in budget_allocation_summary(result, 1000.0, 1000.0)["service"]
+    }
+
+    assert service["A"]["funded"] == 2
+    assert service["A"]["achieved"] == 1.0
+    assert service["A"]["met"] is True
+    assert service["B"]["achieved"] == 0.0
+    assert service["B"]["met"] is False
+
+
+def test_continuity_is_reported_as_protected_when_nothing_is_escalated():
+    """Es la cifra que encabeza la pantalla del comprador."""
+    covered = budget_allocation_summary(
+        apply_budget(critical_table(), 1000.0, overrun_max=1000.0), 1000.0, 1000.0
+    )
+    exposed = budget_allocation_summary(
+        apply_budget(critical_table(), 1000.0, overrun_max=0.0), 1000.0, 0.0
+    )
+
+    assert covered["continuity_protected"] is True
+    assert exposed["continuity_protected"] is False
+
+
+def test_the_service_floor_is_respected_when_the_money_allows_it():
+    """Con solo piezas B, el piso del 80 % obliga a financiar cuatro de cinco."""
+    candidates = [candidate(f"b{index}", 100.0, 500.0 - index, "B") for index in range(5)]
+    chosen = allocate_budget(candidates, 450.0, overrun_max=0.0)
+
+    assert len(chosen["approved"]) == 4
+
+
+def test_the_service_floor_gives_way_before_declaring_the_model_infeasible():
+    """Si ni el piso cabe, se suelta y se informa, no se falla en silencio."""
+    candidates = [candidate(f"b{index}", 100.0, 500.0 - index, "B") for index in range(5)]
+    chosen = allocate_budget(candidates, 150.0, overrun_max=0.0)
+
+    assert len(chosen["approved"]) == 1
+    assert chosen["escalated"] == set()

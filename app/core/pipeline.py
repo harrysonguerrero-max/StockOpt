@@ -19,26 +19,45 @@ from pathlib import Path
 
 import pandas as pd
 
+from app.core.cleaning import MIN_DAYS_PER_MONTH
+from app.core.forecast import QUANTILE_Z
+from app.core.inventory import DAYS_PER_MONTH, Z_BY_CRITICALITY, planning_lead_time
 from app.core.optimization import (
+    BUDGET_OVERRUN_MAX_USD,
     DECISION_BUY,
     DECISION_DEFERRED,
+    DECISION_ESCALATE,
     DECISION_HOLD,
     DECISION_REVIEW,
-    MAX_COVERAGE_MONTHS,
+    EOQ_MAX_COVERAGE_MONTHS,
+    HOLDING_COST_RATE_ANNUAL,
+    MONTHS_PER_YEAR,
+    PLANNING_PERIOD_DAYS,
     REASON_ABOVE_MINIMUM,
+    REASON_ESCALATE,
     REASON_INFEASIBLE,
     REASON_LOW_CONFIDENCE,
     REASON_NO_SUPPLIER,
     REASON_OVER_BUDGET,
     REASON_SHELF_LIFE_BLOCK,
     SCENARIO_BUDGET_USD,
+    SERVICE_FLOOR_BY_CRITICALITY,
+    SHELF_LIFE_SAFETY_RATIO,
+    STOCKOUT_COST_PER_DAY_USD,
+    budget_allocation_summary,
     offer_costs,
 )
 from app.core.patterns import (
     CV_VOLATILE,
+    MIN_PERIODS,
+    SEASONAL_PERIOD,
     SEASONAL_PVALUE_MAX,
     SEASONAL_STRENGTH_MIN,
+    W_RECENT,
+    W_VOLATILITY,
+    W_VOLUME,
 )
+from app.core.profiling import IQR_FACTOR, MAD_SCALE, MAD_THRESHOLD
 
 ARTIFACT_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "pipeline"
 
@@ -78,11 +97,11 @@ STAGE_CHARTS = {
 }
 
 STAGE_TITLES = {
-    STAGE_CLEANING: "Limpieza de fuentes",
-    STAGE_DATASET: "Dataset relacional",
-    STAGE_PATTERNS: "Patrones de demanda",
-    STAGE_MODEL: "Modelo de proyeccion",
-    STAGE_OPTIMIZATION: "Optimizacion de compra",
+    STAGE_CLEANING: "Source cleaning",
+    STAGE_DATASET: "Relational dataset",
+    STAGE_PATTERNS: "Demand patterns",
+    STAGE_MODEL: "Demand forecast",
+    STAGE_OPTIMIZATION: "Replenishment optimisation",
 }
 
 RESULT_RULE = "RESULTADO"
@@ -94,24 +113,25 @@ KIND_ADJUST = "ajuste"
 KIND_RESULT = "resultado"
 
 CAUSE_BY_DECISION = {
-    DECISION_BUY: "Las existencias no alcanzan el minimo operativo",
-    DECISION_REVIEW: "El lote minimo del proveedor supera el maximo de bodega",
+    DECISION_BUY: "Stock is below the operating minimum",
+    DECISION_REVIEW: "The supplier minimum order quantity exceeds the warehouse ceiling",
     DECISION_DEFERRED: REASON_OVER_BUDGET,
+    DECISION_ESCALATE: REASON_ESCALATE,
 }
 
 HOLD_CAUSES = (REASON_ABOVE_MINIMUM, REASON_NO_SUPPLIER, REASON_SHELF_LIFE_BLOCK, REASON_INFEASIBLE)
 
 FEATURE_FAMILIES = [
-    ("Rezagos de la propia serie", ("lag_",)),
-    ("Medias y desviaciones moviles", ("roll_",)),
-    ("Señal operativa", ("issue_events", "breakdown_")),
-    ("Calendario", ("month_",)),
-    ("Atributos de la pieza", ("unit_cost", "shelf_life", "criticality")),
-    ("Ubicacion", ("is_nava",)),
-    ("Origen del dato", ("is_synthetic",)),
+    ("Lags of the series itself", ("lag_",)),
+    ("Rolling means and deviations", ("roll_",)),
+    ("Operating signal", ("issue_events", "breakdown_")),
+    ("Calendar", ("month_",)),
+    ("Part attributes", ("unit_cost", "shelf_life", "criticality")),
+    ("Location", ("is_nava",)),
+    ("Data origin", ("is_synthetic",)),
 ]
 
-OTHER_FAMILY = "Otras"
+OTHER_FAMILY = "Other"
 
 
 def _rule_kind(label: str) -> str:
@@ -194,8 +214,14 @@ def cleaning_summary(quality_report: dict) -> dict:
     return {
         "id": STAGE_CLEANING,
         "title": STAGE_TITLES[STAGE_CLEANING],
-        "input": "Fuentes crudas tal como llegaron",
-        "output": "Las mismas fuentes, sin las filas que no evidencian nada",
+        "input": "Raw sources exactly as they arrived",
+        "output": "The same sources, without the rows that evidence nothing",
+        "parameters": {
+            "iqr_factor": IQR_FACTOR,
+            "mad_threshold": MAD_THRESHOLD,
+            "mad_scale": MAD_SCALE,
+            "min_days_per_month": MIN_DAYS_PER_MONTH,
+        },
         "sources": sources,
         "rows_before": sum(source["rows_before"] for source in sources),
         "rows_after": sum(source["rows_after"] for source in sources),
@@ -242,8 +268,8 @@ def dataset_summary(tables: dict) -> dict:
     return {
         "id": STAGE_DATASET,
         "title": STAGE_TITLES[STAGE_DATASET],
-        "input": "Fuentes limpias",
-        "output": "Tablas relacionadas y validadas por pieza, ciudad y proveedor",
+        "input": "Clean sources",
+        "output": "Related, validated tables by part, city and supplier",
         "tables": [{"name": name, "rows": len(frame)} for name, frame in tables.items()],
         "months": len(months),
         "first_month": str(months[0]) if months else "",
@@ -293,14 +319,24 @@ def pattern_summary(patterns: pd.DataFrame) -> dict:
     return {
         "id": STAGE_PATTERNS,
         "title": STAGE_TITLES[STAGE_PATTERNS],
-        "input": "72 meses de consumo por serie",
-        "output": "Una etiqueta de patron y una confianza por serie",
+        "input": "72 months of consumption per series",
+        "output": "One pattern label and one confidence score per series",
         "counts": {str(name): int(value) for name, value in counts.items()},
         "points": points,
         "thresholds": {
             "cv_volatile": CV_VOLATILE,
             "seasonal_strength": SEASONAL_STRENGTH_MIN,
             "seasonal_pvalue": SEASONAL_PVALUE_MAX,
+        },
+        "parameters": {
+            "cv_volatile": CV_VOLATILE,
+            "seasonal_strength_min": SEASONAL_STRENGTH_MIN,
+            "seasonal_pvalue_max": SEASONAL_PVALUE_MAX,
+            "seasonal_period": SEASONAL_PERIOD,
+            "min_periods": MIN_PERIODS,
+            "weight_volume": W_VOLUME,
+            "weight_volatility": W_VOLATILITY,
+            "weight_recent": W_RECENT,
         },
     }
 
@@ -334,29 +370,48 @@ def feature_families(features: list) -> list:
     return grouped
 
 
-def model_summary(training_metrics: dict) -> dict:
-    """Resume que recibe y que entrega el modelo de proyeccion.
+def model_summary(
+    training_metrics: dict,
+    forecast: pd.DataFrame,
+    suppliers: pd.DataFrame,
+    blend_weight: float,
+) -> dict:
+    """Resume que recibe y que entrega la etapa de proyeccion.
 
     Entrada:
         training_metrics: contenido del informe de entrenamiento, con metricas,
             referencias, variables e importancia.
+        forecast: proyeccion por serie con su inventario minimo ya compuesto.
+        suppliers: catalogo de proveedores, de donde sale el plazo de
+            planificacion y su variabilidad.
+        blend_weight: peso que se dio al modelo al combinarlo con la
+            proyeccion estadistica.
 
     Salida:
         Diccionario con las variables agrupadas por familia, las metricas del
-        modelo, las de las referencias y el reparto temporal del entrenamiento.
+        modelo, las de las referencias, el reparto temporal del entrenamiento y
+        la politica de inventario que esta etapa deja fijada.
 
     Funcionalidad:
         Deja explicito lo que la pantalla anterior daba por supuesto: que entra
         al modelo, que sale, y contra que se comparo para decidir si aporta algo.
+
+        Publica ademas los parametros de la politica de inventario. El inventario
+        minimo se calcula aqui, no en la optimizacion, y sin el plazo de entrega,
+        su variabilidad y el factor de servicio de cada criticidad la cifra no se
+        puede reconstruir a mano ni comprobar.
     """
     metrics = training_metrics.get("metrics", {})
     features = training_metrics.get("features", [])
+    lead_time, lead_time_std = planning_lead_time(suppliers)
+
+    sources = forecast["forecast_source"].value_counts() if len(forecast) else {}
 
     return {
         "id": STAGE_MODEL,
         "title": STAGE_TITLES[STAGE_MODEL],
-        "input": f"{len(features)} variables derivadas de cada serie y su pieza",
-        "output": "Una proyeccion de consumo por serie y mes",
+        "input": f"{len(features)} features derived from each series and its part",
+        "output": "A monthly demand forecast and a reorder point per series",
         "features": features,
         "families": feature_families(features),
         "metrics": metrics,
@@ -367,6 +422,29 @@ def model_summary(training_metrics: dict) -> dict:
         "validation_months": training_metrics.get("validation_months", ""),
         "rows_train": metrics.get("n_train", 0),
         "rows_validation": metrics.get("n_val", 0),
+        "policy": {
+            "lead_time_days": round(lead_time, 2),
+            "lead_time_std_days": round(lead_time_std, 2),
+            "demand_lead_time_avg": round(float(forecast["demand_lead_time"].mean()), 2)
+            if len(forecast)
+            else 0.0,
+            "safety_stock_avg": round(float(forecast["safety_stock"].mean()), 2)
+            if len(forecast)
+            else 0.0,
+            "inventory_min_total": int(forecast["inventory_min"].sum()) if len(forecast) else 0,
+            "confidence_avg": round(float(forecast["confidence_final"].mean()), 2)
+            if len(forecast)
+            else 0.0,
+            "sources": {str(name): int(value) for name, value in dict(sources).items()},
+        },
+        "parameters": {
+            "days_per_month": DAYS_PER_MONTH,
+            "z_by_criticality": dict(Z_BY_CRITICALITY),
+            "quantile_z": QUANTILE_Z,
+            "blend_weight": blend_weight,
+            "lead_time_days": round(lead_time, 2),
+            "lead_time_std_days": round(lead_time_std, 2),
+        },
     }
 
 
@@ -479,22 +557,26 @@ def optimization_summary(
     savings.sort(key=lambda item: -item["saving_usd"])
     buying = recommendations[recommendations["decision"] == DECISION_BUY]
     deferring = recommendations[recommendations["decision"] == DECISION_DEFERRED]
+    escalating = recommendations[recommendations["decision"] == DECISION_ESCALATE]
+    exposed = pd.concat([deferring, escalating])
 
     return {
         "id": STAGE_OPTIMIZATION,
         "title": STAGE_TITLES[STAGE_OPTIMIZATION],
-        "input": "Proyeccion, existencias, ofertas, reglas y presupuesto",
-        "output": "Una decision por pieza y ciudad, con su motivo",
+        "input": "Forecast, stock on hand, offers, business rules and budget",
+        "output": "One decision per part and city, with its reason",
         "counts": {
             DECISION_BUY: int(counts.get(DECISION_BUY, 0)),
             DECISION_REVIEW: int(counts.get(DECISION_REVIEW, 0)),
             DECISION_DEFERRED: int(counts.get(DECISION_DEFERRED, 0)),
+            DECISION_ESCALATE: int(counts.get(DECISION_ESCALATE, 0)),
             DECISION_HOLD: int(counts.get(DECISION_HOLD, 0)),
         },
         "budget_usd": SCENARIO_BUDGET_USD,
         "deferred_usd": round(float(deferring["total_cost_usd"].sum()), 2),
+        "escalated_usd": round(float(escalating["total_cost_usd"].sum()), 2),
         "stockout_avoided_usd": round(float(buying["stockout_cost_usd"].sum()), 2),
-        "stockout_exposed_usd": round(float(deferring["stockout_cost_usd"].sum()), 2),
+        "stockout_exposed_usd": round(float(exposed["stockout_cost_usd"].sum()), 2),
         "stockout_return": round(
             float(buying["stockout_cost_usd"].sum() / buying["total_cost_usd"].sum()), 1
         )
@@ -505,7 +587,20 @@ def optimization_summary(
         "investment_usd": round(float(buying["total_cost_usd"].sum()), 2),
         "units": int(buying["recommended_qty"].sum()),
         "saving_usd": round(sum(item["saving_usd"] for item in savings), 2),
-        "max_coverage_months": MAX_COVERAGE_MONTHS,
+        "allocation": budget_allocation_summary(recommendations, SCENARIO_BUDGET_USD),
+        "eoq_units_avg": round(float(buying["eoq_units"].mean()), 1) if len(buying) else 0.0,
+        "parameters": {
+            "budget_usd": SCENARIO_BUDGET_USD,
+            "overrun_max_usd": BUDGET_OVERRUN_MAX_USD,
+            "service_floor": dict(SERVICE_FLOOR_BY_CRITICALITY),
+            "stockout_cost_per_day_usd": dict(STOCKOUT_COST_PER_DAY_USD),
+            "planning_period_days": PLANNING_PERIOD_DAYS,
+            "holding_cost_rate_annual": HOLDING_COST_RATE_ANNUAL,
+            "months_per_year": MONTHS_PER_YEAR,
+            "eoq_max_coverage_months": EOQ_MAX_COVERAGE_MONTHS,
+            "shelf_life_safety_ratio": SHELF_LIFE_SAFETY_RATIO,
+            "days_per_month": DAYS_PER_MONTH,
+        },
         "needs_review": int(recommendations["needs_review"].sum()),
         "low_confidence": low_confidence,
     }
@@ -598,7 +693,9 @@ def build_stages(
     tables: dict,
     patterns: pd.DataFrame,
     training_metrics: dict,
+    forecast: pd.DataFrame,
     recommendations: pd.DataFrame,
+    blend_weight: float,
 ) -> list:
     """Compone el recorrido completo del pipeline.
 
@@ -607,7 +704,9 @@ def build_stages(
         tables: DataFrames del dataset relacional.
         patterns: clasificacion de patrones.
         training_metrics: informe del ultimo entrenamiento.
+        forecast: proyeccion por serie con su inventario minimo.
         recommendations: decisiones de compra.
+        blend_weight: peso del modelo en la combinacion de proyecciones.
 
     Salida:
         Lista de resumenes de etapa en el orden en que se ejecutan.
@@ -625,7 +724,7 @@ def build_stages(
         cleaning_summary(quality_report),
         dataset_summary(tables),
         pattern_summary(patterns),
-        model_summary(training_metrics),
+        model_summary(training_metrics, forecast, tables["suppliers"], blend_weight),
         optimization_summary(
             recommendations,
             tables["supplier_offers"],

@@ -51,7 +51,7 @@ def test_the_catalogue_matches_the_columns_actually_on_disk():
 def test_the_document_is_rendered_from_the_catalogue():
     document = render_markdown()
 
-    assert "# Diccionario de datos - MVP SupplyOpt" in document
+    assert "# Data dictionary - MRO Spare Parts Optimizer MVP" in document
     for name in TABLES:
         assert f"## {name}" in document
 
@@ -102,4 +102,4 @@ def test_a_table_in_a_subfolder_is_served(client):
     response = client.get("/api/v1/data/tables/quality/demand_outliers.csv")
 
     assert response.status_code == 200
-    assert response.json()["title"] == "Meses de consumo atipico"
+    assert response.json()["title"] == "Outlier consumption months"

@@ -32,7 +32,7 @@ class Settings(BaseSettings):
         un GET funcionara —no genera preflight— y un POST no.
     """
 
-    PROJECT_NAME: str = "SupplyOpt"
+    PROJECT_NAME: str = "MRO Spare Parts Optimizer"
     API_V1_STR: str = "/api/v1"
 
     BACKEND_CORS_ORIGINS: list[str] = [

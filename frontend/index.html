@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SupplyOpt · Abastecimiento de refacciones</title>
+<title>MRO Spare Parts Optimizer · Nava &amp; Ciudad Obregón</title>
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -11,28 +11,28 @@
 <header class="topbar">
   <div class="topbar__brand">
     <span class="topbar__mark" aria-hidden="true"></span>
-    <h1>SupplyOpt</h1>
+    <h1>MRO Spare Parts Optimizer</h1>
   </div>
-  <nav class="topbar__nav" aria-label="Secciones">
-    <button class="navlink navlink--on" data-view="turno" type="button">El turno</button>
-    <button class="navlink" data-view="tabla" type="button">Todas las piezas</button>
-    <button class="navlink" data-view="modelo" type="button">Modelo y pipeline</button>
+  <nav class="topbar__nav" aria-label="Sections">
+    <button class="navlink navlink--on" data-view="turno" type="button">The shift</button>
+    <button class="navlink" data-view="tabla" type="button">All parts</button>
+    <button class="navlink" data-view="modelo" type="button">Model &amp; pipeline</button>
   </nav>
   <div class="topbar__nav">
-    <a class="navlink" id="export-all" href="#">Descargar CSV</a>
-    <button class="navlink" id="refresh" type="button">Recargar</button>
+    <a class="navlink" id="export-all" href="#">Download CSV</a>
+    <button class="navlink" id="refresh" type="button">Reload</button>
   </div>
 </header>
 
-<!-- El turno: la desviacion, donde esta, y solo entonces la lista. -->
+<!-- El turno: que amenaza la produccion, donde esta, y solo entonces la lista. -->
 <main id="view-turno">
   <section class="opening">
-    <p class="opening__lead">Abastecimiento de refacciones · Nava y Ciudad Obregón</p>
-    <h2 class="display" id="opening-line">Cargando el turno…</h2>
+    <p class="opening__lead">Production-continuity replenishment · Nava and Ciudad Obregón</p>
+    <h2 class="display" id="opening-line">Loading the shift…</h2>
     <div class="opening__note" id="opening-note"></div>
   </section>
 
-  <section class="atlas" aria-label="Casos por ubicación">
+  <section class="atlas" aria-label="Cases by location">
     <div class="atlas__map" id="map"></div>
     <div class="atlas__side">
       <div id="plant-card"></div>
@@ -40,22 +40,22 @@
     </div>
   </section>
 
-  <section id="bands" aria-label="Casos"></section>
+  <section id="bands" aria-label="Cases"></section>
 </main>
 
 <!-- La tabla completa sigue existiendo, pero como destino y no como portada. -->
 <main id="view-tabla" hidden>
   <div class="subhead">
     <div>
-      <h2 class="title">Todas las piezas</h2>
-      <p class="meta">El dato traducido a lo que significa, ordenable por
-        cualquier columna. Pulsa una fila para abrir su caso.</p>
+      <h2 class="title">All parts</h2>
+      <p class="meta">The data translated into what it means, sortable by any column.
+        Click a row to open its case.</p>
     </div>
-    <button class="btn btn--quiet" id="export-tabla" type="button">Descargar lo filtrado</button>
+    <button class="btn btn--quiet" id="export-tabla" type="button">Download what is filtered</button>
   </div>
 
-  <section class="cats" id="cats" aria-label="Familias de refacción"></section>
-  <section class="filters" id="filters-tabla" aria-label="Filtros"></section>
+  <section class="cats" id="cats" aria-label="Part families"></section>
+  <section class="filters" id="filters-tabla" aria-label="Filters"></section>
 
   <div class="tablewrap">
     <table class="queue queue--rich">
@@ -68,19 +68,19 @@
   <div class="tablefoot" id="foot-tabla"></div>
 </main>
 
-<!-- El registro completo sin capa de presentacion: el sitio donde se comprueba
-     contra que se hizo la interpretacion de las otras vistas. -->
+<!-- El recorrido del dato, etapa por etapa, con la formula que aplica cada una. -->
 <main id="view-modelo" hidden>
   <div class="subhead">
     <div>
-      <h2 class="title">Modelo y pipeline</h2>
-      <p class="meta">Las cinco etapas que convierten las fuentes crudas en una
-        decisión de compra. Cada una declara qué recibe, qué entrega y qué hizo.</p>
+      <h2 class="title">Model &amp; pipeline</h2>
+      <p class="meta">The five stages that turn raw sources into a purchase decision. Each
+        one declares what it receives, what it hands on, what it did, and which formula it
+        applied — with the reference it comes from.</p>
     </div>
-    <button class="btn btn--quiet" id="go-datos" type="button">Ver los datos en crudo →</button>
+    <button class="btn btn--quiet" id="go-datos" type="button">See the raw data →</button>
   </div>
 
-  <section class="pipe" aria-label="Etapas del pipeline">
+  <section class="pipe" aria-label="Pipeline stages">
     <ol class="pipe__track" id="pipe-track"></ol>
   </section>
 
@@ -88,12 +88,13 @@
     <header class="stage__head">
       <h3 id="stage-title">—</h3>
       <div class="stage__io">
-        <p><span class="label">Entra</span><span id="stage-in"></span></p>
-        <p><span class="label">Sale</span><span id="stage-out"></span></p>
+        <p><span class="label">In</span><span id="stage-in"></span></p>
+        <p><span class="label">Out</span><span id="stage-out"></span></p>
       </div>
     </header>
     <div class="figs" id="stage-figures"></div>
     <div class="note note--wide" id="stage-note"></div>
+    <div id="stage-theory"></div>
     <div class="stage__detail" id="stage-detail"></div>
     <div class="charts" id="stage-charts"></div>
   </section>
@@ -101,16 +102,16 @@
   <section class="tracer">
     <header class="tracer__head">
       <div>
-        <h3>Seguir una pieza por el pipeline</h3>
-        <p class="meta">De su historia de consumo a la decisión de compra, paso a paso.</p>
+        <h3>Follow one part through the pipeline</h3>
+        <p class="meta">From its consumption history to the purchase decision, step by step.</p>
       </div>
       <div class="tracer__pick">
         <label class="field">
-          <span class="label">Pieza</span>
+          <span class="label">Part</span>
           <select id="tr-sku"></select>
         </label>
         <label class="field">
-          <span class="label">Planta</span>
+          <span class="label">Plant</span>
           <select id="tr-city"></select>
         </label>
       </div>
@@ -119,21 +120,55 @@
   </section>
 </main>
 
-<!-- Las tablas del dataset tal como estan en disco: el sitio donde se comprueba
-     contra que se hizo la interpretacion de las otras vistas. -->
+<!-- Las tablas del dataset tal como estan en disco, y la lectura del catalogo en
+     criticidad, valor y rotacion que da contexto a todo lo demas. -->
 <main id="view-datos" hidden>
   <div class="subhead">
     <div>
-      <h2 class="title">Datos en crudo</h2>
-      <p class="meta">Las tablas del dataset sin traducir ni redondear, con la
-        definición de cada columna y las notas de lo que se hizo con ella.</p>
+      <h2 class="title">Raw data</h2>
+      <p class="meta">The dataset tables untranslated and unrounded, with the definition of
+        every column — and, above them, how the catalogue reads on the three dimensions
+        that decide where control goes.</p>
     </div>
-    <button class="btn btn--quiet" id="back-modelo" type="button">← Volver al pipeline</button>
+    <button class="btn btn--quiet" id="back-modelo" type="button">← Back to the pipeline</button>
   </div>
 
+  <section class="classify" aria-label="Criticality, value and rotation">
+    <header class="classify__head">
+      <h3>Criticality · Value · Rotation</h3>
+      <p class="meta">Criticality answers what happens if the part is missing, value
+        answers how much capital it moves, and rotation answers how often it moves. None
+        of the three is enough on its own, and that is exactly why they are crossed.</p>
+    </header>
+
+    <div class="figs" id="class-figures"></div>
+
+    <div class="classify__charts">
+      <section class="card">
+        <h3>Where the value is</h3>
+        <p class="meta">Cumulative share of annual consumption value, parts ordered from
+          most to least valuable. The question is not what each part is worth but how few
+          parts it takes to reach 80% of the spend. Colour is criticality.</p>
+        <div id="class-pareto"></div>
+      </section>
+
+      <section class="card">
+        <h3>Value against rotation</h3>
+        <p class="meta">Each bubble is a part. Right means it moves often, up means it
+          moves money. Colour is criticality — the one dimension neither axis can
+          derive, because it is a maintenance judgement and not a measurement.</p>
+        <div id="class-scatter"></div>
+      </section>
+    </div>
+
+    <div class="classify__profiles" id="class-profiles"></div>
+    <div class="classify__matrices" id="class-matrices"></div>
+    <div id="class-finding"></div>
+  </section>
+
   <section class="explorer">
-    <aside class="explorer__index" aria-label="Tablas del dataset">
-      <p class="label">Tablas del dataset</p>
+    <aside class="explorer__index" aria-label="Dataset tables">
+      <p class="label">Dataset tables</p>
       <ul class="tablelist" id="table-list"></ul>
     </aside>
 
@@ -145,10 +180,10 @@
         </div>
         <div class="explorer__actions">
           <label class="field">
-            <span class="label">Filtrar filas</span>
-            <input type="search" id="t-search" placeholder="Cualquier valor" autocomplete="off">
+            <span class="label">Filter rows</span>
+            <input type="search" id="t-search" placeholder="Any value" autocomplete="off">
           </label>
-          <a class="btn btn--quiet" id="t-download" href="#">Descargar CSV</a>
+          <a class="btn btn--quiet" id="t-download" href="#">Download CSV</a>
         </div>
       </header>
 
@@ -164,9 +199,9 @@
       <footer class="explorer__foot">
         <span class="meta" id="t-count"></span>
         <div class="pager">
-          <button class="btn btn--quiet" id="t-prev" type="button">Anterior</button>
+          <button class="btn btn--quiet" id="t-prev" type="button">Previous</button>
           <span class="meta mono" id="t-page"></span>
-          <button class="btn btn--quiet" id="t-next" type="button">Siguiente</button>
+          <button class="btn btn--quiet" id="t-next" type="button">Next</button>
         </div>
       </footer>
     </div>

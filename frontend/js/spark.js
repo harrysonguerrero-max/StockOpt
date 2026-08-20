@@ -58,7 +58,7 @@ export function spark(history, forecast) {
 
   return `
 <svg class="spark" viewBox="0 0 ${W} ${H}" role="img"
-     aria-label="Consumo mensual y proyección del próximo mes">
+     aria-label="Monthly consumption and next-month forecast">
   <line x1="${PAD.left}" y1="${y(0)}" x2="${W - PAD.right}" y2="${y(0)}"
         stroke="#E3E8EF" stroke-width="1"/>
 
@@ -81,11 +81,11 @@ export function spark(history, forecast) {
           text-anchor="${label.i === 0 ? "start" : "middle"}"
           font-family="ui-monospace, monospace">${label.text}</text>`).join("")}
   <text x="${W - PAD.right}" y="${H - 6}" font-size="10" fill="#003B70"
-        text-anchor="end" font-family="ui-monospace, monospace">proyección</text>
+        text-anchor="end" font-family="ui-monospace, monospace">forecast</text>
 </svg>
 <span class="spark__key">
-  <span><i class="k-real"></i>consumo real</span>
-  ${syntheticPart.length > 1 ? '<span><i class="k-sint"></i>histórico simulado</span>' : ""}
-  <span><i class="k-proy"></i>proyección (rango probable)</span>
+  <span><i class="k-real"></i>actual consumption</span>
+  ${syntheticPart.length > 1 ? '<span><i class="k-sint"></i>simulated history</span>' : ""}
+  <span><i class="k-proy"></i>forecast (likely range)</span>
 </span>`;
 }

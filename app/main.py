@@ -1,4 +1,4 @@
-"""Arranque de la aplicacion web de SupplyOpt.
+"""Arranque de la aplicacion web del optimizador de refacciones MRO.
 
 Funcionalidad:
     Monta la API de recomendaciones y, si esta compilada, tambien la interfaz.

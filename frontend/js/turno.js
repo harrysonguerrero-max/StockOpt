@@ -1,9 +1,12 @@
 /* El turno del comprador: la pantalla de entrada.
  *
- * Abre por lo que amenaza la cadena, no por el inventario de trabajo. Primero
- * la desviacion —si el presupuesto dejo reposiciones sin financiar, eso es lo
- * unico que importa saber al entrar—, luego el mapa que dice donde estan los
- * casos, y solo despues la lista.
+ * Abre por lo que amenaza la produccion, no por el inventario de trabajo ni por
+ * el presupuesto. El presupuesto dejo de mandar sobre todo: las piezas cuyo
+ * quiebre para una linea se reponen siempre, y lo que la pantalla tiene que
+ * decir primero es si eso se consiguio. Solo despues viene lo que costo y que
+ * desplazo.
+ *
+ * Luego el mapa, que dice donde estan los casos, y por ultimo la lista.
  *
  * La lista va ordenada por el semaforo y no por volumen. Las compras que el
  * solver resolvio sin ambigüedad son automaticas: se cuentan, se pueden abrir,
@@ -12,7 +15,7 @@
  */
 
 import { applyState, state, toast } from "./api.js";
-import { escape, usdRound } from "./format.js";
+import { escape, percent, usdRound } from "./format.js";
 import { drawMap, plantCard } from "./mapa.js";
 import {
   ADVANCED, PENDING, actionLine, byUrgency, critChip, footLine, gauge,
@@ -22,32 +25,38 @@ import { glyph } from "./glyphs.js";
 
 const BANDS = [
   {
+    id: "escalar",
+    title: "Need a budget decision",
+    open: true,
+    match: (i) => i.decision === "ESCALAR" && i.state === PENDING,
+  },
+  {
     id: "decide",
-    title: "Necesitan tu decisión",
+    title: "Need your decision",
     open: true,
     match: (i) => i.decision === "REVISAR" && i.state === PENDING,
   },
   {
     id: "aplazado",
-    title: "Frenadas por presupuesto",
+    title: "Held back by the budget",
     open: true,
     match: (i) => i.decision === "APLAZADO" && i.state === PENDING,
   },
   {
     id: "auto",
-    title: "Compras automáticas",
+    title: "Automatic purchases",
     open: false,
     match: (i) => i.decision === "COMPRAR" && i.state === PENDING,
   },
   {
     id: "curso",
-    title: "En curso",
+    title: "In progress",
     open: false,
     match: (i) => ADVANCED.includes(i.state),
   },
   {
     id: "quieto",
-    title: "Sin acción",
+    title: "No action",
     open: false,
     muted: true,
     match: (i) => (i.decision === "NO_COMPRAR" && i.state === PENDING)
@@ -69,56 +78,115 @@ export function renderTurno(callback, refresh) {
 
 /* ---------- La apertura ----------
  * Una alerta, no un recuento. Lo que decide si el comprador tiene que hacer
- * algo hoy es si el presupuesto dejo riesgo sin cubrir, no cuantas filas hay.
+ * algo hoy es si algo amenaza la continuidad de produccion. El dinero viene
+ * despues, porque es el medio y no el fin: gastar de mas para no parar una
+ * linea es una decision correcta, y la pantalla tiene que poder decirlo asi.
  */
+
+const serviceOf = (summary, criticality) =>
+  (summary.service || []).find((level) => level.criticality === criticality) || null;
 
 function paintOpening() {
   const s = state.summary;
   if (!s) return;
 
-  const deferred = s.deferred || 0;
   const line = document.getElementById("opening-line");
   const note = document.getElementById("opening-note");
+  const critical = serviceOf(s, "A");
+  const escalated = s.escalated || 0;
 
-  if (deferred > 0) {
+  if (escalated > 0) {
     line.className = "display display--alert";
-    line.innerHTML = `El presupuesto se agotó y dejó `
-      + `<button class="figure-link figure-link--stop" data-band="aplazado">`
-      + `${deferred} reposiciones</button> sin financiar, `
-      + `con ${usdRound(s.stockout_exposed_usd)} USD de quiebre expuesto.`;
+    line.innerHTML = "Production continuity is exposed: "
+      + `<button class="figure-link figure-link--stop" data-band="escalar">`
+      + `${escalated} critical ${escalated === 1 ? "part" : "parts"}</button> `
+      + `cannot be replenished within the authorised budget, leaving `
+      + `${usdRound(s.stockout_escalated_usd)} USD of line-stoppage risk uncovered.`;
+  } else if (critical && critical.needed > 0) {
+    line.className = "display";
+    line.innerHTML = `Production is covered: all <b>${critical.needed}</b> criticality-A `
+      + `${critical.needed === 1 ? "replenishment is" : "replenishments are"} funded. `
+      + "Nothing that stops a line is waiting for money.";
   } else {
     line.className = "display";
-    line.innerHTML = "El presupuesto cubre todo lo que procedía. Ninguna reposición quedó fuera.";
+    line.innerHTML = "No criticality-A part is below its reorder point. "
+      + "Nothing threatens the line this run.";
   }
 
-  // Las cifras cuentan lo que sigue pendiente, no el total de la corrida: una
-  // fila ya aprobada no reclama nada y sumarla infla el trabajo por delante.
-  const pending = (decision) => state.items.filter(
-    (i) => i.decision === decision && i.state === PENDING
-  );
-  const review = pending("REVISAR");
-  const auto = pending("COMPRAR");
-  const causes = reviewCauses(review);
-
-  note.innerHTML = `
-    <span class="lede">
-      ${deferred > 0
-        ? `Ampliar el presupuesto en <b>${usdRound(s.deferred_usd)} USD</b> lo cierra. `
-        : ""}
-      <button class="figure-link figure-link--go" data-band="auto">${auto.length} compras</button>
-      salen automáticas por <b>${usdRound(s.investment_usd)} USD</b> de los
-      ${usdRound(s.budget_usd)} USD de la corrida, y evitan
-      ${usdRound(s.stockout_avoided_usd)} USD de quiebre.
-    </span>
-    <span class="lede">
-      <button class="figure-link figure-link--hold" data-band="decide">${review.length} casos</button>
-      necesitan tu criterio${causes ? `, ${causes}` : ""}. Las otras ${s.no_action}
-      piezas cubren su mínimo.
-    </span>`;
+  note.innerHTML = `${costLine(s)}\n${tradeOffLine(s)}\n${workLine(s)}`;
 
   document.querySelectorAll(".opening .figure-link").forEach((button) => {
     button.addEventListener("click", () => focusBand(button.dataset.band));
   });
+}
+
+/** Que costo proteger la continuidad, y de donde salio el dinero.
+ *
+ *  La cifra de dinero es la de la corrida entera y no la de lo que sigue
+ *  pendiente: el reparto se hizo sobre todas las compras, y aprobar una fila no
+ *  cambia lo que costo. Lo pendiente se cuenta aparte, porque es lo unico que
+ *  reclama a una persona. */
+function costLine(s) {
+  const pending = state.items.filter((i) => i.decision === "COMPRAR" && i.state === PENDING);
+  const overrun = s.overrun_usd || 0;
+
+  const funding = overrun > 0
+    ? `That took the <b>${usdRound(s.budget_usd)} USD</b> of run budget plus `
+      + `<b>${usdRound(overrun)} USD</b> of the ${usdRound(s.overrun_max_usd)} USD `
+      + "authorised overrun, reported rather than hidden."
+    : `It fits inside the <b>${usdRound(s.budget_usd)} USD</b> of the run, `
+      + `with ${usdRound(s.budget_usd - s.investment_usd)} USD still free.`;
+
+  return `<span class="lede">
+      The run commits <b>${usdRound(s.investment_usd)} USD</b> across ${s.to_buy}
+      ${s.to_buy === 1 ? "purchase" : "purchases"} and avoids
+      ${usdRound(s.stockout_avoided_usd)} USD of stockout, of which
+      <button class="figure-link figure-link--go" data-band="auto">${pending.length} `
+    + `${pending.length === 1 ? "is" : "are"} still waiting</button>
+      for your approval. ${funding}
+    </span>`;
+}
+
+/** Que se desplazo para conseguirlo, y contra que politica se mide. */
+function tradeOffLine(s) {
+  const deferred = s.deferred || 0;
+  if (!deferred) {
+    return '<span class="lede">Nothing else was displaced: every replenishment that '
+      + "was due is funded.</span>";
+  }
+
+  const missed = (s.service || []).filter((level) => level.needed > 0 && !level.met);
+  const policy = missed.length
+    ? " Service lands at " + missed.map((level) =>
+      `<b>${percent(level.achieved)}</b> on class ${level.criticality} against a declared `
+      + `floor of ${percent(level.floor)}`).join(", and at ") + "."
+    : "";
+
+  return `<span class="lede">
+      Protecting it displaced
+      <button class="figure-link figure-link--stop" data-band="aplazado">${deferred} `
+    + `${deferred === 1 ? "replenishment" : "replenishments"}</button>
+      worth <b>${usdRound(s.deferred_usd)} USD</b>, which leaves
+      ${usdRound(s.stockout_exposed_usd)} USD of stockout risk uncovered.${policy}
+    </span>`;
+}
+
+/** El trabajo que queda por delante para una persona. */
+function workLine(s) {
+  const review = state.items.filter((i) => i.decision === "REVISAR" && i.state === PENDING);
+  const causes = reviewCauses(review);
+
+  if (!review.length) {
+    return `<span class="lede">No case needs your judgement. The other ${s.no_action} `
+      + "parts cover their minimum.</span>";
+  }
+
+  return `<span class="lede">
+      <button class="figure-link figure-link--hold" data-band="decide">${review.length} `
+    + `${review.length === 1 ? "case needs" : "cases need"}</button>
+      your judgement${causes ? `, ${causes}` : ""}. The other ${s.no_action} parts cover
+      their minimum.
+    </span>`;
 }
 
 /** Agrupa por que el solver no pudo cerrar los casos que siguen abiertos.
@@ -132,12 +200,12 @@ function reviewCauses(review) {
   const rest = review.length - overflow;
 
   if (overflow === review.length) {
-    return "el lote mínimo del proveedor supera lo que se puede almacenar";
+    return "the supplier minimum lot exceeds what the part can hold";
   }
   const parts = [];
-  if (overflow) parts.push(`${overflow} por lote mínimo`);
-  if (rest) parts.push(`${rest} por otras restricciones`);
-  return parts.join(" y ");
+  if (overflow) parts.push(`${overflow} on minimum lot size`);
+  if (rest) parts.push(`${rest} on other constraints`);
+  return parts.join(" and ");
 }
 
 function focusBand(id) {
@@ -155,8 +223,9 @@ const sum = (rows, field) => rows.reduce((total, i) => total + (Number(i[field])
 function plantStats(city) {
   const rows = state.items.filter((i) => i.city_id === city.id);
   const open = rows.filter(
-    (i) => i.state === PENDING && ["REVISAR", "APLAZADO"].includes(i.decision)
+    (i) => i.state === PENDING && ["ESCALAR", "REVISAR", "APLAZADO"].includes(i.decision)
   );
+  const escalated = open.filter((i) => i.decision === "ESCALAR").length;
   const deferred = open.filter((i) => i.decision === "APLAZADO").length;
 
   return {
@@ -166,8 +235,9 @@ function plantStats(city) {
     warehouse: rows[0] ? rows[0].warehouse_id : "",
     parts: rows.length,
     open: open.length,
+    escalated,
     deferred,
-    level: deferred ? "stop" : open.length ? "hold" : "go",
+    level: escalated || deferred ? "stop" : open.length ? "hold" : "go",
     stock: sum(rows, "on_hand_qty"),
     capacity: sum(rows, "inventory_max"),
     demand: sum(rows, "demand_monthly"),
@@ -192,8 +262,8 @@ function paintMap() {
 
   const label = document.getElementById("map-filter");
   label.innerHTML = picked
-    ? `Mostrando solo <b>${escape(picked.name)}</b> · <button class="figure-link" id="map-clear">ver las dos plantas</button>`
-    : "Pulsa una planta para ver su ficha y filtrar los casos.";
+    ? `Showing <b>${escape(picked.name)}</b> only · <button class="figure-link" id="map-clear">see both plants</button>`
+    : "Click a plant to see its card and filter the cases.";
 
   const clear = document.getElementById("map-clear");
   if (clear) {
@@ -281,7 +351,7 @@ function caseCard(item) {
     ${advice ? `
       <span class="advice advice--${advice.buy ? "buy" : "hold"}">
         <b>${advice.headline}</b> ${advice.why}
-        <i>La decisión sigue siendo tuya.</i>
+        <i>The call is still yours.</i>
       </span>` : ""}
     <span class="case__foot">${footLine(item)}</span>
     ${decideBar(item)}`;
@@ -305,7 +375,7 @@ function caseCard(item) {
       approve.disabled = true;
       try {
         await applyState(item, "Aprobado");
-        toast(`${item.sku_id} · aprobado`);
+        toast(`${item.sku_id} · approved`);
         await onChanged();
       } catch (error) {
         /* Si el servidor rechaza la transicion es que la pantalla ya no
@@ -335,13 +405,13 @@ function decideBar(item) {
   const canApprove = next.includes("Aprobado");
   const canReject = next.includes("Rechazado");
   if (!canApprove && !canReject) {
-    return '<span class="case__more">Ver el detalle <i>→</i></span>';
+    return '<span class="case__more">See the detail <i>→</i></span>';
   }
 
   return `
     <span class="case__decide">
-      ${canApprove ? '<button class="btn btn--go" type="button" data-approve>Aprobar</button>' : ""}
-      ${canReject ? '<button class="btn btn--stop" type="button" data-reject>Rechazar…</button>' : ""}
-      <span class="case__more">Ver el detalle <i>→</i></span>
+      ${canApprove ? '<button class="btn btn--go" type="button" data-approve>Approve</button>' : ""}
+      ${canReject ? '<button class="btn btn--stop" type="button" data-reject>Reject…</button>' : ""}
+      <span class="case__more">See the detail <i>→</i></span>
     </span>`;
 }

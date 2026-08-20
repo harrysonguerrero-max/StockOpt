@@ -11,11 +11,7 @@
  */
 
 import { state } from "./api.js";
-import { escape } from "./format.js";
-
-const DECISION_WORD = {
-  COMPRAR: "Comprar", NO_COMPRAR: "No comprar", REVISAR: "Revisar", APLAZADO: "Aplazado",
-};
+import { decisionWord, stateLong } from "./format.js";
 
 export function mountFilters(hostId, prefix, onChange, { raw = false } = {}) {
   const host = document.getElementById(hostId);
@@ -24,31 +20,31 @@ export function mountFilters(hostId, prefix, onChange, { raw = false } = {}) {
 
   host.innerHTML = `
     <label class="field field--grow">
-      <span class="label">Buscar</span>
+      <span class="label">Search</span>
       <input type="search" id="${id("search")}" autocomplete="off"
-             placeholder="Código o descripción">
+             placeholder="Code or description">
     </label>
     <label class="field">
-      <span class="label">Planta</span>
-      <select id="${id("city")}"><option value="">Todas</option></select>
+      <span class="label">Plant</span>
+      <select id="${id("city")}"><option value="">All</option></select>
     </label>
     <label class="field">
-      <span class="label">Decisión</span>
-      <select id="${id("decision")}"><option value="">Todas</option></select>
+      <span class="label">Decision</span>
+      <select id="${id("decision")}"><option value="">All</option></select>
     </label>
     <label class="field">
-      <span class="label">Estado</span>
-      <select id="${id("state")}"><option value="">Todos</option></select>
+      <span class="label">Status</span>
+      <select id="${id("state")}"><option value="">All</option></select>
     </label>
     <label class="field">
-      <span class="label">Criticidad</span>
-      <select id="${id("crit")}"><option value="">Todas</option></select>
+      <span class="label">Criticality</span>
+      <select id="${id("crit")}"><option value="">All</option></select>
     </label>
     <label class="field field--check">
       <input type="checkbox" id="${id("review")}">
-      <span>Solo las que piden revisión</span>
+      <span>Only those needing review</span>
     </label>
-    <button class="btn btn--quiet" id="${id("clear")}" type="button" hidden>Quitar filtros</button>`;
+    <button class="btn btn--quiet" id="${id("clear")}" type="button" hidden>Clear filters</button>`;
 
   const controls = ["search", "city", "decision", "state", "crit", "review"].map(el);
   controls.forEach((node) => node.addEventListener("input", onChange));
@@ -83,10 +79,10 @@ export function mountFilters(hostId, prefix, onChange, { raw = false } = {}) {
 
     add("city", state.filters.cities, (c) => [c.id, raw ? `${c.id} · ${c.name}` : c.name]);
     add("decision", state.filters.decisions,
-      (d) => [d, raw ? d : DECISION_WORD[d] || d]);
-    add("state", state.filters.states, (s) => [s, s]);
+      (d) => [d, raw ? d : decisionWord(d)]);
+    add("state", state.filters.states, (s) => [s, raw ? s : stateLong(s)]);
     add("crit", state.filters.criticalities,
-      (c) => [c, raw ? c : `Criticidad ${c}`]);
+      (c) => [c, raw ? c : `Criticality ${c}`]);
     host.dataset.ready = "1";
   }
 
@@ -120,5 +116,3 @@ export function mountFilters(hostId, prefix, onChange, { raw = false } = {}) {
 
   return { apply, count, clear, fill, sync };
 }
-
-export const decisionWord = (value) => DECISION_WORD[value] || escape(value);

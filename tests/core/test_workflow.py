@@ -55,7 +55,7 @@ def test_full_purchase_cycle(db):
 
 
 def test_skipping_a_step_is_rejected(db):
-    with pytest.raises(ValueError, match="Transicion no permitida"):
+    with pytest.raises(ValueError, match="Transition not allowed"):
         update_state("MRO-3", "NAVA", workflow.STATE_CONFIRMED, "ana", db_path=db)
 
 
@@ -69,7 +69,7 @@ def test_a_confirmed_order_cannot_move(db):
 
 
 def test_rejection_requires_a_reason(db):
-    with pytest.raises(ValueError, match="motivo"):
+    with pytest.raises(ValueError, match="requires a reason"):
         update_state("MRO-5", "NAVA", workflow.STATE_REJECTED, "ana", db_path=db)
 
     update_state(
@@ -92,9 +92,9 @@ def test_a_rejected_row_can_be_reopened(db):
 
 
 def test_confidence_labels_cover_the_scale():
-    assert confidence_label(0.9) == "alta"
-    assert confidence_label(0.6) == "media"
-    assert confidence_label(0.2) == "baja"
+    assert confidence_label(0.9) == "high"
+    assert confidence_label(0.6) == "medium"
+    assert confidence_label(0.2) == "low"
 
 
 def test_explanation_states_the_action_and_the_evidence(queue):
@@ -109,15 +109,15 @@ def test_explanation_states_the_action_and_the_evidence(queue):
 def test_explanation_communicates_confidence_and_lead_time(queue):
     purchase = next(i for i in queue if i["decision"] == opt_config.DECISION_BUY)
     assumptions = " ".join(purchase["explanation"]["assumptions"])
-    assert "Confianza" in assumptions
-    assert "Plazo de entrega" in assumptions
-    assert "Vida util" in assumptions
+    assert "confidence" in assumptions
+    assert "lead time" in assumptions
+    assert "Shelf life" in assumptions
 
 
 def test_review_cases_explain_the_conflict(queue):
     review = [i for i in queue if i["decision"] == opt_config.DECISION_REVIEW]
     assert review, "el dataset debe producir casos de revision"
-    assert all("lote minimo" in i["explanation"]["headline"] for i in review)
+    assert all("minimum order quantity" in i["explanation"]["headline"] for i in review)
 
 
 def test_every_row_has_an_explanation(queue):
@@ -146,11 +146,43 @@ def test_summary_adds_up(queue):
     summary = build_summary(queue)
     assert summary["total"] == len(queue)
     assert (
-        summary["to_buy"] + summary["to_review"] + summary["deferred"] + summary["no_action"]
+        summary["to_buy"]
+        + summary["to_review"]
+        + summary["deferred"]
+        + summary["escalated"]
+        + summary["no_action"]
     ) == summary["total"]
     assert summary["investment_usd"] > 0
     if summary["budget_usd"] is not None:
-        assert summary["investment_usd"] <= summary["budget_usd"]
+        assert summary["investment_usd"] <= summary["budget_usd"] + summary["overrun_max_usd"]
+
+
+def test_the_summary_reports_the_overrun_that_protecting_continuity_cost(queue):
+    """Gastar de mas para no parar una linea es legitimo si se ve."""
+    summary = build_summary(queue)
+
+    assert summary["overrun_usd"] == max(
+        0.0, round(summary["investment_usd"] - summary["budget_usd"], 2)
+    )
+    assert summary["overrun_usd"] <= summary["overrun_max_usd"]
+
+
+def test_every_critical_replenishment_is_funded_or_escalated(queue):
+    """La criticidad A no puede quedar aplazada: es la restriccion dura."""
+    critical = [i for i in queue if i["criticality"] == "A"]
+    deferred = [i for i in critical if i["decision"] == opt_config.DECISION_DEFERRED]
+
+    assert deferred == []
+
+
+def test_the_service_level_reached_is_published_next_to_the_declared_floor(queue):
+    """Sin el piso declarado al lado, el nivel conseguido no dice nada."""
+    summary = build_summary(queue)
+    service = {level["criticality"]: level for level in summary["service"]}
+
+    assert set(service) == set(opt_config.SERVICE_FLOOR_BY_CRITICALITY)
+    assert service["A"]["floor"] == 1.0
+    assert service["A"]["met"] is True
 
 
 def test_filters_are_derived_from_the_data(queue):
@@ -194,7 +226,7 @@ def test_state_endpoint_rejects_an_invalid_transition(client, queue):
         },
     )
     assert response.status_code == 400
-    assert "Transicion no permitida" in response.json()["detail"]
+    assert "Transition not allowed" in response.json()["detail"]
 
 
 def test_state_endpoint_rejects_an_unknown_part(client):
@@ -212,7 +244,7 @@ def test_state_endpoint_rejects_an_unknown_part(client):
         },
     )
     assert response.status_code == 404
-    assert "No existe la recomendacion" in response.json()["detail"]
+    assert "No recommendation for" in response.json()["detail"]
 
 
 def test_export_returns_a_csv(client):
@@ -231,7 +263,7 @@ def test_workflow_endpoint_describes_the_flow(client):
 def test_interface_is_served_at_the_root(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert "SupplyOpt" in response.text
+    assert "MRO Spare Parts Optimizer" in response.text
 
 
 # --------------------------------------------------------------------------- #
@@ -362,7 +394,7 @@ def test_review_quantity_is_the_supplier_lot_not_a_recommendation(queue):
             "si el lote cabe en bodega no deberia ser REVISAR"
         )
         headline = item["explanation"]["headline"]
-        assert "No se recomienda comprar" in headline
+        assert "is not recommended" in headline
         assert item["supplier_name"] in headline
 
 
