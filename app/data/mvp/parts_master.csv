@@ -1,21 +1,877 @@
 sku_id,description,category,criticality,uom,unit_cost_usd,currency,shelf_life_days
-MRO-10045,Deep Groove Ball Bearing 6205-2RS,Bearing,A,EA,10.24,USD,1825
-MRO-10046,Cylindrical Roller Bearing NU-2210,Bearing,A,EA,25.3,USD,1825
-MRO-10047,Taper Roller Bearing 30206,Bearing,A,EA,17.47,USD,1825
-MRO-20031,Hydraulic Seal Kit 50mm Bore,Seal & Gasket,A,KIT,38.55,USD,730
-MRO-20032,O-Ring NBR 75 Shore 40x3mm,Seal & Gasket,C,EA,0.14,USD,730
-MRO-20033,V-Ring Shaft Seal VS-35,Seal & Gasket,B,EA,2.23,USD,730
-MRO-30011,V-Belt A-68 Classical,Drive Belt,B,EA,3.86,USD,1095
-MRO-30012,Poly-V Belt 6PK1780,Drive Belt,B,EA,10.72,USD,1095
-MRO-40021,Hydraulic Filter Element 10 Micron,Filter,B,EA,6.51,USD,365
-MRO-40022,Air Filter Cartridge AF-2500,Filter,B,EA,9.16,USD,365
-MRO-50008,Carbon Brush Set 12.5x25mm,Electrical,B,SET,5.18,USD,1825
-MRO-50009,Contactor LC1-D40 Coil 230V,Electrical,A,EA,22.29,USD,1825
-MRO-60015,Coupling Spider (Jaw) 65 Shore,Coupling,B,EA,8.07,USD,2555
-MRO-60016,Flexible Coupling Insert GR-38,Coupling,B,EA,11.08,USD,2555
-MRO-70004,Grease Nipple M6x1 Straight,Lubrication,C,EA,0.22,USD,180
-MRO-70005,Lithium EP-2 Grease 400g Cartridge,Lubrication,C,CTG,2.53,USD,180
-MRO-80001,Proximity Sensor PNP M12 2mm,Sensor,A,EA,13.25,USD,1825
-MRO-80002,Thermocouple Type-K 200mm,Sensor,B,EA,7.83,USD,1825
-MRO-90011,SS Fastener Hex Bolt M10x40 Gr8.8,Fastener,C,PKT,1.14,USD,3650
-MRO-90012,Lock Washer M10 Spring Type,Fastener,C,PKT,0.54,USD,3650
+B2B-017FC278,Cylindrical Roller Bearing 157,Bearing,C,EA,131.0,USD,1825
+B2B-01DE7624,Timing Belt 77,Drive Belt,C,EA,78.0,USD,1095
+B2B-0204FB90,Lubrication Nipple 41,Lubrication,B,EA,24.0,USD,180
+B2B-023801DD,Flexible Coupling 171,Coupling,C,EA,548.0,USD,2555
+B2B-02702E82,Chain Lubricant 58,Lubrication,C,EA,30.5,USD,180
+B2B-02A3F8C0,Flexible Coupling 82,Coupling,C,EA,506.0,USD,2555
+B2B-02EDB12B,Timing Belt 131,Drive Belt,C,EA,89.0,USD,1095
+B2B-030788CA,Coalescing Element 15,Filter,B,EA,37.0,USD,365
+B2B-031521B6,Pillow Block Unit 156,Bearing,C,EA,125.0,USD,1825
+B2B-034A55B1,Conveyor Belt Section 170,Drive Belt,C,EA,84.0,USD,1095
+B2B-03D4E261,Spherical Roller Bearing 127,Bearing,C,EA,218.0,USD,1825
+B2B-03F2DDDA,Shaft Collar Assembly 103,Coupling,C,EA,345.0,USD,2555
+B2B-04A67908,Hydraulic Filter Element 84,Filter,B,EA,34.0,USD,365
+B2B-04E64A1E,Deep Groove Ball Bearing 21,Bearing,C,EA,176.0,USD,1825
+B2B-04E72EE3,Hex Bolt 183,Fastener,C,EA,6.0,USD,3650
+B2B-04FFF724,Temperature Probe 43,Sensor,B,EA,870.0,USD,1825
+B2B-055862A4,O-Ring NBR 45,Seal & Gasket,B,EA,18.0,USD,730
+B2B-05BB0047,Air Filter Cartridge 143,Filter,A,EA,43.0,USD,365
+B2B-0613D319,Shaft Collar Assembly 196,Coupling,C,EA,326.0,USD,2555
+B2B-064325A4,O-Ring NBR 79,Seal & Gasket,B,EA,9.5,USD,730
+B2B-0663EAC5,Food Grade Grease 95,Lubrication,C,EA,29.0,USD,180
+B2B-06E7F576,Angular Contact Bearing 30,Bearing,A,EA,129.5,USD,1825
+B2B-06F0B7BB,Deep Groove Ball Bearing 155,Bearing,C,EA,157.0,USD,1825
+B2B-074C259B,Threaded Rod 144,Fastener,B,EA,5.0,USD,3650
+B2B-07E656C6,Toothed Belt 185,Drive Belt,C,EA,93.0,USD,1095
+B2B-0807EF6D,Contactor 147,Electrical,C,EA,11193.0,USD,1825
+B2B-081C324A,Flange Gasket 183,Seal & Gasket,B,EA,10.0,USD,730
+B2B-090C0C8F,CIP Gasket EPDM 190,Seal & Gasket,C,EA,11.0,USD,730
+B2B-09A87048,Shaft Seal 83,Seal & Gasket,C,EA,22.0,USD,730
+B2B-09D3794B,Hydraulic Filter Element 137,Filter,B,EA,39.0,USD,365
+B2B-09E188FB,Rotary Seal Kit 172,Seal & Gasket,A,EA,22.0,USD,730
+B2B-09EE755B,Safety Relay 195,Electrical,B,EA,3439.0,USD,1825
+B2B-09F6C494,O-Ring NBR 33,Seal & Gasket,C,EA,16.0,USD,730
+B2B-0A049C10,Flange Gasket 189,Seal & Gasket,C,EA,13.0,USD,730
+B2B-0A7B5D7F,Tapered Roller Bearing 152,Bearing,B,EA,243.5,USD,1825
+B2B-0B2EBB6B,Air Filter Cartridge 132,Filter,C,EA,35.0,USD,365
+B2B-0B7D27FA,Breather Filter 193,Filter,B,EA,33.0,USD,365
+B2B-0BD7AABE,Pressure Transmitter 20,Sensor,C,EA,584.0,USD,1825
+B2B-0BDEBF74,Pressure Transmitter 91,Sensor,B,EA,676.0,USD,1825
+B2B-0BE47CF6,Angular Contact Bearing 77,Bearing,B,EA,169.0,USD,1825
+B2B-0BFDC0C3,Cylindrical Roller Bearing 172,Bearing,B,EA,251.0,USD,1825
+B2B-0C20548B,Gear Oil 166,Lubrication,C,EA,26.0,USD,180
+B2B-0C232B3D,Coalescing Element 13,Filter,C,EA,41.0,USD,365
+B2B-0C8A83CA,Flexible Coupling 55,Coupling,B,EA,391.0,USD,2555
+B2B-0CE85B8A,Safety Relay 173,Electrical,C,EA,3264.0,USD,1825
+B2B-0D033FE2,Flange Gasket 155,Seal & Gasket,C,EA,15.0,USD,730
+B2B-0D1CC065,Cylindrical Roller Bearing 139,Bearing,C,EA,149.0,USD,1825
+B2B-0DD1AA9C,O-Ring NBR 113,Seal & Gasket,C,EA,18.0,USD,730
+B2B-0DFF8701,Conveyor Belt Section 73,Drive Belt,C,EA,72.5,USD,1095
+B2B-0E2D8BD2,Coalescing Element 181,Filter,B,EA,34.0,USD,365
+B2B-0E4605CF,V-Belt 74,Drive Belt,B,EA,77.0,USD,1095
+B2B-0E9545F7,Lip Seal 118,Seal & Gasket,C,EA,15.0,USD,730
+B2B-0F2B7E81,Toothed Belt 58,Drive Belt,C,EA,52.0,USD,1095
+B2B-0F652EB9,V-Belt 149,Drive Belt,C,EA,74.0,USD,1095
+B2B-0FB69D23,Lip Seal 150,Seal & Gasket,C,EA,10.0,USD,730
+B2B-0FCFAD40,Torque Limiter 139,Coupling,C,EA,307.0,USD,2555
+B2B-0FF8FFA4,Lubrication Nipple 38,Lubrication,C,EA,26.0,USD,180
+B2B-107EFC1C,Rotary Seal Kit 167,Seal & Gasket,C,EA,20.0,USD,730
+B2B-108C769F,Angular Contact Bearing 99,Bearing,C,EA,168.0,USD,1825
+B2B-10C8B88C,Angular Contact Bearing 44,Bearing,B,EA,162.5,USD,1825
+B2B-110AF049,Toothed Belt 87,Drive Belt,C,EA,52.5,USD,1095
+B2B-112A7A30,Servo Drive 88,Electrical,B,EA,2155.0,USD,1825
+B2B-112D80FF,Angular Contact Bearing 23,Bearing,B,EA,114.0,USD,1825
+B2B-11B2A747,Angular Contact Bearing 116,Bearing,B,EA,125.0,USD,1825
+B2B-11EC40BA,Air Filter Cartridge 92,Filter,C,EA,37.0,USD,365
+B2B-11F00043,Rotary Seal Kit 16,Seal & Gasket,C,EA,20.0,USD,730
+B2B-11F9D853,Flat Belt 94,Drive Belt,B,EA,61.0,USD,1095
+B2B-1228D9AB,Conveyor Belt Section 62,Drive Belt,C,EA,85.0,USD,1095
+B2B-12329DAA,Flange Gasket 198,Seal & Gasket,B,EA,22.0,USD,730
+B2B-126DED1C,Jaw Coupling 161,Coupling,B,EA,485.0,USD,2555
+B2B-135AD84E,Flexible Coupling 49,Coupling,A,EA,336.0,USD,2555
+B2B-13C90FB6,Food Grade Grease 13,Lubrication,C,EA,25.0,USD,180
+B2B-1402824E,Pressure Transmitter 45,Sensor,C,EA,711.0,USD,1825
+B2B-14284CA2,PLC Input Module 10,Electrical,C,EA,3397.0,USD,1825
+B2B-142D3777,Cylindrical Roller Bearing 56,Bearing,B,EA,97.0,USD,1825
+B2B-14601675,Gear Oil 134,Lubrication,B,EA,23.0,USD,180
+B2B-1487F8B3,Conveyor Belt Section 72,Drive Belt,C,EA,63.0,USD,1095
+B2B-148FAF9F,Food Grade Grease 85,Lubrication,C,EA,24.0,USD,180
+B2B-1508C522,Hex Bolt 11,Fastener,C,EA,1.0,USD,3650
+B2B-151302E4,Lip Seal 88,Seal & Gasket,C,EA,18.0,USD,730
+B2B-154C3938,Chain Lubricant 176,Lubrication,C,EA,31.0,USD,180
+B2B-15FE9FAE,Grease Cartridge 91,Lubrication,B,EA,26.0,USD,180
+B2B-1777BD2C,Gear Coupling 28,Coupling,C,EA,407.0,USD,2555
+B2B-1881FA7E,Socket Head Screw 131,Fastener,B,EA,1.0,USD,3650
+B2B-188BC5A2,Contactor 93,Electrical,C,EA,1135.0,USD,1825
+B2B-18C515D1,Lock Washer Set 96,Fastener,B,EA,7.5,USD,3650
+B2B-19107219,Tapered Roller Bearing 15,Bearing,C,EA,95.0,USD,1825
+B2B-1972A9E4,Socket Head Screw 13,Fastener,C,EA,5.0,USD,3650
+B2B-19824648,Air Filter Cartridge 133,Filter,C,EA,37.0,USD,365
+B2B-1A99AF72,Rotary Seal Kit 80,Seal & Gasket,C,EA,16.0,USD,730
+B2B-1AFEC9F3,Lubrication Nipple 174,Lubrication,B,EA,26.5,USD,180
+B2B-1B16B6A1,Air Filter Cartridge 180,Filter,C,EA,45.0,USD,365
+B2B-1B29E2D8,Conveyor Belt Section 17,Drive Belt,C,EA,51.0,USD,1095
+B2B-1B6E9894,Retaining Ring 186,Fastener,C,EA,8.0,USD,3650
+B2B-1BC9D6A5,Rotary Seal Kit 153,Seal & Gasket,C,EA,19.0,USD,730
+B2B-1BF419CE,Membrane Filter 121,Filter,B,EA,40.0,USD,365
+B2B-1C4F216C,Rotary Seal Kit 51,Seal & Gasket,C,EA,14.0,USD,730
+B2B-1C50B0B6,Lock Washer Set 105,Fastener,C,EA,1.0,USD,3650
+B2B-1C51C78A,Pressure Transmitter 170,Sensor,B,EA,619.0,USD,1825
+B2B-1D93FCD8,Motor Starter 107,Electrical,C,EA,7143.0,USD,1825
+B2B-1DBA4393,Stud Assembly 87,Fastener,C,EA,7.0,USD,3650
+B2B-1DE3A766,Gear Oil 76,Lubrication,C,EA,24.0,USD,180
+B2B-1DEDF284,Rotary Seal Kit 58,Seal & Gasket,C,EA,20.5,USD,730
+B2B-1EA21CFA,Shaft Collar Assembly 170,Coupling,B,EA,384.0,USD,2555
+B2B-1EC461E1,Timing Belt 182,Drive Belt,A,EA,72.0,USD,1095
+B2B-1F2F865F,Universal Joint 166,Coupling,C,EA,319.0,USD,2555
+B2B-1F536C46,Hydraulic Filter Element 135,Filter,C,EA,34.0,USD,365
+B2B-1FDD5AD2,Stud Assembly 137,Fastener,B,EA,1.0,USD,3650
+B2B-206973A6,Hydraulic Filter Element 20,Filter,C,EA,39.0,USD,365
+B2B-2114DFC1,Lip Seal 138,Seal & Gasket,C,EA,21.0,USD,730
+B2B-22D8CF65,Grease Cartridge 105,Lubrication,C,EA,31.0,USD,180
+B2B-23F36FE3,Flange Gasket 24,Seal & Gasket,C,EA,19.0,USD,730
+B2B-2475817F,Spherical Roller Bearing 30,Bearing,C,EA,196.0,USD,1825
+B2B-24C357C9,Angular Contact Bearing 73,Bearing,C,EA,256.0,USD,1825
+B2B-24D0030F,Lock Washer Set 125,Fastener,C,EA,3.0,USD,3650
+B2B-253A658B,Hydraulic Fluid 118,Lubrication,C,EA,30.0,USD,180
+B2B-2582DD16,Pillow Block Unit 44,Bearing,B,EA,141.0,USD,1825
+B2B-259F02BD,Retaining Ring 79,Fastener,C,EA,4.0,USD,3650
+B2B-25BE7340,Tapered Roller Bearing 170,Bearing,B,EA,234.0,USD,1825
+B2B-25C42D53,Pressure Transmitter 128,Sensor,C,EA,899.5,USD,1825
+B2B-25DE09FB,Jaw Coupling 180,Coupling,B,EA,350.0,USD,2555
+B2B-25F67750,Contactor 109,Electrical,C,EA,1150.0,USD,1825
+B2B-2652ACBF,Conveyor Belt Section 82,Drive Belt,C,EA,72.0,USD,1095
+B2B-26A01ECD,Air Filter Cartridge 129,Filter,C,EA,43.0,USD,365
+B2B-26F7A0A5,Cylindrical Roller Bearing 164,Bearing,C,EA,260.0,USD,1825
+B2B-278D7730,Coalescing Element 53,Filter,A,EA,49.0,USD,365
+B2B-27D8553C,Flat Belt 188,Drive Belt,B,EA,81.0,USD,1095
+B2B-282422D6,Pressure Transmitter 146,Sensor,C,EA,652.0,USD,1825
+B2B-28D8F809,Gear Coupling 86,Coupling,C,EA,527.0,USD,2555
+B2B-291AA5BF,Pillow Block Unit 104,Bearing,B,EA,198.0,USD,1825
+B2B-292C9EF8,Frequency Inverter 72,Electrical,C,EA,3617.0,USD,1825
+B2B-298BFCBA,Pillow Block Unit 140,Bearing,C,EA,174.0,USD,1825
+B2B-29C7B436,Jaw Coupling 115,Coupling,C,EA,278.0,USD,2555
+B2B-2A60287F,CIP Gasket EPDM 106,Seal & Gasket,B,EA,19.0,USD,730
+B2B-2A974E84,O-Ring NBR 77,Seal & Gasket,C,EA,11.5,USD,730
+B2B-2AF3C44F,Shaft Seal 134,Seal & Gasket,B,EA,14.0,USD,730
+B2B-2B7366FA,Universal Joint 166,Coupling,C,EA,302.0,USD,2555
+B2B-2B74262C,Breather Filter 73,Filter,C,EA,46.0,USD,365
+B2B-2C274F12,Temperature Probe 137,Sensor,C,EA,896.0,USD,1825
+B2B-2C668EF8,Contactor 57,Electrical,B,EA,1473.0,USD,1825
+B2B-2C7B4BFB,Universal Joint 110,Coupling,C,EA,434.0,USD,2555
+B2B-2D3421AE,Toothed Belt 128,Drive Belt,C,EA,87.0,USD,1095
+B2B-2D5004B4,Filter Candle 123,Filter,C,EA,43.0,USD,365
+B2B-2D6CE968,Food Grade Grease 34,Lubrication,C,EA,25.0,USD,180
+B2B-2DB1DEB4,Spherical Roller Bearing 81,Bearing,C,EA,202.0,USD,1825
+B2B-2DBBCF0E,Spherical Roller Bearing 166,Bearing,C,EA,214.0,USD,1825
+B2B-2DC805BB,Retaining Ring 50,Fastener,C,EA,5.0,USD,3650
+B2B-2E230974,Gear Coupling 75,Coupling,C,EA,422.0,USD,2555
+B2B-2E302679,Threaded Rod 29,Fastener,B,EA,4.0,USD,3650
+B2B-2E55A0E2,Spherical Roller Bearing 130,Bearing,C,EA,98.0,USD,1825
+B2B-2EF0C560,Pillow Block Unit 156,Bearing,C,EA,248.0,USD,1825
+B2B-300A5037,Jaw Coupling 103,Coupling,C,EA,351.0,USD,2555
+B2B-300D55DD,O-Ring NBR 26,Seal & Gasket,C,EA,10.0,USD,730
+B2B-3035CEDE,CIP Gasket EPDM 131,Seal & Gasket,A,EA,16.0,USD,730
+B2B-30440C1B,V-Belt 100,Drive Belt,C,EA,63.0,USD,1095
+B2B-31437C68,Rotary Seal Kit 116,Seal & Gasket,C,EA,15.0,USD,730
+B2B-31B48C59,Shaft Collar Assembly 13,Coupling,B,EA,297.0,USD,2555
+B2B-31DFDD86,Flange Gasket 79,Seal & Gasket,A,EA,16.0,USD,730
+B2B-31ECC143,Timing Belt 114,Drive Belt,C,EA,52.0,USD,1095
+B2B-31ED8A8A,Contactor 182,Electrical,B,EA,2552.0,USD,1825
+B2B-32014988,Hydraulic Filter Element 98,Filter,C,EA,38.0,USD,365
+B2B-322BC141,O-Ring NBR 43,Seal & Gasket,C,EA,11.0,USD,730
+B2B-3268AEEF,Toothed Belt 148,Drive Belt,B,EA,55.0,USD,1095
+B2B-32844696,V-Belt 177,Drive Belt,B,EA,53.5,USD,1095
+B2B-32F6CBEA,Photoelectric Sensor 154,Sensor,C,EA,919.0,USD,1825
+B2B-32F8EB3B,Tapered Roller Bearing 152,Bearing,C,EA,179.5,USD,1825
+B2B-33166200,Threaded Rod 57,Fastener,C,EA,3.0,USD,3650
+B2B-33406034,Threaded Rod 71,Fastener,C,EA,3.0,USD,3650
+B2B-33CD1137,Lip Seal 152,Seal & Gasket,B,EA,20.0,USD,730
+B2B-340ED9DD,Hydraulic Filter Element 136,Filter,C,EA,44.0,USD,365
+B2B-34946AC4,Filter Candle 56,Filter,C,EA,48.0,USD,365
+B2B-35004849,Contactor 176,Electrical,B,EA,2579.5,USD,1825
+B2B-35268622,Grease Cartridge 30,Lubrication,B,EA,23.0,USD,180
+B2B-35A8EE8F,O-Ring NBR 109,Seal & Gasket,B,EA,14.0,USD,730
+B2B-35D8C78F,V-Belt 134,Drive Belt,C,EA,80.0,USD,1095
+B2B-35F1E9F3,Contactor 84,Electrical,C,EA,4250.0,USD,1825
+B2B-3611FBEA,Stud Assembly 187,Fastener,B,EA,3.0,USD,3650
+B2B-368C647F,Cylindrical Roller Bearing 147,Bearing,C,EA,200.0,USD,1825
+B2B-376D8078,Shaft Collar Assembly 25,Coupling,C,EA,480.0,USD,2555
+B2B-37A67579,Motor Starter 83,Electrical,C,EA,9141.0,USD,1825
+B2B-381E97F9,Flexible Coupling 199,Coupling,B,EA,462.0,USD,2555
+B2B-392D5F2B,Jaw Coupling 137,Coupling,B,EA,288.0,USD,2555
+B2B-3955B656,Pillow Block Unit 179,Bearing,C,EA,138.0,USD,1825
+B2B-39736DC1,CIP Gasket EPDM 163,Seal & Gasket,C,EA,22.0,USD,730
+B2B-39E815CE,Tapered Roller Bearing 50,Bearing,C,EA,105.5,USD,1825
+B2B-3A1BBB38,Socket Head Screw 78,Fastener,C,EA,2.0,USD,3650
+B2B-3A7BE5BE,Grease Cartridge 19,Lubrication,C,EA,27.0,USD,180
+B2B-3ADCAEE1,Socket Head Screw 23,Fastener,B,EA,1.0,USD,3650
+B2B-3AF021E7,Shaft Seal 19,Seal & Gasket,C,EA,13.0,USD,730
+B2B-3B04AEC3,Universal Joint 111,Coupling,B,EA,303.0,USD,2555
+B2B-3B0B4D69,Membrane Filter 158,Filter,C,EA,39.0,USD,365
+B2B-3B87A90B,Level Sensor 10,Sensor,C,EA,619.0,USD,1825
+B2B-3B967590,Safety Relay 148,Electrical,B,EA,1581.0,USD,1825
+B2B-3B99A789,Food Grade Grease 138,Lubrication,B,EA,22.0,USD,180
+B2B-3BE52C4E,Level Sensor 149,Sensor,C,EA,745.0,USD,1825
+B2B-3C37E0A7,Poly-V Belt 132,Drive Belt,B,EA,62.0,USD,1095
+B2B-3C3A31AD,Universal Joint 177,Coupling,B,EA,383.0,USD,2555
+B2B-3C70A88B,Frequency Inverter 18,Electrical,C,EA,10887.0,USD,1825
+B2B-3C78A64F,V-Belt 73,Drive Belt,C,EA,84.0,USD,1095
+B2B-3CE77B12,Shaft Seal 29,Seal & Gasket,C,EA,10.0,USD,730
+B2B-3D1F4808,Rotary Seal Kit 21,Seal & Gasket,C,EA,11.0,USD,730
+B2B-3D285BAB,Poly-V Belt 48,Drive Belt,A,EA,58.0,USD,1095
+B2B-3ECB9008,Photoelectric Sensor 182,Sensor,C,EA,763.0,USD,1825
+B2B-3EE6799E,V-Belt 156,Drive Belt,C,EA,75.0,USD,1095
+B2B-3F23B0C1,Lock Washer Set 112,Fastener,B,EA,6.0,USD,3650
+B2B-3F3973A4,Coalescing Element 178,Filter,C,EA,38.0,USD,365
+B2B-3F72B874,Lubrication Nipple 51,Lubrication,C,EA,27.0,USD,180
+B2B-3F7DB904,Gear Oil 157,Lubrication,C,EA,26.0,USD,180
+B2B-3FC0E5B1,Retaining Ring 90,Fastener,C,EA,2.0,USD,3650
+B2B-40505780,Hex Bolt 62,Fastener,C,EA,4.0,USD,3650
+B2B-40CED9B2,Cylindrical Roller Bearing 144,Bearing,C,EA,112.0,USD,1825
+B2B-4100CC04,Level Sensor 25,Sensor,C,EA,633.0,USD,1825
+B2B-410C7C12,Temperature Probe 112,Sensor,C,EA,576.0,USD,1825
+B2B-411D357F,Pillow Block Unit 197,Bearing,C,EA,108.0,USD,1825
+B2B-4142FA05,CIP Gasket EPDM 144,Seal & Gasket,C,EA,17.0,USD,730
+B2B-417AB46C,Air Filter Cartridge 112,Filter,C,EA,39.0,USD,365
+B2B-42098A0D,Pressure Transmitter 159,Sensor,C,EA,938.5,USD,1825
+B2B-426C7CF0,Deep Groove Ball Bearing 71,Bearing,C,EA,263.0,USD,1825
+B2B-42897AE3,Deep Groove Ball Bearing 93,Bearing,C,EA,225.0,USD,1825
+B2B-4293D2AE,Air Filter Cartridge 186,Filter,B,EA,40.0,USD,365
+B2B-430460BE,Hex Bolt 55,Fastener,C,EA,9.0,USD,3650
+B2B-43339D86,Timing Belt 38,Drive Belt,C,EA,79.0,USD,1095
+B2B-433F8CF6,Breather Filter 157,Filter,B,EA,38.0,USD,365
+B2B-436C48C9,Pillow Block Unit 194,Bearing,B,EA,138.0,USD,1825
+B2B-43C93C0C,Deep Groove Ball Bearing 138,Bearing,A,EA,119.0,USD,1825
+B2B-44181DD5,Hydraulic Fluid 196,Lubrication,B,EA,23.0,USD,180
+B2B-441FD0A5,Poly-V Belt 49,Drive Belt,B,EA,74.0,USD,1095
+B2B-44FEED02,Proximity Sensor 178,Sensor,B,EA,561.0,USD,1825
+B2B-45042E33,Shaft Seal 57,Seal & Gasket,C,EA,11.0,USD,730
+B2B-452A3DF7,Timing Belt 75,Drive Belt,C,EA,80.5,USD,1095
+B2B-45558E95,Filter Candle 103,Filter,B,EA,43.0,USD,365
+B2B-4556DA95,Conveyor Belt Section 47,Drive Belt,B,EA,50.5,USD,1095
+B2B-455B3B76,Toothed Belt 108,Drive Belt,C,EA,70.0,USD,1095
+B2B-45B8A6F6,Air Filter Cartridge 190,Filter,C,EA,38.0,USD,365
+B2B-45BB978B,Servo Drive 174,Electrical,B,EA,1218.0,USD,1825
+B2B-46502E03,Spherical Roller Bearing 18,Bearing,A,EA,250.0,USD,1825
+B2B-4723F389,Toothed Belt 146,Drive Belt,C,EA,52.0,USD,1095
+B2B-47363D01,Motor Starter 173,Electrical,B,EA,1476.0,USD,1825
+B2B-47559277,Stud Assembly 73,Fastener,C,EA,9.0,USD,3650
+B2B-47A6976D,Lip Seal 174,Seal & Gasket,C,EA,16.0,USD,730
+B2B-4830685F,Cylindrical Roller Bearing 70,Bearing,C,EA,99.0,USD,1825
+B2B-4892A1C9,Threaded Rod 166,Fastener,C,EA,2.0,USD,3650
+B2B-48DB5CF5,Cylindrical Roller Bearing 172,Bearing,B,EA,143.0,USD,1825
+B2B-4902CB4F,Torque Limiter 111,Coupling,C,EA,537.0,USD,2555
+B2B-49234388,Spherical Roller Bearing 40,Bearing,C,EA,96.0,USD,1825
+B2B-492ECBD6,Universal Joint 193,Coupling,C,EA,333.0,USD,2555
+B2B-498814A9,Lubrication Nipple 159,Lubrication,C,EA,22.0,USD,180
+B2B-499D44F5,Threaded Rod 28,Fastener,C,EA,9.0,USD,3650
+B2B-49D0FAF4,Membrane Filter 104,Filter,C,EA,41.0,USD,365
+B2B-4A184D34,Air Filter Cartridge 22,Filter,B,EA,40.0,USD,365
+B2B-4A2CE0ED,Membrane Filter 69,Filter,C,EA,40.0,USD,365
+B2B-4A3431AF,Deep Groove Ball Bearing 100,Bearing,C,EA,173.0,USD,1825
+B2B-4A72795B,Spherical Roller Bearing 31,Bearing,C,EA,209.5,USD,1825
+B2B-4A80ACE9,O-Ring NBR 161,Seal & Gasket,C,EA,11.0,USD,730
+B2B-4AA7544F,Coalescing Element 32,Filter,C,EA,33.0,USD,365
+B2B-4AAE9058,Stud Assembly 15,Fastener,C,EA,1.0,USD,3650
+B2B-4AFE4D1D,O-Ring NBR 109,Seal & Gasket,B,EA,15.0,USD,730
+B2B-4AFED08F,Hex Bolt 58,Fastener,B,EA,1.0,USD,3650
+B2B-4B21CCDC,Contactor 28,Electrical,B,EA,1856.0,USD,1825
+B2B-4B22F204,O-Ring NBR 125,Seal & Gasket,B,EA,20.0,USD,730
+B2B-4B9F55A2,Temperature Probe 186,Sensor,B,EA,584.0,USD,1825
+B2B-4C50719D,Gear Oil 104,Lubrication,B,EA,24.0,USD,180
+B2B-4C7629DA,Servo Drive 176,Electrical,C,EA,2617.0,USD,1825
+B2B-4CBD402C,Level Sensor 91,Sensor,C,EA,778.5,USD,1825
+B2B-4CFCA4E7,Breather Filter 40,Filter,B,EA,37.0,USD,365
+B2B-4D04368F,Coalescing Element 108,Filter,B,EA,34.0,USD,365
+B2B-4D5F5A6B,Universal Joint 173,Coupling,C,EA,443.0,USD,2555
+B2B-4E316E20,Angular Contact Bearing 194,Bearing,A,EA,263.0,USD,1825
+B2B-4E40FFE0,Filter Candle 93,Filter,C,EA,46.0,USD,365
+B2B-4E56653A,PLC Input Module 68,Electrical,B,EA,6368.0,USD,1825
+B2B-4EB8E1FA,Hydraulic Fluid 187,Lubrication,B,EA,30.0,USD,180
+B2B-4F26750A,Level Sensor 162,Sensor,B,EA,806.0,USD,1825
+B2B-4F9158D6,Deep Groove Ball Bearing 69,Bearing,C,EA,225.5,USD,1825
+B2B-4F976EE2,Lubrication Nipple 88,Lubrication,C,EA,22.0,USD,180
+B2B-4FC5BBFA,Shaft Collar Assembly 71,Coupling,B,EA,316.0,USD,2555
+B2B-4FC72CD1,Spherical Roller Bearing 33,Bearing,C,EA,123.0,USD,1825
+B2B-5002E9A3,Conveyor Belt Section 19,Drive Belt,C,EA,54.0,USD,1095
+B2B-50160261,Level Sensor 85,Sensor,C,EA,867.0,USD,1825
+B2B-50167218,Food Grade Grease 125,Lubrication,C,EA,27.0,USD,180
+B2B-50C8A2FE,Chain Lubricant 149,Lubrication,C,EA,22.5,USD,180
+B2B-512AFA6A,Hydraulic Fluid 49,Lubrication,C,EA,27.0,USD,180
+B2B-513FA697,Retaining Ring 138,Fastener,C,EA,7.0,USD,3650
+B2B-51515109,Toothed Belt 19,Drive Belt,C,EA,68.0,USD,1095
+B2B-51A24FC7,Breather Filter 165,Filter,B,EA,35.0,USD,365
+B2B-52124577,Temperature Probe 117,Sensor,C,EA,622.5,USD,1825
+B2B-5292BB69,Lip Seal 84,Seal & Gasket,C,EA,13.5,USD,730
+B2B-529E8670,Cylindrical Roller Bearing 154,Bearing,C,EA,262.0,USD,1825
+B2B-52D3C1AF,Socket Head Screw 186,Fastener,C,EA,5.0,USD,3650
+B2B-5304017D,Lip Seal 159,Seal & Gasket,C,EA,13.0,USD,730
+B2B-536E9E44,Pillow Block Unit 127,Bearing,B,EA,114.0,USD,1825
+B2B-53ADD74B,Conveyor Belt Section 66,Drive Belt,C,EA,54.0,USD,1095
+B2B-53AEBFBA,Lip Seal 135,Seal & Gasket,B,EA,13.0,USD,730
+B2B-5416358B,Lip Seal 57,Seal & Gasket,B,EA,20.0,USD,730
+B2B-5492692B,Flat Belt 180,Drive Belt,C,EA,61.0,USD,1095
+B2B-55059136,Poly-V Belt 113,Drive Belt,C,EA,83.0,USD,1095
+B2B-55241C74,Chain Lubricant 88,Lubrication,C,EA,30.0,USD,180
+B2B-5586A63A,Poly-V Belt 120,Drive Belt,C,EA,74.0,USD,1095
+B2B-55993977,CIP Gasket EPDM 136,Seal & Gasket,C,EA,21.0,USD,730
+B2B-5653B1D4,PLC Input Module 131,Electrical,C,EA,8464.0,USD,1825
+B2B-5671BD0A,Safety Relay 119,Electrical,C,EA,1942.0,USD,1825
+B2B-56AB256E,Spherical Roller Bearing 174,Bearing,C,EA,107.5,USD,1825
+B2B-56DF157C,Socket Head Screw 77,Fastener,B,EA,2.0,USD,3650
+B2B-574206A9,Tapered Roller Bearing 34,Bearing,C,EA,248.0,USD,1825
+B2B-57518D0F,Frequency Inverter 154,Electrical,C,EA,1221.5,USD,1825
+B2B-57674178,Cylindrical Roller Bearing 107,Bearing,B,EA,143.0,USD,1825
+B2B-576825E5,Breather Filter 40,Filter,C,EA,47.0,USD,365
+B2B-5808D846,Angular Contact Bearing 98,Bearing,B,EA,155.0,USD,1825
+B2B-588968E5,Food Grade Grease 135,Lubrication,C,EA,22.0,USD,180
+B2B-58A74AFC,Retaining Ring 31,Fastener,C,EA,5.0,USD,3650
+B2B-58B1BFE0,Poly-V Belt 194,Drive Belt,C,EA,53.5,USD,1095
+B2B-58B21ADB,Photoelectric Sensor 184,Sensor,C,EA,915.0,USD,1825
+B2B-58DF4920,Filter Candle 40,Filter,A,EA,41.0,USD,365
+B2B-5932C58C,Hydraulic Filter Element 159,Filter,B,EA,32.0,USD,365
+B2B-595AE33B,V-Belt 57,Drive Belt,B,EA,87.0,USD,1095
+B2B-59640EEF,Flange Gasket 152,Seal & Gasket,C,EA,10.0,USD,730
+B2B-599B7967,Hydraulic Filter Element 130,Filter,C,EA,49.0,USD,365
+B2B-59AF0286,Stud Assembly 47,Fastener,C,EA,5.0,USD,3650
+B2B-59B4522E,Pillow Block Unit 98,Bearing,A,EA,241.5,USD,1825
+B2B-59BEB417,Membrane Filter 42,Filter,C,EA,45.0,USD,365
+B2B-5A066E11,Stud Assembly 91,Fastener,A,EA,4.0,USD,3650
+B2B-5A52EC44,PLC Input Module 165,Electrical,B,EA,2245.0,USD,1825
+B2B-5A8C95BA,Jaw Coupling 104,Coupling,C,EA,419.0,USD,2555
+B2B-5AA3976E,Poly-V Belt 164,Drive Belt,C,EA,91.0,USD,1095
+B2B-5AF5C3C6,Lock Washer Set 77,Fastener,C,EA,8.0,USD,3650
+B2B-5B018433,Shaft Collar Assembly 196,Coupling,B,EA,431.5,USD,2555
+B2B-5B101B3D,Threaded Rod 13,Fastener,C,EA,1.0,USD,3650
+B2B-5B3B7057,Food Grade Grease 86,Lubrication,C,EA,22.0,USD,180
+B2B-5B481946,Flow Meter 94,Sensor,C,EA,980.0,USD,1825
+B2B-5BC556C6,Rotary Seal Kit 58,Seal & Gasket,B,EA,12.5,USD,730
+B2B-5C185880,Grease Cartridge 189,Lubrication,B,EA,26.0,USD,180
+B2B-5C23004B,Hex Bolt 80,Fastener,B,EA,7.0,USD,3650
+B2B-5C5A758C,Lubrication Nipple 155,Lubrication,B,EA,23.0,USD,180
+B2B-5CE18479,Torque Limiter 66,Coupling,C,EA,297.0,USD,2555
+B2B-5DF47B5D,Threaded Rod 86,Fastener,C,EA,7.0,USD,3650
+B2B-5EA92CE9,Air Filter Cartridge 117,Filter,C,EA,34.0,USD,365
+B2B-5EB47646,Membrane Filter 134,Filter,C,EA,41.0,USD,365
+B2B-5ED575A1,Coalescing Element 21,Filter,C,EA,37.0,USD,365
+B2B-5EEF176B,Motor Starter 38,Electrical,B,EA,2093.0,USD,1825
+B2B-5F93DB8B,Deep Groove Ball Bearing 25,Bearing,C,EA,140.0,USD,1825
+B2B-5FEE409E,Flow Meter 87,Sensor,C,EA,622.0,USD,1825
+B2B-6123EB6D,Temperature Probe 58,Sensor,B,EA,609.0,USD,1825
+B2B-614FB6A0,Pillow Block Unit 163,Bearing,C,EA,118.0,USD,1825
+B2B-61AF0245,Chain Lubricant 49,Lubrication,C,EA,24.0,USD,180
+B2B-61EBD1BE,Conveyor Belt Section 10,Drive Belt,C,EA,49.0,USD,1095
+B2B-6292ED51,Poly-V Belt 81,Drive Belt,C,EA,55.0,USD,1095
+B2B-63DEB13D,Lip Seal 69,Seal & Gasket,C,EA,12.0,USD,730
+B2B-63E1C5CE,Stud Assembly 12,Fastener,C,EA,3.0,USD,3650
+B2B-6408C53C,Deep Groove Ball Bearing 128,Bearing,C,EA,124.0,USD,1825
+B2B-6450579B,Pillow Block Unit 183,Bearing,C,EA,175.0,USD,1825
+B2B-6459EB20,Breather Filter 95,Filter,B,EA,43.0,USD,365
+B2B-64ABFD43,Chain Lubricant 47,Lubrication,C,EA,30.0,USD,180
+B2B-64B0BE04,Tapered Roller Bearing 115,Bearing,B,EA,241.0,USD,1825
+B2B-64F486B0,Tapered Roller Bearing 165,Bearing,C,EA,138.0,USD,1825
+B2B-6514BBB7,Servo Drive 176,Electrical,C,EA,2223.0,USD,1825
+B2B-6543364B,Shaft Collar Assembly 130,Coupling,B,EA,302.0,USD,2555
+B2B-655B3944,CIP Gasket EPDM 166,Seal & Gasket,B,EA,19.0,USD,730
+B2B-665157BD,Motor Starter 95,Electrical,C,EA,2203.0,USD,1825
+B2B-667437F2,Toothed Belt 121,Drive Belt,B,EA,62.5,USD,1095
+B2B-66AC9297,Lubrication Nipple 29,Lubrication,B,EA,30.0,USD,180
+B2B-66E0279E,Hydraulic Filter Element 39,Filter,B,EA,34.0,USD,365
+B2B-66F1A5FB,Spherical Roller Bearing 128,Bearing,C,EA,112.0,USD,1825
+B2B-6714F776,Hydraulic Fluid 161,Lubrication,C,EA,23.0,USD,180
+B2B-67B5178B,O-Ring NBR 76,Seal & Gasket,B,EA,20.0,USD,730
+B2B-67C435EA,Photoelectric Sensor 88,Sensor,B,EA,758.0,USD,1825
+B2B-6826C345,Threaded Rod 75,Fastener,B,EA,7.0,USD,3650
+B2B-68342F29,Photoelectric Sensor 24,Sensor,C,EA,571.0,USD,1825
+B2B-68C2828B,CIP Gasket EPDM 115,Seal & Gasket,A,EA,11.0,USD,730
+B2B-68D00C2E,Retaining Ring 167,Fastener,C,EA,9.0,USD,3650
+B2B-690956F0,Shaft Collar Assembly 117,Coupling,C,EA,488.0,USD,2555
+B2B-696FB817,Retaining Ring 137,Fastener,C,EA,1.0,USD,3650
+B2B-697489DE,Universal Joint 78,Coupling,C,EA,458.0,USD,2555
+B2B-69BE22C9,O-Ring NBR 161,Seal & Gasket,B,EA,13.0,USD,730
+B2B-69D0A639,Filter Candle 177,Filter,B,EA,33.0,USD,365
+B2B-6A1C5FE0,Pillow Block Unit 48,Bearing,C,EA,226.0,USD,1825
+B2B-6B2428F6,Proximity Sensor 102,Sensor,C,EA,793.0,USD,1825
+B2B-6B34F25D,Contactor 141,Electrical,B,EA,2534.0,USD,1825
+B2B-6D1657D3,Hydraulic Filter Element 12,Filter,C,EA,32.0,USD,365
+B2B-6D560776,Membrane Filter 135,Filter,C,EA,36.0,USD,365
+B2B-6E34BD05,Flexible Coupling 165,Coupling,B,EA,423.0,USD,2555
+B2B-6E990172,Hydraulic Fluid 125,Lubrication,A,EA,28.0,USD,180
+B2B-6EB0D5A5,Filter Candle 90,Filter,C,EA,36.0,USD,365
+B2B-6F02ED2B,Level Sensor 25,Sensor,C,EA,1078.0,USD,1825
+B2B-6F298F15,Breather Filter 164,Filter,C,EA,44.0,USD,365
+B2B-6F97381C,Lip Seal 165,Seal & Gasket,C,EA,9.0,USD,730
+B2B-6FC52F87,Angular Contact Bearing 73,Bearing,C,EA,210.0,USD,1825
+B2B-704AE895,Cylindrical Roller Bearing 56,Bearing,C,EA,157.0,USD,1825
+B2B-70B45E53,Shaft Seal 93,Seal & Gasket,B,EA,13.0,USD,730
+B2B-70D2C0EA,Socket Head Screw 17,Fastener,C,EA,3.0,USD,3650
+B2B-70FBB833,CIP Gasket EPDM 99,Seal & Gasket,C,EA,15.0,USD,730
+B2B-7113764C,Socket Head Screw 68,Fastener,C,EA,4.0,USD,3650
+B2B-71CFF1C0,Torque Limiter 50,Coupling,C,EA,356.0,USD,2555
+B2B-722E0F62,CIP Gasket EPDM 137,Seal & Gasket,C,EA,17.0,USD,730
+B2B-7251856A,CIP Gasket EPDM 40,Seal & Gasket,C,EA,17.0,USD,730
+B2B-7252717A,Retaining Ring 46,Fastener,C,EA,5.0,USD,3650
+B2B-72D05D17,Torque Limiter 30,Coupling,B,EA,301.0,USD,2555
+B2B-73279405,Lubrication Nipple 103,Lubrication,C,EA,30.0,USD,180
+B2B-732A3856,O-Ring NBR 165,Seal & Gasket,C,EA,9.0,USD,730
+B2B-739D0BBF,Lubrication Nipple 128,Lubrication,C,EA,24.0,USD,180
+B2B-73B94E91,Hex Bolt 73,Fastener,C,EA,3.0,USD,3650
+B2B-73BAEB50,CIP Gasket EPDM 50,Seal & Gasket,C,EA,13.0,USD,730
+B2B-73EEBDB3,Hydraulic Fluid 89,Lubrication,C,EA,26.0,USD,180
+B2B-7405A3CF,Lock Washer Set 101,Fastener,C,EA,8.0,USD,3650
+B2B-74274CF8,O-Ring NBR 38,Seal & Gasket,C,EA,17.0,USD,730
+B2B-74594E52,Stud Assembly 49,Fastener,C,EA,2.5,USD,3650
+B2B-74EF5B95,Flange Gasket 106,Seal & Gasket,C,EA,13.0,USD,730
+B2B-7516F84B,Proximity Sensor 197,Sensor,C,EA,655.0,USD,1825
+B2B-7521D3A0,Level Sensor 138,Sensor,B,EA,567.0,USD,1825
+B2B-7554DD5B,Safety Relay 156,Electrical,C,EA,2361.0,USD,1825
+B2B-76125E46,Flow Meter 107,Sensor,B,EA,650.0,USD,1825
+B2B-76ACFCBD,Photoelectric Sensor 33,Sensor,C,EA,680.5,USD,1825
+B2B-7714F117,Stud Assembly 192,Fastener,C,EA,7.0,USD,3650
+B2B-7787D960,Pressure Transmitter 169,Sensor,C,EA,791.0,USD,1825
+B2B-779BF89E,Air Filter Cartridge 96,Filter,C,EA,34.0,USD,365
+B2B-77ACB959,Flexible Coupling 49,Coupling,B,EA,477.5,USD,2555
+B2B-78149712,Coalescing Element 120,Filter,B,EA,46.5,USD,365
+B2B-783BB58E,Breather Filter 89,Filter,C,EA,39.0,USD,365
+B2B-7898BB76,Grease Cartridge 111,Lubrication,B,EA,23.0,USD,180
+B2B-78A27D03,CIP Gasket EPDM 88,Seal & Gasket,B,EA,16.0,USD,730
+B2B-78A4836A,Air Filter Cartridge 114,Filter,A,EA,42.0,USD,365
+B2B-791A09AC,Frequency Inverter 182,Electrical,B,EA,8015.0,USD,1825
+B2B-79711D45,CIP Gasket EPDM 36,Seal & Gasket,C,EA,21.0,USD,730
+B2B-79AC7085,Hex Bolt 22,Fastener,C,EA,8.0,USD,3650
+B2B-7A0B4541,Rotary Seal Kit 185,Seal & Gasket,C,EA,12.0,USD,730
+B2B-7A8D9E84,Lock Washer Set 159,Fastener,C,EA,1.0,USD,3650
+B2B-7AC535CE,Hydraulic Filter Element 125,Filter,B,EA,42.0,USD,365
+B2B-7B3F9494,Lip Seal 106,Seal & Gasket,A,EA,10.0,USD,730
+B2B-7BB8C827,V-Belt 112,Drive Belt,C,EA,74.0,USD,1095
+B2B-7BE63F34,O-Ring NBR 196,Seal & Gasket,B,EA,13.0,USD,730
+B2B-7C101052,Rotary Seal Kit 62,Seal & Gasket,B,EA,16.0,USD,730
+B2B-7C369525,Pressure Transmitter 67,Sensor,C,EA,1003.5,USD,1825
+B2B-7C691EE5,O-Ring NBR 82,Seal & Gasket,B,EA,16.0,USD,730
+B2B-7CB662D2,Servo Drive 69,Electrical,C,EA,1356.0,USD,1825
+B2B-7CCA405C,Shaft Seal 81,Seal & Gasket,A,EA,13.0,USD,730
+B2B-7CFE1999,Angular Contact Bearing 70,Bearing,C,EA,94.0,USD,1825
+B2B-7D5780F0,Universal Joint 88,Coupling,A,EA,317.0,USD,2555
+B2B-7DB034E8,Torque Limiter 91,Coupling,B,EA,355.0,USD,2555
+B2B-7DB9D1E8,Lock Washer Set 182,Fastener,C,EA,3.0,USD,3650
+B2B-7E21582F,Food Grade Grease 17,Lubrication,C,EA,31.0,USD,180
+B2B-7E3EF9BE,Spherical Roller Bearing 22,Bearing,C,EA,138.0,USD,1825
+B2B-7E4BE9DC,Poly-V Belt 111,Drive Belt,C,EA,88.5,USD,1095
+B2B-7EA5DECD,Motor Starter 32,Electrical,C,EA,1426.0,USD,1825
+B2B-7F9A7480,Servo Drive 35,Electrical,B,EA,1399.0,USD,1825
+B2B-7FA8F656,Level Sensor 23,Sensor,B,EA,790.0,USD,1825
+B2B-7FFC8B03,Temperature Probe 133,Sensor,C,EA,921.0,USD,1825
+B2B-802FABD0,O-Ring NBR 148,Seal & Gasket,C,EA,10.0,USD,730
+B2B-804C7BFC,O-Ring NBR 143,Seal & Gasket,B,EA,11.0,USD,730
+B2B-805FCA77,Socket Head Screw 153,Fastener,B,EA,1.0,USD,3650
+B2B-8073FA58,Food Grade Grease 116,Lubrication,A,EA,30.0,USD,180
+B2B-80D031E9,Universal Joint 153,Coupling,C,EA,310.5,USD,2555
+B2B-80FB35A1,Lip Seal 117,Seal & Gasket,C,EA,13.0,USD,730
+B2B-814215F7,Gear Oil 118,Lubrication,C,EA,29.5,USD,180
+B2B-8157A0F2,Universal Joint 79,Coupling,B,EA,414.0,USD,2555
+B2B-8172FE1B,Poly-V Belt 83,Drive Belt,C,EA,85.0,USD,1095
+B2B-81959962,PLC Input Module 67,Electrical,B,EA,2153.0,USD,1825
+B2B-81AB4580,Pillow Block Unit 78,Bearing,C,EA,246.0,USD,1825
+B2B-81CA7D9A,Gear Oil 40,Lubrication,B,EA,24.0,USD,180
+B2B-81FECBF3,Air Filter Cartridge 155,Filter,C,EA,46.0,USD,365
+B2B-8271E4B3,Membrane Filter 172,Filter,C,EA,43.0,USD,365
+B2B-828BE792,Breather Filter 191,Filter,C,EA,42.0,USD,365
+B2B-82B79814,Air Filter Cartridge 50,Filter,B,EA,43.0,USD,365
+B2B-82C8BBF5,Spherical Roller Bearing 84,Bearing,B,EA,160.5,USD,1825
+B2B-82D82BAE,Food Grade Grease 131,Lubrication,C,EA,25.0,USD,180
+B2B-833FDFF7,Pressure Transmitter 61,Sensor,C,EA,918.0,USD,1825
+B2B-834ABA6D,Shaft Seal 170,Seal & Gasket,C,EA,9.0,USD,730
+B2B-83725482,Flange Gasket 131,Seal & Gasket,C,EA,16.0,USD,730
+B2B-841B80EA,Lubrication Nipple 153,Lubrication,C,EA,24.0,USD,180
+B2B-85561238,Gear Oil 127,Lubrication,C,EA,23.0,USD,180
+B2B-85F570C1,Chain Lubricant 111,Lubrication,C,EA,31.0,USD,180
+B2B-862D1AA3,Pillow Block Unit 15,Bearing,C,EA,135.0,USD,1825
+B2B-86D3ED95,Poly-V Belt 170,Drive Belt,C,EA,58.0,USD,1095
+B2B-87412EC5,Flange Gasket 78,Seal & Gasket,A,EA,12.0,USD,730
+B2B-87654C3C,Universal Joint 133,Coupling,C,EA,445.0,USD,2555
+B2B-87A72B6B,PLC Input Module 85,Electrical,C,EA,7243.0,USD,1825
+B2B-87B3B23C,Grease Cartridge 60,Lubrication,C,EA,23.0,USD,180
+B2B-87C278EB,Motor Starter 191,Electrical,C,EA,3292.0,USD,1825
+B2B-87DCDC20,Gear Oil 164,Lubrication,B,EA,26.5,USD,180
+B2B-87E2F577,Pillow Block Unit 144,Bearing,B,EA,206.0,USD,1825
+B2B-88361C05,Cylindrical Roller Bearing 158,Bearing,C,EA,172.0,USD,1825
+B2B-88AA85A6,Coalescing Element 10,Filter,C,EA,38.0,USD,365
+B2B-8959BF92,Toothed Belt 156,Drive Belt,C,EA,93.0,USD,1095
+B2B-895CDD3B,Toothed Belt 42,Drive Belt,C,EA,79.0,USD,1095
+B2B-8960F46F,Lubrication Nipple 137,Lubrication,C,EA,26.0,USD,180
+B2B-8973D677,Cylindrical Roller Bearing 192,Bearing,B,EA,95.0,USD,1825
+B2B-89C24DC0,Stud Assembly 100,Fastener,C,EA,4.0,USD,3650
+B2B-89C7E11A,Membrane Filter 129,Filter,C,EA,43.0,USD,365
+B2B-89EF3F00,CIP Gasket EPDM 144,Seal & Gasket,B,EA,9.0,USD,730
+B2B-8A439FA6,Food Grade Grease 18,Lubrication,C,EA,28.0,USD,180
+B2B-8B371C75,Hex Bolt 83,Fastener,C,EA,5.5,USD,3650
+B2B-8B4F596C,O-Ring NBR 141,Seal & Gasket,B,EA,13.0,USD,730
+B2B-8B58DBDB,Jaw Coupling 34,Coupling,C,EA,435.5,USD,2555
+B2B-8BC3B903,Socket Head Screw 180,Fastener,C,EA,8.0,USD,3650
+B2B-8BDE020A,Toothed Belt 66,Drive Belt,B,EA,65.0,USD,1095
+B2B-8BF0CB4A,Hex Bolt 141,Fastener,B,EA,8.0,USD,3650
+B2B-8C6D5AB6,Hex Bolt 90,Fastener,B,EA,7.0,USD,3650
+B2B-8CF33394,O-Ring NBR 194,Seal & Gasket,C,EA,14.0,USD,730
+B2B-8D0B7EFA,Gear Oil 199,Lubrication,B,EA,29.0,USD,180
+B2B-8D6D7F2D,Pillow Block Unit 191,Bearing,B,EA,150.0,USD,1825
+B2B-8DA224E4,Socket Head Screw 22,Fastener,A,EA,6.0,USD,3650
+B2B-8DA33E5C,Lip Seal 101,Seal & Gasket,B,EA,11.0,USD,730
+B2B-8DB72BFB,Grease Cartridge 108,Lubrication,A,EA,25.0,USD,180
+B2B-8E5AC190,Flat Belt 17,Drive Belt,B,EA,56.0,USD,1095
+B2B-8E6F92D9,Shaft Collar Assembly 67,Coupling,C,EA,315.0,USD,2555
+B2B-8E76C835,Food Grade Grease 64,Lubrication,C,EA,31.0,USD,180
+B2B-8E85F23F,Flat Belt 11,Drive Belt,C,EA,50.0,USD,1095
+B2B-8E93A9CA,Level Sensor 72,Sensor,B,EA,971.5,USD,1825
+B2B-8EB62FAC,Lock Washer Set 100,Fastener,C,EA,1.0,USD,3650
+B2B-8ED1602C,Chain Lubricant 107,Lubrication,C,EA,25.0,USD,180
+B2B-8F05359E,Membrane Filter 189,Filter,A,EA,33.0,USD,365
+B2B-8F3E0EA0,Motor Starter 94,Electrical,C,EA,8858.0,USD,1825
+B2B-90CE8664,Grease Cartridge 67,Lubrication,C,EA,26.0,USD,180
+B2B-9103B9D5,Pillow Block Unit 195,Bearing,C,EA,173.0,USD,1825
+B2B-91AC3D69,Safety Relay 141,Electrical,B,EA,2403.0,USD,1825
+B2B-922EB261,Membrane Filter 73,Filter,C,EA,40.5,USD,365
+B2B-92733B13,Coalescing Element 150,Filter,C,EA,46.0,USD,365
+B2B-9292370D,O-Ring NBR 99,Seal & Gasket,A,EA,18.0,USD,730
+B2B-92CC7D69,CIP Gasket EPDM 112,Seal & Gasket,C,EA,18.0,USD,730
+B2B-951C22C0,Lock Washer Set 147,Fastener,C,EA,1.0,USD,3650
+B2B-95936535,Shaft Seal 23,Seal & Gasket,C,EA,14.0,USD,730
+B2B-95D5901C,Flat Belt 20,Drive Belt,C,EA,68.0,USD,1095
+B2B-960A978D,Flow Meter 101,Sensor,B,EA,843.0,USD,1825
+B2B-96178491,Timing Belt 18,Drive Belt,C,EA,82.5,USD,1095
+B2B-961F83AB,Socket Head Screw 162,Fastener,C,EA,8.0,USD,3650
+B2B-962D4A6C,Gear Coupling 127,Coupling,C,EA,534.0,USD,2555
+B2B-963632D1,Poly-V Belt 179,Drive Belt,C,EA,91.0,USD,1095
+B2B-9653841B,Shaft Seal 58,Seal & Gasket,B,EA,13.0,USD,730
+B2B-96B0DCC8,O-Ring NBR 72,Seal & Gasket,C,EA,15.5,USD,730
+B2B-96FF49FA,Shaft Collar Assembly 98,Coupling,A,EA,415.0,USD,2555
+B2B-9712C4BB,Rotary Seal Kit 44,Seal & Gasket,B,EA,9.0,USD,730
+B2B-9726172B,Poly-V Belt 65,Drive Belt,B,EA,62.0,USD,1095
+B2B-976157CB,Conveyor Belt Section 147,Drive Belt,C,EA,56.5,USD,1095
+B2B-97A53BAA,Coalescing Element 170,Filter,A,EA,36.0,USD,365
+B2B-97B58B19,Proximity Sensor 27,Sensor,C,EA,563.0,USD,1825
+B2B-97F20CEB,Food Grade Grease 143,Lubrication,A,EA,30.0,USD,180
+B2B-98525FFC,Timing Belt 78,Drive Belt,A,EA,76.0,USD,1095
+B2B-991396CB,Air Filter Cartridge 142,Filter,A,EA,41.0,USD,365
+B2B-99261BEA,Poly-V Belt 11,Drive Belt,C,EA,93.0,USD,1095
+B2B-9963EA1D,Deep Groove Ball Bearing 151,Bearing,C,EA,125.5,USD,1825
+B2B-99830607,Pressure Transmitter 194,Sensor,C,EA,572.0,USD,1825
+B2B-9A08B6C0,Filter Candle 19,Filter,A,EA,40.0,USD,365
+B2B-9A0F3D8D,Flange Gasket 92,Seal & Gasket,C,EA,10.0,USD,730
+B2B-9A6CC1FC,Retaining Ring 14,Fastener,A,EA,3.0,USD,3650
+B2B-9AC055C3,Shaft Seal 108,Seal & Gasket,B,EA,20.0,USD,730
+B2B-9B9337C3,Retaining Ring 112,Fastener,C,EA,3.0,USD,3650
+B2B-9C1DB346,Photoelectric Sensor 156,Sensor,B,EA,753.0,USD,1825
+B2B-9C29DA60,Deep Groove Ball Bearing 142,Bearing,B,EA,166.0,USD,1825
+B2B-9CA2E5E7,Frequency Inverter 36,Electrical,C,EA,1203.0,USD,1825
+B2B-9DA4CF38,Universal Joint 111,Coupling,C,EA,330.5,USD,2555
+B2B-9DAE58CC,Frequency Inverter 24,Electrical,C,EA,4346.0,USD,1825
+B2B-9DEC2B19,Proximity Sensor 123,Sensor,C,EA,735.0,USD,1825
+B2B-9DF022FB,Threaded Rod 168,Fastener,C,EA,1.0,USD,3650
+B2B-9E09F572,Socket Head Screw 161,Fastener,C,EA,3.0,USD,3650
+B2B-9E1A325C,Breather Filter 135,Filter,A,EA,44.0,USD,365
+B2B-9E5D3DD5,Lubrication Nipple 142,Lubrication,C,EA,24.0,USD,180
+B2B-A02652A2,Breather Filter 152,Filter,C,EA,39.0,USD,365
+B2B-A0AD4AE0,Stud Assembly 189,Fastener,B,EA,1.0,USD,3650
+B2B-A1164735,Shaft Collar Assembly 74,Coupling,A,EA,290.0,USD,2555
+B2B-A1771D60,Lock Washer Set 194,Fastener,C,EA,3.0,USD,3650
+B2B-A183F90A,Temperature Probe 27,Sensor,C,EA,583.0,USD,1825
+B2B-A1891E35,Pillow Block Unit 151,Bearing,A,EA,248.0,USD,1825
+B2B-A19E6FE4,CIP Gasket EPDM 126,Seal & Gasket,C,EA,10.0,USD,730
+B2B-A1BD2B47,O-Ring NBR 153,Seal & Gasket,B,EA,14.0,USD,730
+B2B-A1F519CF,Flat Belt 138,Drive Belt,C,EA,79.0,USD,1095
+B2B-A2369CBF,Universal Joint 95,Coupling,B,EA,398.0,USD,2555
+B2B-A242DD80,Gear Oil 55,Lubrication,C,EA,24.0,USD,180
+B2B-A2E66521,Temperature Probe 53,Sensor,C,EA,799.0,USD,1825
+B2B-A40B0146,Poly-V Belt 145,Drive Belt,C,EA,93.0,USD,1095
+B2B-A4409334,Flange Gasket 74,Seal & Gasket,B,EA,14.0,USD,730
+B2B-A47647F7,Cylindrical Roller Bearing 130,Bearing,C,EA,124.0,USD,1825
+B2B-A4A247AE,Socket Head Screw 26,Fastener,C,EA,7.0,USD,3650
+B2B-A4F0282D,Lock Washer Set 23,Fastener,C,EA,3.0,USD,3650
+B2B-A4F6EB56,Frequency Inverter 65,Electrical,C,EA,1904.0,USD,1825
+B2B-A510C45D,Socket Head Screw 25,Fastener,B,EA,3.0,USD,3650
+B2B-A5A72869,V-Belt 129,Drive Belt,C,EA,63.0,USD,1095
+B2B-A60492A0,Cylindrical Roller Bearing 94,Bearing,C,EA,109.0,USD,1825
+B2B-A65E4379,Gear Oil 128,Lubrication,A,EA,31.0,USD,180
+B2B-A6D4F45E,O-Ring NBR 174,Seal & Gasket,C,EA,15.0,USD,730
+B2B-A73D7FEB,Lock Washer Set 197,Fastener,C,EA,7.0,USD,3650
+B2B-A76731E7,CIP Gasket EPDM 71,Seal & Gasket,C,EA,14.0,USD,730
+B2B-A792FC97,Tapered Roller Bearing 132,Bearing,B,EA,239.0,USD,1825
+B2B-A86A108A,Flow Meter 66,Sensor,A,EA,686.5,USD,1825
+B2B-A88F4AE3,Grease Cartridge 187,Lubrication,C,EA,24.0,USD,180
+B2B-A940BFC2,Membrane Filter 54,Filter,C,EA,42.5,USD,365
+B2B-A95ACA52,Torque Limiter 170,Coupling,A,EA,351.0,USD,2555
+B2B-A9850200,Filter Candle 64,Filter,C,EA,44.0,USD,365
+B2B-A9869AA6,Shaft Seal 107,Seal & Gasket,C,EA,14.0,USD,730
+B2B-A9B16443,Flexible Coupling 56,Coupling,B,EA,348.0,USD,2555
+B2B-A9BF0745,Rotary Seal Kit 143,Seal & Gasket,C,EA,21.0,USD,730
+B2B-AA15E288,Membrane Filter 73,Filter,C,EA,48.0,USD,365
+B2B-AAD559DC,Gear Coupling 48,Coupling,B,EA,319.0,USD,2555
+B2B-AAE7B3D1,Timing Belt 78,Drive Belt,C,EA,70.0,USD,1095
+B2B-AAF5BC23,Lip Seal 98,Seal & Gasket,C,EA,15.0,USD,730
+B2B-AB56497D,Spherical Roller Bearing 87,Bearing,A,EA,128.0,USD,1825
+B2B-AB5D6CA9,Air Filter Cartridge 158,Filter,C,EA,39.0,USD,365
+B2B-ABB86FF0,Grease Cartridge 188,Lubrication,A,EA,25.0,USD,180
+B2B-ABDA24EE,Filter Candle 173,Filter,C,EA,45.0,USD,365
+B2B-ABDC8E36,Threaded Rod 102,Fastener,C,EA,8.0,USD,3650
+B2B-ABEF5E06,Flow Meter 39,Sensor,A,EA,723.0,USD,1825
+B2B-ABF579B9,Cylindrical Roller Bearing 181,Bearing,B,EA,213.0,USD,1825
+B2B-AC142B57,Flexible Coupling 122,Coupling,C,EA,545.0,USD,2555
+B2B-AC6FEB99,Timing Belt 65,Drive Belt,C,EA,83.0,USD,1095
+B2B-AC70977E,Hydraulic Filter Element 109,Filter,C,EA,46.5,USD,365
+B2B-AC7C7634,O-Ring NBR 188,Seal & Gasket,C,EA,13.0,USD,730
+B2B-AC8F35F5,Coalescing Element 121,Filter,B,EA,42.0,USD,365
+B2B-ACBF1C58,Grease Cartridge 42,Lubrication,B,EA,27.0,USD,180
+B2B-ACBFA2C2,Pressure Transmitter 28,Sensor,B,EA,1000.0,USD,1825
+B2B-ACD1E4B9,Lip Seal 180,Seal & Gasket,A,EA,15.5,USD,730
+B2B-ACE68569,Motor Starter 199,Electrical,B,EA,1627.0,USD,1825
+B2B-AD3770F4,Torque Limiter 133,Coupling,C,EA,417.0,USD,2555
+B2B-AD71AC61,Lip Seal 172,Seal & Gasket,C,EA,21.0,USD,730
+B2B-AD8855CC,Jaw Coupling 158,Coupling,C,EA,392.0,USD,2555
+B2B-AD98FB42,Pressure Transmitter 77,Sensor,C,EA,577.0,USD,1825
+B2B-AFECF04A,Jaw Coupling 101,Coupling,C,EA,283.0,USD,2555
+B2B-B0046165,Stud Assembly 66,Fastener,C,EA,1.0,USD,3650
+B2B-B039C852,Shaft Collar Assembly 115,Coupling,B,EA,294.0,USD,2555
+B2B-B07C6095,Gear Coupling 117,Coupling,B,EA,474.0,USD,2555
+B2B-B0A987E3,Conveyor Belt Section 73,Drive Belt,B,EA,66.0,USD,1095
+B2B-B0E9F7D1,Flat Belt 93,Drive Belt,C,EA,70.5,USD,1095
+B2B-B0F094FD,Angular Contact Bearing 18,Bearing,B,EA,210.0,USD,1825
+B2B-B10F93E6,Deep Groove Ball Bearing 93,Bearing,C,EA,226.0,USD,1825
+B2B-B170F154,Timing Belt 142,Drive Belt,B,EA,71.0,USD,1095
+B2B-B24C0FA4,Frequency Inverter 121,Electrical,C,EA,1212.0,USD,1825
+B2B-B250AAB6,Spherical Roller Bearing 100,Bearing,B,EA,152.0,USD,1825
+B2B-B28C5926,Hydraulic Fluid 162,Lubrication,C,EA,31.0,USD,180
+B2B-B2B7BE84,Rotary Seal Kit 23,Seal & Gasket,B,EA,12.0,USD,730
+B2B-B3080695,Food Grade Grease 48,Lubrication,A,EA,23.0,USD,180
+B2B-B30B88C0,Flange Gasket 145,Seal & Gasket,A,EA,21.0,USD,730
+B2B-B39FF544,Motor Starter 39,Electrical,C,EA,1480.0,USD,1825
+B2B-B3A1F4C6,O-Ring NBR 33,Seal & Gasket,B,EA,21.0,USD,730
+B2B-B3AAE996,Toothed Belt 119,Drive Belt,B,EA,62.0,USD,1095
+B2B-B3ACA40F,Toothed Belt 70,Drive Belt,B,EA,77.5,USD,1095
+B2B-B3CD0660,Shaft Seal 20,Seal & Gasket,C,EA,14.0,USD,730
+B2B-B3E8CB0F,Breather Filter 164,Filter,C,EA,37.5,USD,365
+B2B-B49EB3C0,Universal Joint 72,Coupling,B,EA,336.0,USD,2555
+B2B-B50C40DA,CIP Gasket EPDM 123,Seal & Gasket,C,EA,9.0,USD,730
+B2B-B5156317,Rotary Seal Kit 85,Seal & Gasket,C,EA,17.0,USD,730
+B2B-B5718B84,Membrane Filter 49,Filter,C,EA,42.0,USD,365
+B2B-B587ABA9,Food Grade Grease 160,Lubrication,C,EA,29.0,USD,180
+B2B-B63FEB06,Timing Belt 105,Drive Belt,C,EA,71.0,USD,1095
+B2B-B6B319F8,Shaft Seal 181,Seal & Gasket,B,EA,21.0,USD,730
+B2B-B6D9D1C3,Temperature Probe 141,Sensor,B,EA,813.0,USD,1825
+B2B-B738B2E0,Lock Washer Set 124,Fastener,C,EA,6.0,USD,3650
+B2B-B7987DAC,Pillow Block Unit 109,Bearing,C,EA,235.5,USD,1825
+B2B-B7AB7618,Rotary Seal Kit 106,Seal & Gasket,B,EA,19.0,USD,730
+B2B-B82A13D9,Servo Drive 162,Electrical,C,EA,5774.0,USD,1825
+B2B-B848358A,Poly-V Belt 61,Drive Belt,C,EA,54.0,USD,1095
+B2B-B8F5DE4E,Poly-V Belt 28,Drive Belt,C,EA,82.0,USD,1095
+B2B-B92EA564,Servo Drive 50,Electrical,B,EA,1418.5,USD,1825
+B2B-B9FB4AD0,Toothed Belt 96,Drive Belt,B,EA,93.0,USD,1095
+B2B-BA01F8C1,Socket Head Screw 111,Fastener,A,EA,6.0,USD,3650
+B2B-BA5B29E9,V-Belt 45,Drive Belt,C,EA,55.0,USD,1095
+B2B-BA66F70D,Jaw Coupling 141,Coupling,C,EA,481.5,USD,2555
+B2B-BB407E80,Threaded Rod 65,Fastener,C,EA,1.0,USD,3650
+B2B-BB48D113,Shaft Collar Assembly 17,Coupling,C,EA,507.0,USD,2555
+B2B-BBAD61DA,Motor Starter 199,Electrical,C,EA,1238.0,USD,1825
+B2B-BBCE2C7F,Angular Contact Bearing 47,Bearing,C,EA,170.0,USD,1825
+B2B-BC0261A0,Rotary Seal Kit 51,Seal & Gasket,A,EA,13.0,USD,730
+B2B-BC1381D6,Deep Groove Ball Bearing 53,Bearing,C,EA,135.0,USD,1825
+B2B-BCACDBC5,Flexible Coupling 150,Coupling,C,EA,508.5,USD,2555
+B2B-BCDBA1AB,Lip Seal 75,Seal & Gasket,B,EA,10.0,USD,730
+B2B-BDAF4359,Shaft Collar Assembly 38,Coupling,C,EA,359.0,USD,2555
+B2B-BDE7E450,Socket Head Screw 117,Fastener,C,EA,2.0,USD,3650
+B2B-BE2F9443,Hydraulic Fluid 15,Lubrication,C,EA,23.0,USD,180
+B2B-BE792D40,Lubrication Nipple 75,Lubrication,A,EA,30.0,USD,180
+B2B-BEC819FE,Poly-V Belt 74,Drive Belt,C,EA,51.0,USD,1095
+B2B-BF2861EE,Jaw Coupling 116,Coupling,A,EA,559.5,USD,2555
+B2B-BF309321,Flow Meter 174,Sensor,C,EA,1133.0,USD,1825
+B2B-BF74C68C,Cylindrical Roller Bearing 178,Bearing,C,EA,117.0,USD,1825
+B2B-BFD50E3B,Chain Lubricant 162,Lubrication,B,EA,23.0,USD,180
+B2B-C087677A,Flange Gasket 84,Seal & Gasket,A,EA,14.0,USD,730
+B2B-C0CD5AFD,Grease Cartridge 94,Lubrication,C,EA,25.0,USD,180
+B2B-C123CBE9,CIP Gasket EPDM 20,Seal & Gasket,B,EA,16.0,USD,730
+B2B-C1A1C250,Universal Joint 124,Coupling,B,EA,378.0,USD,2555
+B2B-C229F0B7,Stud Assembly 69,Fastener,B,EA,8.0,USD,3650
+B2B-C25C5DBD,Flange Gasket 37,Seal & Gasket,C,EA,9.0,USD,730
+B2B-C2A87BCC,Pillow Block Unit 153,Bearing,C,EA,135.0,USD,1825
+B2B-C2B5A6EF,V-Belt 78,Drive Belt,B,EA,63.0,USD,1095
+B2B-C2F95134,Food Grade Grease 56,Lubrication,C,EA,24.5,USD,180
+B2B-C32DA82E,Pillow Block Unit 58,Bearing,B,EA,194.5,USD,1825
+B2B-C35A6370,O-Ring NBR 32,Seal & Gasket,C,EA,18.0,USD,730
+B2B-C35B05E3,Frequency Inverter 159,Electrical,C,EA,1341.0,USD,1825
+B2B-C35DDECF,Torque Limiter 181,Coupling,C,EA,402.0,USD,2555
+B2B-C376292F,Coalescing Element 120,Filter,A,EA,40.0,USD,365
+B2B-C3FB635C,Threaded Rod 187,Fastener,C,EA,1.0,USD,3650
+B2B-C41530EA,Lip Seal 68,Seal & Gasket,C,EA,12.0,USD,730
+B2B-C4DEFB03,Deep Groove Ball Bearing 147,Bearing,B,EA,252.0,USD,1825
+B2B-C4F60C29,Motor Starter 99,Electrical,C,EA,2148.0,USD,1825
+B2B-C5497407,Hydraulic Fluid 172,Lubrication,A,EA,29.0,USD,180
+B2B-C58A4EA7,Angular Contact Bearing 17,Bearing,B,EA,215.0,USD,1825
+B2B-C59FECA1,Toothed Belt 141,Drive Belt,C,EA,58.0,USD,1095
+B2B-C5E77021,Flange Gasket 57,Seal & Gasket,C,EA,14.0,USD,730
+B2B-C5FD603B,Shaft Collar Assembly 156,Coupling,C,EA,321.5,USD,2555
+B2B-C66F3CB8,Temperature Probe 67,Sensor,B,EA,652.0,USD,1825
+B2B-C6AE6A43,Deep Groove Ball Bearing 177,Bearing,C,EA,253.0,USD,1825
+B2B-C6B6C3CE,Photoelectric Sensor 60,Sensor,B,EA,907.0,USD,1825
+B2B-C6CD455C,Coalescing Element 185,Filter,C,EA,32.0,USD,365
+B2B-C6DE0B12,Pillow Block Unit 17,Bearing,C,EA,184.0,USD,1825
+B2B-C715C8A5,Flat Belt 82,Drive Belt,C,EA,56.0,USD,1095
+B2B-C75D3F14,O-Ring NBR 185,Seal & Gasket,C,EA,20.0,USD,730
+B2B-C7D79BEA,Cylindrical Roller Bearing 151,Bearing,C,EA,158.0,USD,1825
+B2B-C7E494A0,Proximity Sensor 145,Sensor,C,EA,648.5,USD,1825
+B2B-C7E73682,Flat Belt 157,Drive Belt,B,EA,89.0,USD,1095
+B2B-C7F8E1D0,V-Belt 172,Drive Belt,C,EA,63.0,USD,1095
+B2B-C8B37B0E,Pillow Block Unit 139,Bearing,A,EA,151.0,USD,1825
+B2B-C8F1EC72,Stud Assembly 148,Fastener,C,EA,7.0,USD,3650
+B2B-C8F44B59,Flat Belt 181,Drive Belt,B,EA,66.0,USD,1095
+B2B-C9219679,Tapered Roller Bearing 194,Bearing,C,EA,158.0,USD,1825
+B2B-C95DCDBA,Pillow Block Unit 147,Bearing,A,EA,197.0,USD,1825
+B2B-C9C8DECD,Level Sensor 16,Sensor,B,EA,721.0,USD,1825
+B2B-CA94CACA,Toothed Belt 101,Drive Belt,B,EA,65.0,USD,1095
+B2B-CAB8C45B,Lip Seal 46,Seal & Gasket,C,EA,14.0,USD,730
+B2B-CAD029A6,Gear Oil 133,Lubrication,B,EA,30.0,USD,180
+B2B-CAF04013,Temperature Probe 101,Sensor,B,EA,631.0,USD,1825
+B2B-CB386429,PLC Input Module 155,Electrical,B,EA,1317.0,USD,1825
+B2B-CB3F69E8,Filter Candle 47,Filter,C,EA,39.0,USD,365
+B2B-CB5361E8,Lock Washer Set 101,Fastener,B,EA,5.5,USD,3650
+B2B-CB7A0438,Gear Coupling 10,Coupling,C,EA,376.0,USD,2555
+B2B-CC1FE337,Conveyor Belt Section 179,Drive Belt,A,EA,58.0,USD,1095
+B2B-CC49A08F,Breather Filter 151,Filter,B,EA,41.0,USD,365
+B2B-CC519FFA,Stud Assembly 51,Fastener,C,EA,1.0,USD,3650
+B2B-CC76539F,Angular Contact Bearing 10,Bearing,C,EA,95.0,USD,1825
+B2B-CCD199FE,Hydraulic Fluid 192,Lubrication,B,EA,24.0,USD,180
+B2B-CCD2D11C,Timing Belt 168,Drive Belt,C,EA,57.0,USD,1095
+B2B-CD0B01FF,Flexible Coupling 123,Coupling,B,EA,423.0,USD,2555
+B2B-CD43B18D,Chain Lubricant 39,Lubrication,B,EA,25.0,USD,180
+B2B-CEC2B232,Pillow Block Unit 26,Bearing,C,EA,150.0,USD,1825
+B2B-CF28396A,Stud Assembly 45,Fastener,C,EA,7.0,USD,3650
+B2B-CF4B88A6,V-Belt 199,Drive Belt,B,EA,70.0,USD,1095
+B2B-CF61F20F,Level Sensor 194,Sensor,C,EA,1039.0,USD,1825
+B2B-D055A9AB,Gear Oil 54,Lubrication,C,EA,26.0,USD,180
+B2B-D0EF5D71,Poly-V Belt 147,Drive Belt,C,EA,52.0,USD,1095
+B2B-D1087349,Socket Head Screw 180,Fastener,C,EA,2.0,USD,3650
+B2B-D12C9F98,Flow Meter 85,Sensor,B,EA,1067.5,USD,1825
+B2B-D18029A3,Rotary Seal Kit 176,Seal & Gasket,C,EA,13.0,USD,730
+B2B-D1AD51A6,Pillow Block Unit 66,Bearing,B,EA,122.0,USD,1825
+B2B-D1AF9CF8,O-Ring NBR 171,Seal & Gasket,C,EA,11.5,USD,730
+B2B-D1BE9D26,O-Ring NBR 78,Seal & Gasket,C,EA,19.0,USD,730
+B2B-D21785AB,Lock Washer Set 108,Fastener,A,EA,5.0,USD,3650
+B2B-D238B5BE,Flat Belt 36,Drive Belt,A,EA,66.0,USD,1095
+B2B-D263E999,Safety Relay 90,Electrical,B,EA,1158.0,USD,1825
+B2B-D354BF4F,Flexible Coupling 198,Coupling,B,EA,309.0,USD,2555
+B2B-D3D18A57,Spherical Roller Bearing 34,Bearing,B,EA,223.0,USD,1825
+B2B-D3E8A6C2,Threaded Rod 99,Fastener,B,EA,1.0,USD,3650
+B2B-D461DED1,Frequency Inverter 63,Electrical,B,EA,1309.0,USD,1825
+B2B-D49E40EE,Coalescing Element 170,Filter,C,EA,38.0,USD,365
+B2B-D4C9A58D,O-Ring NBR 57,Seal & Gasket,A,EA,10.0,USD,730
+B2B-D4D3CD13,Hydraulic Filter Element 89,Filter,C,EA,40.0,USD,365
+B2B-D4D58281,Gear Coupling 110,Coupling,C,EA,369.0,USD,2555
+B2B-D4D74F87,Hex Bolt 169,Fastener,B,EA,8.0,USD,3650
+B2B-D5E9DFE3,Angular Contact Bearing 153,Bearing,B,EA,264.0,USD,1825
+B2B-D662D1E5,Hex Bolt 77,Fastener,C,EA,6.0,USD,3650
+B2B-D6C16DBC,Stud Assembly 154,Fastener,C,EA,4.0,USD,3650
+B2B-D709406E,Retaining Ring 68,Fastener,C,EA,2.0,USD,3650
+B2B-D72579EF,Socket Head Screw 130,Fastener,C,EA,8.0,USD,3650
+B2B-D7A35F48,Threaded Rod 172,Fastener,A,EA,2.0,USD,3650
+B2B-D7CD0FC1,Coalescing Element 49,Filter,C,EA,32.0,USD,365
+B2B-D82950EB,Deep Groove Ball Bearing 78,Bearing,C,EA,171.0,USD,1825
+B2B-D85F0A8E,Pillow Block Unit 12,Bearing,B,EA,208.5,USD,1825
+B2B-D8665F22,Torque Limiter 127,Coupling,B,EA,463.0,USD,2555
+B2B-D89D44A2,Spherical Roller Bearing 114,Bearing,B,EA,177.5,USD,1825
+B2B-D8CC3C69,Deep Groove Ball Bearing 155,Bearing,B,EA,102.0,USD,1825
+B2B-D9C6EA60,Filter Candle 39,Filter,B,EA,39.0,USD,365
+B2B-D9EC03AA,Pressure Transmitter 10,Sensor,C,EA,595.0,USD,1825
+B2B-DA13923D,Universal Joint 145,Coupling,B,EA,416.0,USD,2555
+B2B-DA2A09ED,Temperature Probe 109,Sensor,C,EA,606.0,USD,1825
+B2B-DA6AC7CE,Food Grade Grease 147,Lubrication,C,EA,27.0,USD,180
+B2B-DACC110A,Coalescing Element 19,Filter,C,EA,42.5,USD,365
+B2B-DB2CFD3E,Coalescing Element 115,Filter,C,EA,42.0,USD,365
+B2B-DB51DCD4,Rotary Seal Kit 26,Seal & Gasket,C,EA,12.0,USD,730
+B2B-DC13D052,Deep Groove Ball Bearing 32,Bearing,B,EA,181.0,USD,1825
+B2B-DC15D2CF,Rotary Seal Kit 42,Seal & Gasket,B,EA,21.0,USD,730
+B2B-DCFDE075,Rotary Seal Kit 123,Seal & Gasket,A,EA,16.0,USD,730
+B2B-DD55B896,Food Grade Grease 159,Lubrication,C,EA,25.0,USD,180
+B2B-DEB10364,Threaded Rod 120,Fastener,C,EA,1.0,USD,3650
+B2B-DF24C3A9,Angular Contact Bearing 122,Bearing,C,EA,125.0,USD,1825
+B2B-DF5FA370,Motor Starter 148,Electrical,B,EA,1406.0,USD,1825
+B2B-DF8D0E09,Hydraulic Fluid 32,Lubrication,A,EA,28.0,USD,180
+B2B-DF8D601A,Tapered Roller Bearing 158,Bearing,C,EA,141.0,USD,1825
+B2B-DFFE454F,Stud Assembly 134,Fastener,B,EA,5.0,USD,3650
+B2B-E0380C88,Pillow Block Unit 63,Bearing,B,EA,237.0,USD,1825
+B2B-E19F051B,Flow Meter 35,Sensor,B,EA,731.0,USD,1825
+B2B-E1F2A053,Grease Cartridge 30,Lubrication,B,EA,25.0,USD,180
+B2B-E20339CF,CIP Gasket EPDM 57,Seal & Gasket,C,EA,19.0,USD,730
+B2B-E2432DCB,Pillow Block Unit 73,Bearing,C,EA,165.0,USD,1825
+B2B-E258C78A,Pressure Transmitter 55,Sensor,C,EA,926.0,USD,1825
+B2B-E268574C,Gear Oil 14,Lubrication,C,EA,23.0,USD,180
+B2B-E26E1F8B,Torque Limiter 97,Coupling,C,EA,477.0,USD,2555
+B2B-E26ED0FC,Safety Relay 126,Electrical,C,EA,1218.5,USD,1825
+B2B-E2AA12B2,Deep Groove Ball Bearing 145,Bearing,C,EA,112.0,USD,1825
+B2B-E2ADEA6E,Lock Washer Set 162,Fastener,C,EA,1.0,USD,3650
+B2B-E36BAA41,Servo Drive 48,Electrical,C,EA,3280.0,USD,1825
+B2B-E38A4FF7,Coalescing Element 99,Filter,B,EA,44.0,USD,365
+B2B-E49C1366,Breather Filter 179,Filter,B,EA,39.0,USD,365
+B2B-E50C784C,Level Sensor 153,Sensor,C,EA,891.5,USD,1825
+B2B-E54F5BFB,Level Sensor 39,Sensor,C,EA,639.0,USD,1825
+B2B-E551E3D9,Breather Filter 133,Filter,C,EA,36.0,USD,365
+B2B-E55A9BAC,Poly-V Belt 45,Drive Belt,C,EA,68.0,USD,1095
+B2B-E5909E56,Level Sensor 72,Sensor,C,EA,657.5,USD,1825
+B2B-E5E734B6,Rotary Seal Kit 43,Seal & Gasket,B,EA,18.0,USD,730
+B2B-E6711558,O-Ring NBR 77,Seal & Gasket,C,EA,14.0,USD,730
+B2B-E6BBD759,Hydraulic Filter Element 147,Filter,A,EA,40.0,USD,365
+B2B-E83528D3,Flange Gasket 117,Seal & Gasket,B,EA,18.0,USD,730
+B2B-E86CF6B9,Gear Oil 192,Lubrication,C,EA,25.0,USD,180
+B2B-E89BA7E1,Lubrication Nipple 99,Lubrication,B,EA,26.0,USD,180
+B2B-E8C1677B,Lip Seal 82,Seal & Gasket,C,EA,17.0,USD,730
+B2B-E8ED4ACF,Poly-V Belt 79,Drive Belt,C,EA,92.0,USD,1095
+B2B-E92D0D2C,Hydraulic Fluid 181,Lubrication,B,EA,22.0,USD,180
+B2B-E96B2896,Safety Relay 66,Electrical,C,EA,1168.0,USD,1825
+B2B-E9A9D44D,Flange Gasket 148,Seal & Gasket,B,EA,10.0,USD,730
+B2B-E9C117B5,Chain Lubricant 33,Lubrication,C,EA,29.5,USD,180
+B2B-E9CE10F3,Breather Filter 103,Filter,C,EA,32.0,USD,365
+B2B-E9F73E8E,Spherical Roller Bearing 38,Bearing,C,EA,217.5,USD,1825
+B2B-EA11AA64,Jaw Coupling 29,Coupling,C,EA,354.0,USD,2555
+B2B-EA627336,Photoelectric Sensor 187,Sensor,C,EA,1042.0,USD,1825
+B2B-EAA43C30,Rotary Seal Kit 110,Seal & Gasket,B,EA,13.0,USD,730
+B2B-EB3E348F,Flange Gasket 50,Seal & Gasket,C,EA,16.0,USD,730
+B2B-EB8AF571,Grease Cartridge 112,Lubrication,A,EA,29.0,USD,180
+B2B-EBD755B2,Level Sensor 164,Sensor,B,EA,1110.0,USD,1825
+B2B-EC497BBE,Tapered Roller Bearing 79,Bearing,B,EA,233.0,USD,1825
+B2B-EC63055B,Hydraulic Filter Element 129,Filter,B,EA,47.0,USD,365
+B2B-EC81DC7C,Poly-V Belt 121,Drive Belt,C,EA,50.0,USD,1095
+B2B-EC9BB3E5,Chain Lubricant 63,Lubrication,C,EA,29.0,USD,180
+B2B-ECC94A5D,Flat Belt 17,Drive Belt,A,EA,51.0,USD,1095
+B2B-ED5DB973,Flange Gasket 74,Seal & Gasket,C,EA,13.0,USD,730
+B2B-ED8F7FA3,Poly-V Belt 176,Drive Belt,C,EA,49.0,USD,1095
+B2B-EDD91D0C,Chain Lubricant 156,Lubrication,A,EA,31.5,USD,180
+B2B-EDFE45C0,Poly-V Belt 14,Drive Belt,C,EA,57.0,USD,1095
+B2B-EEC9E61F,Gear Oil 120,Lubrication,C,EA,29.0,USD,180
+B2B-EF8E3B1E,Coalescing Element 197,Filter,B,EA,35.0,USD,365
+B2B-F189A3CE,V-Belt 144,Drive Belt,C,EA,70.0,USD,1095
+B2B-F2572EF8,Flat Belt 83,Drive Belt,C,EA,82.0,USD,1095
+B2B-F2723FD2,Stud Assembly 102,Fastener,C,EA,5.0,USD,3650
+B2B-F330AE22,Contactor 141,Electrical,B,EA,1841.0,USD,1825
+B2B-F364EABF,Air Filter Cartridge 106,Filter,B,EA,46.0,USD,365
+B2B-F3789EF8,Spherical Roller Bearing 118,Bearing,C,EA,175.0,USD,1825
+B2B-F39083CD,Frequency Inverter 152,Electrical,B,EA,2060.0,USD,1825
+B2B-F488F9B3,Gear Oil 105,Lubrication,C,EA,31.5,USD,180
+B2B-F492EBA6,Membrane Filter 110,Filter,C,EA,41.0,USD,365
+B2B-F4A5BEEB,Angular Contact Bearing 50,Bearing,C,EA,111.0,USD,1825
+B2B-F4AB29CC,Frequency Inverter 139,Electrical,C,EA,1311.5,USD,1825
+B2B-F4EE8201,Food Grade Grease 168,Lubrication,B,EA,25.0,USD,180
+B2B-F53730EA,Hydraulic Filter Element 177,Filter,B,EA,42.0,USD,365
+B2B-F5C3BF14,Membrane Filter 77,Filter,C,EA,42.0,USD,365
+B2B-F61D0EE7,O-Ring NBR 109,Seal & Gasket,A,EA,19.0,USD,730
+B2B-F633808F,Universal Joint 137,Coupling,B,EA,541.0,USD,2555
+B2B-F65BA45B,Socket Head Screw 73,Fastener,C,EA,7.0,USD,3650
+B2B-F740487B,Hydraulic Filter Element 133,Filter,C,EA,43.5,USD,365
+B2B-F765B750,Gear Coupling 34,Coupling,B,EA,276.0,USD,2555
+B2B-F7C748EA,Spherical Roller Bearing 96,Bearing,B,EA,181.0,USD,1825
+B2B-F7DDE2F0,Angular Contact Bearing 193,Bearing,A,EA,226.0,USD,1825
+B2B-F8230A64,Membrane Filter 123,Filter,C,EA,42.0,USD,365
+B2B-F92FCE43,Hex Bolt 93,Fastener,C,EA,8.0,USD,3650
+B2B-F95259BB,Lip Seal 186,Seal & Gasket,C,EA,15.0,USD,730
+B2B-F987C50E,Spherical Roller Bearing 149,Bearing,C,EA,139.0,USD,1825
+B2B-F99F3BFB,Socket Head Screw 170,Fastener,C,EA,6.0,USD,3650
+B2B-F9A4BA6E,CIP Gasket EPDM 162,Seal & Gasket,C,EA,21.0,USD,730
+B2B-F9B6FF4B,Threaded Rod 71,Fastener,C,EA,1.0,USD,3650
+B2B-FA12BB62,Lip Seal 142,Seal & Gasket,B,EA,16.0,USD,730
+B2B-FA490675,Pressure Transmitter 36,Sensor,B,EA,718.0,USD,1825
+B2B-FA9D6D70,Tapered Roller Bearing 97,Bearing,C,EA,122.0,USD,1825
+B2B-FAA4E3E1,Torque Limiter 97,Coupling,B,EA,538.0,USD,2555
+B2B-FB5ADA9F,Chain Lubricant 48,Lubrication,C,EA,22.0,USD,180
+B2B-FB5FED13,Air Filter Cartridge 99,Filter,C,EA,35.0,USD,365
+B2B-FB626CAE,Lock Washer Set 117,Fastener,C,EA,5.0,USD,3650
+B2B-FC2013A6,Lubrication Nipple 193,Lubrication,C,EA,22.0,USD,180
+B2B-FD0FD40D,Hex Bolt 106,Fastener,B,EA,3.0,USD,3650
+B2B-FD3C9A91,Tapered Roller Bearing 109,Bearing,C,EA,263.0,USD,1825
+B2B-FE06EA00,Retaining Ring 149,Fastener,C,EA,4.0,USD,3650
+B2B-FEAD1D8E,Flow Meter 31,Sensor,B,EA,716.0,USD,1825
+B2B-FEB41A36,Hydraulic Filter Element 171,Filter,C,EA,43.0,USD,365
+B2B-FEC8356A,O-Ring NBR 61,Seal & Gasket,A,EA,17.0,USD,730
+B2B-FED2058E,Motor Starter 50,Electrical,C,EA,1296.0,USD,1825
+B2B-FF331A7F,Hydraulic Filter Element 62,Filter,C,EA,33.0,USD,365
+B2B-FF6C56FD,Socket Head Screw 49,Fastener,B,EA,6.0,USD,3650
+B2B-FF956A99,Poly-V Belt 126,Drive Belt,C,EA,87.0,USD,1095
+B2B-FFCB60E0,Hex Bolt 183,Fastener,A,EA,1.0,USD,3650
+B2B-FFE335A4,O-Ring NBR 28,Seal & Gasket,B,EA,14.0,USD,730

@@ -115,8 +115,8 @@ def main() -> None:
             )
         print()
 
-    print("Costo de quiebre asumido por dia sin la pieza:")
-    for level, cost in config.STOCKOUT_COST_PER_DAY_USD.items():
+    print("Costo asumido de una peticion no atendida:")
+    for level, cost in config.STOCKOUT_COST_PER_EVENT_USD.items():
         print(f"  criticidad {level}: {cost:,.2f} USD")
     print("  parametro de negocio: validar con mantenimiento antes de usarlo\n")
 

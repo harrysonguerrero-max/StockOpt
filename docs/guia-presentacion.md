@@ -737,3 +737,752 @@ En orden de lo que bloquea, no de lo que sería vistoso:
 | [`Spec.md` §13.12](../Spec.md) | Los 12 supuestos del modelo y su consecuencia si fallan |
 | [`Spec.md` §14](../Spec.md) | Diseño: continuidad de producción como restricción dura |
 | [`Spec.md` §15](../Spec.md) | Diseño: chat de explicabilidad y trazabilidad |
+
+---
+
+## 9. Formulario técnico del pipeline — cada fórmula explicada
+
+Esta sección es el respaldo matemático de la guía. Contiene **todas las fórmulas**
+que el sistema aplica, en el orden en que se ejecutan, con su justificación, fuente
+bibliográfica, glosario completo de símbolos y las condiciones bajo las cuales deja
+de ser válida. Úsala cuando la audiencia es técnica o cuando alguien pregunta
+«¿de dónde salió ese número?».
+
+---
+
+### 9.1 Etapa 0 · Limpieza de fuentes
+
+#### 9.1.1 Banda intercuartílica de Tukey
+
+**Qué hace:** Marca una observación como atípica si cae fuera del intervalo
+`[Q1 − 1,5·RIC , Q3 + 1,5·RIC]`.
+
+```
+x ∉ [Q1 − 1,5·IQR ,  Q3 + 1,5·IQR]  ⟹  outlier
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `Q1, Q3` | Primer y tercer cuartil de la columna | unidad de la columna |
+| `IQR` | Rango intercuartílico, Q3 − Q1 | unidad de la columna |
+| `1,5` | Ancho de la banda. Convención de Tukey para atípico leve | adimensional |
+
+**Fuente:** Tukey, J.W. (1977). *Exploratory Data Analysis*. Addison-Wesley.
+
+**Por qué se usa:** No asume distribución normal. Funciona razonablemente bien con
+colas asimétricas, que son la norma en datos de consumo de refacciones.
+
+**Cuándo falla:** Si más de un cuarto de las observaciones son extremas, los
+cuartiles se desplazan y el criterio se vuelve demasiado permisivo. Por eso no se
+usa solo.
+
+---
+
+#### 9.1.2 Z-score modificado sobre la desviación absoluta mediana (MAD)
+
+**Qué hace:** Compara cada valor con la mediana usando la MAD como escala. Si el
+score supera 3,5, la observación se marca.
+
+```
+Mᵢ  =  0,6745 · (xᵢ − x̃) / MAD   >  3,5  ⟹  outlier
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `xᵢ` | Valor observado | unidad de la columna |
+| `x̃` | Mediana de la columna | unidad de la columna |
+| `MAD` | Mediana de `|xᵢ − x̃|` | unidad de la columna |
+| `0,6745` | Factor de escala que hace la MAD comparable a una desviación estándar bajo normalidad | adimensional |
+| `3,5` | Umbral de corte | adimensional |
+
+**Fuente:** Iglewicz, B. & Hoaglin, D.C. (1993). *How to Detect and Handle Outliers*.
+ASQC; reproducido en NIST/SEMATECH e-Handbook of Statistical Methods.
+
+**Por qué se usa:** Usa la mediana en lugar de la media, por lo que unos pocos
+valores extremos no desplazan el criterio. Es robusto donde el IQR empieza a fallar.
+
+**Cuándo falla:** Cuando más de la mitad de las observaciones son idénticas —caso
+habitual en refacciones con muchos ceros— la MAD vale cero y la división indefine
+el score. El código detecta esta situación y recurre a la desviación media absoluta
+respecto de la mediana, que conserva la robustez.
+
+---
+
+#### 9.1.3 Mínimo de días registrados por mes
+
+**Qué hace:** Descarta un mes completo si tiene menos de 20 días con registro.
+
+```
+días_registrados_en_el_mes < 20  ⟹  mes descartado
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `20` | Umbral de días por debajo del cual el mes no es evidencia de demanda | días/mes |
+
+**Fuente:** Regla operativa declarada para este conjunto de datos.
+
+**Por qué se usa:** Un mes con un solo día registrado se leería como una caída
+brusca de la demanda. Descartarlo elimina una señal falsa, no información real.
+
+---
+
+### 9.2 Etapa 1 · Ingesta y validación
+
+#### 9.2.1 Integridad referencial del dataset
+
+**Qué hace:** Bloquea el pipeline antes de procesar si alguna de estas condiciones
+falla.
+
+```
+precio ≥ 0 ,   MOQ ≥ 1 ,   L > 0 ,   qty ≥ 0 ,   ∀ s : |O(s)| ≥ 2
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `precio` | Precio unitario de una oferta | USD/unidad |
+| `MOQ` | Cantidad mínima de orden | unidades |
+| `L` | Lead time del proveedor | días |
+| `qty` | Cantidad en cualquier fila de inventario o demanda | unidades |
+| `\|O(s)\|` | Número de ofertas que pueden servir la serie `s` | ofertas |
+
+**Fuente:** Reglas duras de negocio declaradas para el proyecto.
+
+**Por qué se usa:** La última regla es la que más importa para el optimizador: con
+una sola oferta no hay nada que elegir, y el modelo de selección de proveedor se
+reduce a aritmética. El optimizador necesita al menos dos alternativas para producir
+una decisión defendible.
+
+---
+
+#### 9.2.2 Punto de reorden inicial del inventario sintético
+
+**Qué hace:** Genera el stock de partida de cada serie usando el servicio declarado.
+
+```
+ROP  =  ceil( μ  +  z(k) · σ )
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `μ` | Consumo mensual medio de la serie | unidades/mes |
+| `σ` | Desviación estándar del consumo mensual | unidades/mes |
+| `z(k)` | Factor de servicio por criticidad: A 1,65 · B 1,28 · C 0,84 | adimensional |
+
+**Fuente:** Aproximación normal estándar, con los mismos factores de servicio que
+la política de inventario.
+
+**Aclaración importante:** Este es solo el stock de arranque que escribe el build.
+El punto de reorden real que el sistema calcula opera sobre el lead time verdadero
+(días), no sobre el mes calendario. La fórmula completa está en §9.4.1.
+
+---
+
+### 9.3 Etapa 2 · Clasificación de patrones de demanda
+
+#### 9.3.1 Coeficiente de variación (CV)
+
+**Qué hace:** Mide la dispersión relativa de la serie. Si CV > 0,5, la serie se
+clasifica como Volátil.
+
+```
+CV  =  σ / μ ,    CV > 0,5  ⟹  Volátil
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `σ` | Desviación estándar del consumo mensual | unidades/mes |
+| `μ` | Media del consumo mensual | unidades/mes |
+| `CV` | Dispersión relativa, comparable entre piezas de cualquier escala | adimensional |
+| `0,5` | Umbral de volatilidad declarado como política | adimensional |
+
+**Fuente:** Estadística descriptiva clásica. Umbral declarado como política de
+negocio, no estimado.
+
+**Por qué se usa:** Dividir por la media hace que una pieza que mueve 100 unidades
+al mes sea comparable con una que mueve 2. La desviación absoluta sola no sirve
+para comparar piezas de distinta escala.
+
+---
+
+#### 9.3.2 Fuerza estacional de la descomposición
+
+**Qué hace:** Mide qué fracción de la varianza de la señal (estacional + residuo)
+se explica por el componente estacional. Si Fₛ ≥ 0,45, la condición de fuerza se
+cumple.
+
+```
+Fₛ  =  1  −  Var(R) / Var(S + R) ,    Fₛ ≥ 0,45
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `S` | Componente estacional de la descomposición | unidades/mes |
+| `R` | Residuo tras eliminar tendencia y estación | unidades/mes |
+| `Fₛ` | Proporción de la varianza (S+R) explicada por la estación | 0 a 1 |
+| `0,45` | Fuerza mínima para considerar estacional | adimensional |
+
+**Fuente:** Wang, X., Smith, K. & Hyndman, R.J. (2006). Characteristic-based
+clustering for time series data. *Data Mining and Knowledge Discovery*, 13(3).
+Descomposición STL: Cleveland et al. (1990). *J. of Official Statistics*, 6(1).
+
+**Por qué se usa:** Cuantifica cuánto de lo que varía en la serie es ciclo anual y
+no ruido. La decomposición clásica extrae un componente estacional aparente incluso
+de ruido puro con solo 3 ciclos de historia, de ahí que esta condición no sea
+suficiente por sí sola.
+
+**Cuándo falla:** Con 3 ciclos de historia la fuerza media de una serie de ruido
+puro es 0,32 y supera 0,40 en el 26 % de los casos. Por eso se exige también la
+prueba de Kruskal-Wallis.
+
+---
+
+#### 9.3.3 Prueba de efecto de mes (Kruskal-Wallis)
+
+**Qué hace:** Verifica si el mes del calendario explica de forma estadísticamente
+significativa las diferencias de consumo. Si p < 0,05, el efecto es real.
+
+```
+H  =  12/(N·(N+1)) · Σⱼ (Rⱼ² / nⱼ)  −  3·(N+1) ,    p < 0,05
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `N` | Total de observaciones de la serie | meses |
+| `nⱼ` | Observaciones en el mes calendario j | meses |
+| `Rⱼ` | Suma de rangos de las observaciones del mes j | rangos |
+| `H` | Estadístico de prueba, aprox. chi-cuadrado con 11 grados de libertad | adimensional |
+| `p` | Probabilidad de ver este efecto de mes por azar | 0 a 1 |
+
+**Fuente:** Kruskal, W.H. & Wallis, W.A. (1952). Use of ranks in one-criterion
+variance analysis. *J. of the American Statistical Association*, 47(260).
+
+**Por qué se usa:** Opera sobre rangos, no sobre valores, así que no exige que la
+demanda sea normal — y la demanda de refacciones no lo es. Es una ANOVA no
+paramétrica de un factor.
+
+**La combinación que importa:** La clasificación Estacional exige Fₛ ≥ 0,45 **Y**
+p < 0,05 simultáneamente. Medido sobre 400 simulaciones, el falso positivo con
+ambas condiciones baja del 26 % al 2 %.
+
+---
+
+#### 9.3.4 Score de confianza del patrón (γ)
+
+**Qué hace:** Combina tres señales en un número de 0 a 1 que mide cuánto se puede
+confiar en la etiqueta asignada. Si γ < 0,5, la serie se marca para revisión humana.
+
+```
+γ  =  0,30 · V(n)  +  0,45 · W(CV)  +  0,25 · R(y)
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `V(n)` | Cuánta historia tiene la serie, saturando en la ventana completa | 0 a 1 |
+| `W(CV)` | Cuán estable es la serie; cae a medida que sube el coeficiente de variación | 0 a 1 |
+| `R(y)` | Qué tan cercanos están los últimos 3 meses al nivel histórico | 0 a 1 |
+| `γ` | Confianza en la etiqueta del patrón | 0 a 1 |
+
+**Fuente:** Política declarada del proyecto, no estimada estadísticamente.
+
+**Por qué se usa:** Las tres señales capturan las tres razones por las que un
+pronóstico falla: poca historia, alta volatilidad y cambio de régimen reciente.
+La volatilidad pesa más (0,45) porque es la que más degrada la precisión. Los pesos
+son una declaración de criterio, no un ajuste de datos.
+
+---
+
+### 9.4 Etapa 3 · Proyección de demanda e inventario mínimo
+
+#### 9.4.1 Los cuatro estimadores centrales (uno por patrón)
+
+**Qué hace:** Selecciona el método de proyección según el patrón de la serie.
+
+```
+D₅₀  =  ⎧ (1/6) · Σₜ yₜ          si Estable
+         ⎪ P₅₀(ventana)           si Volátil
+         ⎪ a·n + b                 si Tendencia
+         ⎩ ℓₙ + sₙ₋₁₁             si Estacional
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `yₜ` | Consumo observado en el mes t | unidades/mes |
+| `P₅₀` | Mediana de los últimos seis meses | unidades/mes |
+| `a, b` | Pendiente e intercepto de la recta por mínimos cuadrados | unidades/mes² y unidades |
+| `ℓₙ` | Nivel Holt-Winters en el último mes | unidades/mes |
+| `sₙ₋₁₁` | Índice estacional del mismo mes calendario del año anterior | unidades/mes |
+| `D₅₀` | Pronóstico central del mes siguiente | unidades/mes |
+
+**Fuentes:**
+- Media móvil: estadística descriptiva clásica.
+- Percentiles empíricos: estadística no paramétrica.
+- OLS: Gauss (1809) / Legendre (1805).
+- Holt-Winters: Holt, C.C. (1957); Winters, P.R. (1960). *Management Science*, 6(3).
+
+**Por qué se usa:** El método lo decide el patrón, no se ajusta por serie. Eso
+hace el pronóstico reproducible: el motivo de cada cifra es la etiqueta, que la
+etapa anterior ya publicó. Solo 6 de 40 series necesitan Holt-Winters; el 85 % se
+resuelve con métodos estadísticos simples, que es lo correcto para este volumen.
+
+**Por qué no Prophet:** Con 36 observaciones mensuales y 3 ciclos, Prophet está
+sobredimensionado y sobreajusta. Además exige compilar Stan, que en Windows
+complica la demo. Holt-Winters viene en statsmodels y es igualmente explicable.
+
+---
+
+#### 9.4.2 Intervalo de incertidumbre del pronóstico
+
+**Qué hace:** Construye el escenario bajo (D₂₅) y alto (D₇₅) alrededor del punto
+central.
+
+```
+D₂₅ / D₇₅  =  max( 0 ,  D₅₀  ∓  0,674 · S )
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `S` | Dispersión de la serie usada como estimador del error | unidades/mes |
+| `0,674` | Cuantil de la normal estándar que deja el 25 % en cada cola | adimensional |
+| `D₂₅, D₇₅` | Escenario bajo y alto del mes siguiente | unidades/mes |
+
+**Fuente:** Cuantil de la distribución normal estándar.
+
+**Por qué se recorta en cero:** Una demanda negativa no tiene significado operativo.
+La aproximación normal la produce cuando la media es pequeña frente a la dispersión,
+que es frecuente en refacciones. No es cosmético.
+
+---
+
+#### 9.4.3 Error ponderado del método — validación con origen móvil
+
+**Qué hace:** Mide el error del método como fracción del volumen total movido,
+evitando la división por cero del MAPE clásico.
+
+```
+WMAPE  =  Σⱼ |eⱼ| / Σⱼ yⱼ
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `eⱼ` | Error del mes j: pronóstico menos observado | unidades |
+| `yⱼ` | Consumo observado en el mes j | unidades |
+| `WMAPE` | Error como fracción del volumen realmente movido | 0 a 1 |
+
+**Fuente:** Tashman, L.J. (2000). Out-of-sample tests of forecasting accuracy.
+*International Journal of Forecasting*, 16(4). Evaluación con origen móvil
+(*rolling-origin evaluation*) reservando los últimos 6 meses.
+
+**Por qué WMAPE y no MAPE:** El MAPE divide mes a mes entre el valor real y
+explota cuando hay meses en cero. Descartar esos meses los eliminaría siendo los
+más informativos. WMAPE pone el total en el denominador una sola vez. Ponderar por
+volumen evita además que un método se clasifique por su comportamiento en los meses
+de menor demanda — que son los menos importantes operativamente.
+
+---
+
+#### 9.4.4 Combinación de los dos pronósticos
+
+**Qué hace:** Mezcla el pronóstico del modelo global de ML con el del método
+estadístico del patrón, con peso igual para ambos.
+
+```
+D₅₀,final  =  0,5 · M  +  0,5 · D₅₀
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `M` | Pronóstico del modelo global entrenado | unidades/mes |
+| `D₅₀` | Pronóstico del método estadístico del patrón | unidades/mes |
+| `λ` | Peso dado al modelo (aquí λ = 0,5) | 0 a 1 |
+
+**Fuente:** Bates, J.M. & Granger, C.W.J. (1969). The combination of forecasts.
+*Operational Research Quarterly*, 20(4). Premio Nobel de Economía 2003 para
+Granger por trabajos posteriores en series temporales.
+
+**Por qué peso igual:** El peso óptimo teórico minimizaría el error combinado
+teniendo en cuenta la correlación de los errores de ambos métodos. Se usa 0,5
+porque la validación muestra errores similares y errores débilmente correlacionados
+entre el modelo y el estadístico — que es exactamente el caso en que la
+combinación aequiponderada aproxima bien el óptimo. El peso óptimo no se estima
+para no sobreajustar la combinación a los datos de validación.
+
+---
+
+#### 9.4.5 Base diaria de la demanda
+
+**Qué hace:** Convierte el pronóstico mensual en tasa y desviación diarias para
+alimentar el cálculo del inventario mínimo.
+
+```
+d  =  D₅₀,final / 30 ,    σ_d  =  σ / √30
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `d` | Demanda media diaria | unidades/día |
+| `σ_d` | Desviación estándar de la demanda diaria | unidades/día |
+| `30` | Días de planificación por mes. Constante de política, no el calendario | días/mes |
+
+**Fuente:** Varianza de una suma de variaciones diarias independientes.
+
+**La sutileza estadística:** La media divide lineal por 30 y la desviación divide
+por √30, porque la varianza de una suma de 30 variaciones diarias independientes es
+30 veces la varianza diaria. Con autocorrelación positiva —que la demanda de
+refacciones suele tener— el exponente real está entre 0,6 y 0,8, no en 0,5, así
+que esta conversión subestima el colchón en las series más correlacionadas.
+
+---
+
+#### 9.4.6 Varianza de la demanda sobre un lead time aleatorio
+
+**Qué hace:** Descompone el riesgo total del reorden en dos fuentes independientes:
+la incertidumbre de la demanda y la incertidumbre del proveedor.
+
+```
+Var(D_L)  =  L · σ_d²  +  d² · σ_L²
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `L` | Lead time medio de planificación | días |
+| `σ_L` | Desviación estándar del lead time | días |
+| `d, σ_d` | Media y desviación de la demanda diaria | unidades/día |
+| `Var(D_L)` | Varianza de la demanda acumulada mientras el pedido está en tránsito | unidades² |
+
+**Fuente:** Ley de la varianza total (*law of total variance*). Hadley, G. &
+Whitin, T.M. (1963). *Analysis of Inventory Systems*. Prentice-Hall. También en
+Silver, E.A., Pyke, D.F. & Peterson, R. (1998). *Inventory Management and
+Production Planning and Scheduling*. Wiley.
+
+**El dato que lo hace importante:** Con σ_L/L ≈ 0,53 en estos proveedores, los dos
+términos son del mismo orden de magnitud: **la mitad del riesgo de cada pieza no
+viene de la demanda, viene del proveedor**. Un cálculo de inventario mínimo que
+ignore el segundo término queda 30–40 % corto creyendo tener el nivel de servicio
+declarado.
+
+---
+
+#### 9.4.7 Punto de reorden — el inventario mínimo (fórmula central)
+
+**Qué hace:** Calcula el nivel de existencias al que se debe lanzar la orden de
+compra para que, con la probabilidad declarada por criticidad, el stock no se agote
+antes de que llegue el pedido.
+
+```
+Imin  =  ceil( d · L  +  z(k) · √( L · σ_d²  +  d² · σ_L² ) )
+          └────┬────┘     └─────────────────┬─────────────────┘
+          consumo durante          colchón de seguridad que absorbe
+          el lead time             la variabilidad de demanda Y de proveedor
+```
+
+| Símbolo | Qué es | Unidad | Valor actual |
+|---|---|---|---|
+| `d` | Demanda media diaria proyectada | unidades/día | Por serie |
+| `L` | Lead time medio | días | ≈ 10,6 |
+| `σ_d` | Desviación de la demanda diaria | unidades/día | Por serie |
+| `σ_L` | Desviación del lead time | días | ≈ 5,45 |
+| `z(k)` | Factor de servicio por criticidad | adimensional | A 1,65 (95%) · B 1,28 (90%) · C 0,84 (80%) |
+| `Imin` | Nivel al que se lanza la orden | unidades enteras | — |
+
+**Fuente:** Hadley, G. & Whitin, T.M. (1963). *Analysis of Inventory Systems*.
+Prentice-Hall. Es la formulación canónica implementada en los módulos MRP de SAP,
+Oracle y la mayoría de los ERP industriales.
+
+**Por qué se usa esta y no solo `d · L`:** El primer término (`d · L`) es el
+mínimo absoluto: lo que se consume mientras llega el pedido. No hay colchón ahí.
+El segundo término es el colchón, y está bajo la raíz cuadrada porque las
+varianzas se suman cuando las incertidumbres son independientes. Ignorar el término
+`d² · σ_L²` equivale a asumir que todos los proveedores son perfectamente
+puntuales — supuesto que el propio dataset refuta (σ_L/μ_L = 0,53).
+
+**Los valores de `z` son la única declaración de política de servicio en el
+sistema.** No hay otra palanca. Si mantenimiento dice que una pieza A vale 600
+USD/día de paro en vez de 400, el nivel de servicio para esa pieza debería ser
+mayor que 95 %. Hoy está fijado por constante.
+
+**Limitación estadística conocida:** Eppen, G.D. & Martin, R.K. (1988) demuestran
+que la demanda sobre un lead time aleatorio sigue una distribución mezcla
+asimétrica, no una normal. El factor `z` de la normal subestima sistemáticamente
+el stock de seguridad real necesario para alcanzar el nivel de servicio declarado.
+El sistema no corrige esto.
+
+---
+
+### 9.5 Etapa 4 · Optimización de abastecimiento
+
+#### 9.5.1 Cantidad económica de pedido (EOQ / Wilson)
+
+**Qué hace:** Calcula la cantidad de compra que minimiza la suma anual del costo de
+pedir (flete por pedido) más el costo de mantener (capital inmovilizado + seguros +
+obsolescencia).
+
+```
+Q*  =  √( 2 · K · D / h ) ,    con  h = i · c ,    D = 12 · D₅₀
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `K` | Costo fijo de traer un pedido: el flete a esa planta | USD/pedido |
+| `D` | Demanda anual proyectada para la pieza | unidades/año |
+| `c` | Valor unitario de la pieza en el maestro | USD/unidad |
+| `h` | Costo de mantener una unidad ociosa un año: capital + almacenamiento + seguros + riesgo de obsolescencia | USD/unidad/año |
+| `i` | Tasa anual de posesión aplicada al valor de la pieza | fracción (0,25 = 25 %) |
+| `Q*` | Cantidad que minimiza la suma anual de costo de ordenar + mantener | unidades |
+
+**Fuente:** Harris, F.W. (1913). How many parts to make at once. *Factory, The
+Magazine of Management*, 10(2). Wilson, R.H. (1934). A scientific routine for
+stock control. *Harvard Business Review*, 13. Enlace con la política order-up-to:
+Hadley & Whitin (1963).
+
+**Por qué reemplaza la cobertura en meses fija:** Una cobertura de 1,5 meses fija
+no se entera de que el flete de esta pieza es 5 veces el de aquella, ni de que el
+valor de esta otra justifica un lote menor para no inmovilizar capital. El EOQ
+equilibra esos dos costos explícitamente. El resultado: lotes más grandes en piezas
+baratas con flete alto, lotes más pequeños en piezas caras con bajo flete.
+
+**La propiedad del costo plano:** La curva de costo total alrededor del óptimo es
+cuadrática aplastada, no en V. Estar el doble del Q* óptimo sube el costo total
+anual solo un 25 %. Esto hace que una aproximación a K con el flete promedio de las
+ofertas sea razonable: el efecto de la raíz cuadrada amortigua el error.
+
+---
+
+#### 9.5.2 Nivel order-up-to y tope de cobertura
+
+**Qué hace:** Calcula el nivel hasta el que se repone (S), aplica el tope de
+cobertura para no acumular más de 6 meses, y define el máximo de inventario.
+
+```
+Q    =  min( ceil(Q*) ,  floor(D₅₀ × 6) )
+S    =  Imin + Q
+Imax =  S
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `s` | Punto de reorden, que es Imin de la etapa anterior | unidades |
+| `S` | Nivel al que se repone cuando se lanza la orden | unidades |
+| `Q` | Lote económico después del tope de cobertura | unidades |
+| `6` | Meses de cobertura por encima de los cuales la obsolescencia supera el ahorro en flete | meses |
+
+**Fuente:** Política (s, S). Propiedad del costo plano: Silver, Pyke & Peterson
+(1998). *Inventory Management and Production Planning and Scheduling*. Wiley.
+
+**La implicación de política:** En una política (s, S), el nivel de reposición y
+el techo de inventario son el mismo número. Nunca se compra por encima de S, así
+que ese nivel es a la vez el objetivo y el máximo. Esto reemplaza los 3 meses
+fijados a dedo que usaba el sistema anterior.
+
+**Por qué el tope de 6 meses:** Por encima de 6 meses de cobertura, la ganancia de
+ordenar menos veces al año es menor que el costo de inmovilizar esas unidades
+adicionales. También limita el riesgo de obsolescencia: el EOQ de Wilson no sabe
+que las piezas vencen; este tope se lo dice.
+
+---
+
+#### 9.5.3 Techo por vida útil (anti-obsolescencia)
+
+**Qué hace:** Limita la compra a lo que la demanda proyectada puede consumir antes
+de que la pieza venza, con un margen de seguridad del 20 %.
+
+```
+Ivida  =  max( 0 ,  floor( d × 0,80 × V )  −  q )
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `V` | Vida útil de la pieza | días |
+| `0,80` | Margen de seguridad: solo se planifica contra el 80 % de la vida útil | adimensional |
+| `q` | Unidades ya en bodega, que se consumen primero | unidades |
+| `Ivida` | Unidades que todavía se pueden consumir antes del vencimiento | unidades |
+
+**Fuente:** Regla anti-obsolescencia declarada para este dataset.
+
+**Por qué el 80 %:** Una parte de la vida útil se pierde en almacenamiento,
+manipulación y variabilidad de la tasa de consumo. El 20 % de margen absorbe ese
+riesgo sin agotar el presupuesto en unidades que probablemente se consuman a tiempo.
+
+---
+
+#### 9.5.4 Selección de proveedor — MILP de costo fijo
+
+**Qué hace:** Elige a qué proveedor comprarle y cuántas unidades, minimizando el
+costo total (precio × cantidad + flete), respetando el lote mínimo, la capacidad
+y un solo proveedor por orden.
+
+```
+minimizar   Σₒ ( pₒ · xₒ  +  fₒ · uₒ )
+
+sujeto a    Σₒ xₒ  ≥  Rinf           cubrir el faltante
+            Σₒ uₒ  ≤  1              un solo proveedor por orden
+            xₒ ≥ mₒ · uₒ            el MOQ solo aplica si se activa el proveedor
+            xₒ ≤ Uₒ · uₒ            y la capacidad lo acota
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `xₒ` | Unidades compradas de la oferta o | unidades enteras |
+| `uₒ` | Si la oferta o se activa o no | 0 ó 1 |
+| `pₒ, fₒ, mₒ` | Precio unitario, flete fijo y MOQ de la oferta | USD/unidad, USD, unidades |
+| `Uₒ` | Cota superior efectiva: el menor entre el techo de inventario y la capacidad del proveedor | unidades |
+| `Rinf` | Cantidad que hay que cubrir (diferencia entre mínimo e inventario actual) | unidades |
+
+**Fuente:** Problema de costo fijo (*fixed-charge problem*). Balinski, M.L. (1961).
+Fixed-cost transportation problems. *Naval Research Logistics Quarterly*, 8(1).
+Resuelto exactamente con el solver CBC (COIN-BC), que es gratuito y corre en
+milisegundos para modelos de 2–3 ofertas.
+
+**Las dos restricciones de enlace son el mecanismo clave:**
+- Con `uₒ = 0`: `xₒ ≥ 0 · 0 = 0` y `xₒ ≤ Uₒ · 0 = 0`, por lo que `xₒ = 0`. No
+  se compra nada y no se paga flete.
+- Con `uₒ = 1`: `xₒ ≥ mₒ`, por lo que el lote mínimo se respeta. Y `xₒ ≤ Uₒ`,
+  por lo que la capacidad acota.
+
+Esto es lo que convierte «el flete se paga solo si se usa al proveedor» y «el MOQ
+solo aplica si se le compra» en restricciones lineales que un solver exacto puede
+tratar.
+
+**Por qué un solo proveedor:** No es una restricción matemática — split entre dos
+proveedores sería igual o mejor en costo. Es una regla operativa: una orden tiene
+que ser ejecutable por una persona sin coordinar dos suministros simultáneos.
+
+---
+
+#### 9.5.5 Valoración del quiebre que la reposición evita
+
+**Qué hace:** Traduce el riesgo de quiebre a dólares para que el reparto de
+presupuesto pueda comparar piezas en la misma moneda.
+
+```
+Cq  =  ( max(0, P + L − cobertura)  −  max(0, L − cobertura) )  ×  r  ×  c(k)
+```
+
+| Símbolo | Qué es | Unidad | Valor actual |
+|---|---|---|---|
+| `cobertura` | Días que aguanta el stock actual a la tasa de pronóstico | días | Por serie |
+| `P` | Período de planificación hasta la siguiente corrida | días | 30 |
+| `L` | Lead time de reposición | días | ≈ 10,6 |
+| `r` | Tasa de salida: proporción de días en que la pieza se pide realmente | fracción 0–1 | Por serie |
+| `c(k)` | Costo de un día sin la pieza, por criticidad | USD/día | A 400 · B 80 · C 10 |
+| `Cq` | Valor del quiebre que evita reponer ahora en vez de esperar | USD | — |
+
+**Fuente:** Valoración determinista. Los `c(k)` son parámetros de negocio
+declarados, no estimados.
+
+**La sutileza del factor `r`:** Un día sin existencias solo cuesta dinero si ese
+día alguien pide la pieza. Sin el factor `r`, la valoración asume que la pieza se
+pide todos los días y aproximadamente triplica el riesgo en piezas de baja rotación.
+Con él, el costo es proporcional a la frecuencia real de solicitud. El resultado
+es más defendible frente a finanzas.
+
+**Limitaciones conocidas:**
+1. Es determinista: asume que la demanda llega exactamente a la tasa de pronóstico.
+   Subestima el riesgo en las series menos predecibles.
+2. `c(k)` es un parámetro fijo, no una estimación. Su magnitud decide cuánto pesa
+   la criticidad frente al precio. Tiene que ser validado con mantenimiento.
+
+---
+
+#### 9.5.6 Reparto del presupuesto con continuidad de producción como restricción dura
+
+**Qué hace:** Distribuye el presupuesto de la corrida entre todas las piezas a la
+vez, garantizando primero que ninguna pieza de criticidad A quede sin financiar, y
+luego maximizando el beneficio neto de las discrecionales.
+
+```
+maximizar   Σ_{s ∈ Cand_flex}  bₛ · vₛ
+
+sujeto a    vₛ = 1    ∀ s ∈ Cand_crit         criticidad A siempre financiada
+            Σₛ Cₛ · vₛ  ≤  B + E              presupuesto elástico
+            E  ≤  Emax                         excedente acotado y publicado
+```
+
+| Símbolo | Qué es | Unidad | Valor actual |
+|---|---|---|---|
+| `Cand_crit` | Reposiciones cuyo quiebre para una línea: criticidad A | conjunto | — |
+| `Cand_flex` | El resto, que compite por lo que sobra | conjunto | — |
+| `bₛ` | Beneficio neto: quiebre evitado menos costo de evitarlo | USD | Por serie |
+| `Cₛ` | Costo total de la reposición ya resulto por el modelo anterior | USD | Por serie |
+| `vₛ` | Si la compra se financia en esta corrida | 0 ó 1 | — |
+| `B` | Presupuesto nominal de la corrida | USD | 250.000 |
+| `E` | Excedente realmente consumido para cubrir las críticas | USD | — |
+| `Emax` | Techo autorizado sobre ese excedente | USD | 1.500 |
+
+**Fuente:** Mochila 0/1 (*0/1 knapsack problem*). Lorie, J.H. & Savage, L.J.
+(1955). Three problems in capital rationing. *Journal of Business*, 28(4).
+Weingartner, H.M. (1963). *Mathematical Programming and the Analysis of Capital
+Budgeting Problems*. Prentice-Hall.
+
+**Por qué se resuelve exacto y no con el algoritmo voraz:** El algoritmo voraz
+—ordenar por rentabilidad por dólar y llenar hasta agotar el presupuesto— es
+óptimo solo cuando las compras son divisibles. Cuando son indivisibles (0 ó 1),
+una compra muy rentable y cara puede desplazar a varias baratas que juntas rinden
+más. El solver CBC lo resuelve exactamente en milisegundos para este tamaño.
+
+**La inversión de mando que importa explicar:** Antes, el presupuesto mandaba sobre
+todo y una pieza de criticidad A podía aplazarse si otras rentaban más por dólar —
+un intercambio que el negocio no aprobaría si lo viera. Ahora la continuidad de
+producción no compite: las críticas se financian primero, el presupuesto se vuelve
+elástico hasta `Emax` para lograrlo, y lo que no cabe ni así sale como `ESCALAR`
+en vez de aplazarse en silencio. El excedente se publica, no se oculta.
+
+---
+
+#### 9.5.7 Piso de nivel de servicio por clase de criticidad
+
+**Qué hace:** Añade una restricción al knapsack para que el número de reposiciones
+financiadas por clase sea coherente con el nivel de servicio declarado en el punto
+de reorden.
+
+```
+Σ_{s ∈ Class_k}  vₛ  ≥  ceil( θₖ × |Class_k| )
+```
+
+| Símbolo | Qué es | Unidad | Valor actual |
+|---|---|---|---|
+| `Class_k` | Reposiciones de criticidad k que estaban pendientes | conjunto | — |
+| `θₖ` | Fracción de la clase que debe financiarse | 0 a 1 | A 1,00 · B 0,80 · C 0,50 |
+| `vₛ` | Si la compra se financia | 0 ó 1 | — |
+
+**Fuente:** Consistencia con los valores `z` declarados en el punto de reorden.
+
+**Por qué existe:** Si en la etapa del inventario mínimo se declaró que las piezas
+B operan al 90 % de nivel de servicio, el presupuesto no puede contradecirlo
+aplazando la mayoría de ellas. Esta restricción impone coherencia entre ambas
+etapas. Cuando el dinero no alcanza ni para los pisos, se sueltan de la clase
+menos exigente hacia arriba en vez de declarar el modelo infactible, y el nivel
+realmente alcanzado se publica junto al declarado.
+
+---
+
+### 9.6 Cuadro resumen: de dónde viene cada número
+
+| Número en pantalla | Fórmula que lo produce | Sección |
+|---|---|---|
+| Patrón de la serie | CV, Fₛ, Kruskal-Wallis, Mann-Kendall | §9.3 |
+| Confianza en el patrón (γ) | Score compuesto ponderado | §9.3.4 |
+| Pronóstico central (D₅₀) | Media / percentil / OLS / Holt-Winters + combinación ML | §9.4.1–4 |
+| Intervalo D₂₅–D₇₅ | Cuantil normal ±0,674·S | §9.4.2 |
+| Error WMAPE | Error ponderado sobre volumen total | §9.4.3 |
+| Inventario mínimo (Imin) | Hadley & Whitin: d·L + z·√(L·σ_d²+d²·σ_L²) | §9.4.7 |
+| Lote económico (Q*) | EOQ de Wilson: √(2·K·D/h) | §9.5.1 |
+| Inventario máximo (Imax) | Nivel order-up-to: Imin + Q | §9.5.2 |
+| Techo por vida útil | Anti-obsolescencia: d·0,8·V − q | §9.5.3 |
+| Proveedor y cantidad | MILP de costo fijo, solver CBC | §9.5.4 |
+| Costo del quiebre (Cq) | Días expuestos × tasa salida × c(k) | §9.5.5 |
+| COMPRAR / APLAZADO / ESCALAR | Mochila 0/1 con restricción de continuidad | §9.5.6 |
+| Nivel de servicio alcanzado vs. declarado | Piso por clase θₖ | §9.5.7 |
+
+---
+
+### 9.7 Los tres supuestos que hay que poder defender
+
+Estos son los supuestos implícitos más cuestionables. Si alguien los señala, hay
+que tenerlos reconocidos.
+
+| Supuesto | Dónde aplica | Consecuencia si falla |
+|---|---|---|
+| **La demanda diaria es independiente entre días** | Conversión mensual → diaria (§9.4.5) | El colchón se subestima en series con días de alta correlación. El exponent real es entre 0,6 y 0,8, no 0,5 |
+| **La distribución de demanda sobre el lead time es normal** | Inventario mínimo (§9.4.7) | Eppen & Martin (1988): la distribución real es mezcla asimétrica. El factor z subestima el stock de seguridad real |
+| **Los parámetros c(k) del costo de quiebre son correctos** | Valoración del quiebre (§9.5.5) y mochila (§9.5.6) | Si A = 400 USD/día está muy lejos del costo real de un paro de línea, las prioridades del sistema entero cambian |

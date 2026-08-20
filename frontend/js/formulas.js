@@ -575,15 +575,18 @@ const OPTIMIZATION = [
       ["P", "Planning period until the next run", `${p.planning_period_days ?? 30} days`],
       ["L", "Replenishment lead time", "days"],
       ["r", "Issue rate: share of days the part is actually requested", "0 to 1"],
-      ["c(k)", "Cost of one day without the part, by criticality", "USD/day"],
+      ["c(k)", "Cost of one unmet request, by criticality: the line stops until the "
+        + "part arrives", "USD/request"],
       ["C_q", "Value of the stockout that ordering now instead of waiting prevents",
         "USD"],
     ],
     note: "The r factor is what makes the figure defensible. A day without stock only "
-      + "costs money if somebody asks for the part that day; without it the valuation "
-      + "assumes the part is needed every day and roughly triples the risk. It is still "
-      + "deterministic: it assumes demand arrives exactly at the forecast rate, so it "
-      + "understates the risk on the least predictable series. And c(k) is a fixed "
+      + "costs money if somebody asks for the part that day. Which tells you what the "
+      + "units really are: days times issue rate is not days, it is the expected number "
+      + "of requests that cannot be served, so c(k) is the cost of one unmet request — "
+      + "the line stops until the part arrives, which with OEM material is weeks. It is "
+      + "still deterministic: it assumes demand arrives exactly at the forecast rate, so "
+      + "it understates the risk on the least predictable series. And c(k) is a fixed "
       + "parameter, not an estimate — its magnitude alone decides how much criticality "
       + "weighs against price, so it has to be validated with maintenance.",
   },

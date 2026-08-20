@@ -37,15 +37,22 @@ SEASONAL = "Estacional"
 TREND = "Tendencia"
 STABLE = "Estable"
 VOLATILE = "Volatil"
+INTERMITTENT = "Intermitente"
+LUMPY = "Irregular"
 INSUFFICIENT = "Insuficiente"
 
-PRECEDENCE = [INSUFFICIENT, SEASONAL, TREND, VOLATILE, STABLE]
+PRECEDENCE = [INSUFFICIENT, LUMPY, INTERMITTENT, SEASONAL, TREND, VOLATILE, STABLE]
+
+ADI_INTERMITTENT = 1.32
+CV2_LUMPY = 0.49
 
 PATTERN_LABELS = {
     SEASONAL: "Seasonal",
     TREND: "Trending",
     STABLE: "Stable",
     VOLATILE: "Volatile",
+    INTERMITTENT: "Intermittent",
+    LUMPY: "Lumpy",
     INSUFFICIENT: "Insufficient",
 }
 
@@ -54,6 +61,8 @@ RECOMMENDED_MODEL = {
     TREND: "linear_regression",
     STABLE: "moving_average",
     VOLATILE: "moving_median",
+    INTERMITTENT: "croston",
+    LUMPY: "croston_sba",
     INSUFFICIENT: "manual_input",
 }
 
@@ -63,6 +72,63 @@ W_RECENT = 0.25
 
 RECENT_WINDOW = 3
 
+
+def demand_interval(values) -> float:
+    """Calcula cada cuantos periodos se mueve la pieza.
+
+    Entrada:
+        values: serie mensual ordenada cronologicamente.
+
+    Salida:
+        Intervalo medio entre eventos de demanda, en periodos.
+
+    Funcionalidad:
+        Es el `ADI` de la clasificacion de Syntetos, Boylan y Croston: el numero
+        de periodos dividido entre los periodos con consumo. Un valor de 1 es una
+        pieza que se mueve todos los meses; un valor de 6 es una que se mueve dos
+        veces al ano.
+
+        Es la mitad del diagnostico que decide si una serie admite los metodos
+        clasicos. Con demanda intermitente el promedio movil y la mediana movil
+        devuelven cero, porque la mayoria de los meses son cero, y eso no es una
+        proyeccion sino una renuncia.
+    """
+    values = np.asarray(values, dtype=float)
+    events = int(np.count_nonzero(values))
+    if events == 0:
+        return float(len(values))
+    return float(len(values) / events)
+
+
+def event_variation(values) -> float:
+    """Calcula la dispersion del tamano de los eventos de demanda.
+
+    Entrada:
+        values: serie mensual ordenada cronologicamente.
+
+    Salida:
+        Cuadrado del coeficiente de variacion calculado solo sobre los periodos
+        con consumo.
+
+    Funcionalidad:
+        Es el `CV2` de la clasificacion SBC, y la clave esta en que se mide
+        **solo sobre los periodos con demanda**. El coeficiente de variacion de
+        la serie completa mezcla dos cosas distintas —cada cuanto se pide y
+        cuanto se pide— y en una serie con muchos ceros lo domina la primera,
+        que ya mide el intervalo.
+
+        Separadas, las dos responden preguntas distintas: el intervalo dice si
+        la demanda es intermitente y esta dice si ademas es irregular en tamano,
+        que es lo que distingue una pieza de reposicion periodica de una que se
+        pide de golpe cuando falla algo.
+    """
+    values = np.asarray(values, dtype=float)
+    events = values[values > 0]
+    if len(events) < 2 or events.mean() <= 0:
+        return 0.0
+    return float((events.std(ddof=0) / events.mean()) ** 2)
+
+
 COLUMNS = [
     "sku_id",
     "city_id",
@@ -71,6 +137,8 @@ COLUMNS = [
     "std_monthly",
     "cv",
     "zero_ratio",
+    "adi",
+    "cv_squared",
     "seasonal_strength",
     "seasonal_pvalue",
     "trend_tau",
@@ -241,6 +309,13 @@ def classify_series(values) -> dict:
         marca como insuficiente y no recibe confianza. La estacionalidad exige
         dos condiciones a la vez, componente fuerte y efecto de mes
         significativo, para no confundir ruido con ciclo.
+
+        El regimen de intermitencia se evalua **antes** que todo lo demas, y no
+        es un capricho de orden. Sobre una serie que solo se mueve dos meses de
+        cada doce, la descomposicion estacional y el contraste de tendencia
+        operan casi enteramente sobre ceros: no miden estacionalidad ni
+        tendencia sino el propio patron de huecos. Preguntar primero si la serie
+        es intermitente evita darle una etiqueta que su dato no sostiene.
     """
     values = np.asarray(values, dtype=float)
     n_periods = len(values)
@@ -253,8 +328,15 @@ def classify_series(values) -> dict:
     seasonal_p = seasonality_pvalue(values)
     tau, trend_p = trend_test(values)
 
+    adi = demand_interval(values)
+    cv_squared = event_variation(values)
+
     if n_periods < MIN_PERIODS or mean == 0:
         pattern = INSUFFICIENT
+    elif adi > ADI_INTERMITTENT and cv_squared > CV2_LUMPY:
+        pattern = LUMPY
+    elif adi > ADI_INTERMITTENT:
+        pattern = INTERMITTENT
     elif strength >= SEASONAL_STRENGTH_MIN and seasonal_p < SEASONAL_PVALUE_MAX:
         pattern = SEASONAL
     elif trend_p < TREND_PVALUE_MAX:
@@ -274,6 +356,8 @@ def classify_series(values) -> dict:
         "std_monthly": round(std, 2),
         "cv": round(cv, 3),
         "zero_ratio": round(zero_ratio, 3),
+        "adi": round(adi, 3),
+        "cv_squared": round(cv_squared, 3),
         "seasonal_strength": round(strength, 3),
         "seasonal_pvalue": round(seasonal_p, 4),
         "trend_tau": round(tau, 3),

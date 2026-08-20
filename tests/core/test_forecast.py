@@ -142,7 +142,8 @@ def test_inventory_minimum_covers_lead_time_demand():
 
 
 def test_forecast_has_one_row_per_series(forecast):
-    assert len(forecast) == 20 * len(CITY_IDS)
+    history = pd.read_csv(OUT_DIR / "demand_history.csv")
+    assert len(forecast) == history.groupby(["sku_id", "city_id"]).ngroups
     assert list(forecast.columns) == COLUMNS
     assert not forecast.duplicated(["sku_id", "city_id"]).any()
 

@@ -201,7 +201,8 @@ def real_patterns():
 
 
 def test_one_row_per_series(real_patterns):
-    assert len(real_patterns) == 20 * len(CITY_IDS)
+    history = pd.read_csv(OUT_DIR / "demand_history.csv")
+    assert len(real_patterns) == history.groupby(["sku_id", "city_id"]).ngroups
     assert not real_patterns.duplicated(["sku_id", "city_id"]).any()
     assert list(real_patterns.columns) == COLUMNS
 

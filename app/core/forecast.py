@@ -25,6 +25,8 @@ from app.core.inventory import (
 )
 from app.core.patterns import (
     INSUFFICIENT,
+    INTERMITTENT,
+    LUMPY,
     MIN_PERIODS_SEASONAL,
     RECOMMENDED_MODEL,
     SEASONAL,
@@ -39,6 +41,8 @@ MOVING_WINDOW = 6
 BACKTEST_MONTHS = 6
 
 QUANTILE_Z = 0.674
+
+CROSTON_ALPHA = 0.15
 
 WMAPE_MEDIUM = 0.30
 WMAPE_HIGH = 0.50
@@ -204,11 +208,102 @@ def forecast_seasonal(values: np.ndarray) -> tuple:
         return forecast_stable(values)
 
 
+def _croston(values: np.ndarray, alpha: float, correction: float) -> tuple:
+    """Proyecta una serie intermitente separando intervalo y tamano.
+
+    Entrada:
+        values: serie mensual ordenada cronologicamente.
+        alpha: constante de suavizado de ambos componentes.
+        correction: factor que corrige el sesgo del cociente.
+
+    Salida:
+        Tupla (q25, q50, q75) de demanda mensual esperada.
+
+    Funcionalidad:
+        Es el metodo de Croston (1972). En lugar de suavizar la serie completa
+        —que con mayoria de ceros converge a cero— la parte en dos series
+        distintas y suaviza cada una por separado: cuanto se pide cuando se
+        pide, y cada cuantos periodos ocurre. La proyeccion por periodo es el
+        cociente de ambas.
+
+        Esa separacion es todo el metodo, y es lo que resuelve el problema que
+        hunde a la mediana movil: la mediana de una serie con 87 % de ceros es
+        cero, y afirmar que una pieza que se consume dos veces al ano tiene
+        demanda cero es falso.
+
+        El factor de correccion distingue las dos variantes. Croston original lo
+        deja en uno; la aproximacion de Syntetos y Boylan (2005) lo fija en
+        `1 - alpha/2` porque el cociente de dos estimadores suavizados esta
+        sesgado al alza, y ese sesgo infla el inventario justo en las piezas
+        menos predecibles.
+
+        El intervalo de la proyeccion sale de la dispersion de los tamanos
+        observados, no de la serie completa: sobre una serie de ceros la
+        desviacion mide el patron de huecos y no la incertidumbre del tamano.
+    """
+    events = np.flatnonzero(values > 0)
+    if len(events) == 0:
+        return (0.0, 0.0, 0.0)
+    if len(events) == 1:
+        level = float(values[events[0]]) / len(values)
+        return _spread_from_std(level, level)
+
+    sizes = values[events].astype(float)
+    intervals = np.diff(np.concatenate(([-1], events))).astype(float)
+
+    size = sizes[0]
+    interval = intervals[0]
+    for next_size, next_interval in zip(sizes[1:], intervals[1:], strict=False):
+        size = alpha * next_size + (1 - alpha) * size
+        interval = alpha * next_interval + (1 - alpha) * interval
+
+    level = correction * size / max(interval, 1.0)
+    return _spread_from_std(level, float(sizes.std(ddof=0)) / max(interval, 1.0))
+
+
+def forecast_intermittent(values: np.ndarray) -> tuple:
+    """Proyecta una serie intermitente de tamano regular.
+
+    Entrada:
+        values: serie mensual ordenada cronologicamente.
+
+    Salida:
+        Tupla (q25, q50, q75) de demanda mensual esperada.
+
+    Funcionalidad:
+        Croston original. Se aplica cuando la pieza se mueve pocas veces pero
+        siempre en cantidades parecidas, que es el caso de la reposicion
+        preventiva: filtros cada tres meses, correas al ano.
+    """
+    return _croston(values, CROSTON_ALPHA, 1.0)
+
+
+def forecast_lumpy(values: np.ndarray) -> tuple:
+    """Proyecta una serie intermitente de tamano irregular.
+
+    Entrada:
+        values: serie mensual ordenada cronologicamente.
+
+    Salida:
+        Tupla (q25, q50, q75) de demanda mensual esperada.
+
+    Funcionalidad:
+        Aproximacion de Syntetos y Boylan (2005), que corrige el sesgo al alza
+        del cociente de Croston. Se aplica cuando la pieza no solo se mueve poco
+        sino que ademas se pide en cantidades muy dispares, que es el perfil de
+        la refaccion correctiva: no se sabe cuando falla ni cuantas se llevan
+        cuando falla.
+    """
+    return _croston(values, CROSTON_ALPHA, 1.0 - CROSTON_ALPHA / 2.0)
+
+
 FORECAST_METHODS = {
     STABLE: forecast_stable,
     VOLATILE: forecast_volatile,
     TREND: forecast_trend,
     SEASONAL: forecast_seasonal,
+    INTERMITTENT: forecast_intermittent,
+    LUMPY: forecast_lumpy,
 }
 
 

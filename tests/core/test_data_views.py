@@ -81,7 +81,10 @@ def test_the_catalogue_reports_the_size_of_each_table(client):
 
     assert set(by_name) == set(TABLES)
     assert by_name["cities.csv"]["row_count"] == 2
-    assert by_name["demand_history.csv"]["row_count"] == 2880
+    history = data_views.load_table("demand_history.csv")
+    months = history["period_month"].nunique()
+    series = history.groupby(["sku_id", "city_id"]).ngroups
+    assert by_name["demand_history.csv"]["row_count"] == months * series
 
 
 def test_rows_travel_as_lists_aligned_with_the_columns(client):

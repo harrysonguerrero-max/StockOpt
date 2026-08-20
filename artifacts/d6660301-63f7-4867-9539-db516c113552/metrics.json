@@ -1,0 +1,16 @@
+{
+  "mape": 0.8309317128609118,
+  "mae": 4.384078313287221,
+  "rmse": 20.909889599808054,
+  "seconds": 3.164,
+  "smape": 1.9349711203806153,
+  "wmape": 1.6697850136843484,
+  "acc": null,
+  "bias": -0.37543870405342666,
+  "wmape_ultimo_mes": 1.911320845110909,
+  "mejora_vs_ultimo_mes": 0.1264,
+  "wmape_promedio_movil": 1.5536658202781901,
+  "mejora_vs_promedio_movil": -0.0747,
+  "n_train": 71550,
+  "n_val": 7950
+}

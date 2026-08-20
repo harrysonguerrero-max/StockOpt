@@ -166,6 +166,8 @@ Classification of each series and the measurements behind it.
 | std_monthly | float | units | computed | Monthly standard deviation. |
 | cv | float | - | std / mean | Coefficient of variation. Decides whether the series is volatile. |
 | zero_ratio | float | - | computed | Share of months with no consumption. |
+| adi | float | months | periods / periods with demand | Average inter-demand interval. Above 1.32 the series is intermittent. |
+| cv_squared | float | - | computed on periods with demand only | Squared coefficient of variation of the event size. Above 0.49 the series is lumpy as well as intermittent. |
 | seasonal_strength | float | - | seasonal_decompose | Strength of the seasonal component. |
 | seasonal_pvalue | float | - | Kruskal-Wallis | Significance of the month effect. |
 | trend_tau | float | - | Mann-Kendall | Direction and strength of the trend. |

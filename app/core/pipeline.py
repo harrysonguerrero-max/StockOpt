@@ -43,7 +43,7 @@ from app.core.optimization import (
     SCENARIO_BUDGET_USD,
     SERVICE_FLOOR_BY_CRITICALITY,
     SHELF_LIFE_SAFETY_RATIO,
-    STOCKOUT_COST_PER_DAY_USD,
+    STOCKOUT_COST_PER_EVENT_USD,
     budget_allocation_summary,
     offer_costs,
 )
@@ -593,7 +593,7 @@ def optimization_summary(
             "budget_usd": SCENARIO_BUDGET_USD,
             "overrun_max_usd": BUDGET_OVERRUN_MAX_USD,
             "service_floor": dict(SERVICE_FLOOR_BY_CRITICALITY),
-            "stockout_cost_per_day_usd": dict(STOCKOUT_COST_PER_DAY_USD),
+            "stockout_cost_per_event_usd": dict(STOCKOUT_COST_PER_EVENT_USD),
             "planning_period_days": PLANNING_PERIOD_DAYS,
             "holding_cost_rate_annual": HOLDING_COST_RATE_ANNUAL,
             "months_per_year": MONTHS_PER_YEAR,

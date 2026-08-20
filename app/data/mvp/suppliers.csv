@@ -1,6 +1,7 @@
 supplier_id,name,city_id,active,contact_email,base_freight_usd,lead_time_avg_days,lead_time_min_days,lead_time_max_days,lead_time_std_days
-SUP-01,Alpha_Inc,NAVA,True,ordenes@alpha-inc.com,10,10.6,1,20,5.49
-SUP-02,Beta_Supplies,OBRE,True,ordenes@beta-supplies.com,15,11.1,1,20,5.81
-SUP-03,Delta_Logistics,NAVA,True,ordenes@delta-logistics.com,20,10.5,1,20,5.89
-SUP-04,Epsilon_Group,OBRE,True,ordenes@epsilon-group.com,25,10.7,1,20,5.64
-SUP-05,Gamma_Co,NAVA,True,ordenes@gamma-co.com,30,10.0,1,20,5.42
+SUP-OEM-01,Rheinpack Systems,NAVA,True,ordenes@rheinpack-systems.com,180.0,62.0,34,118,21.0
+SUP-OEM-02,Nordfill Technik,OBRE,True,ordenes@nordfill-technik.com,210.0,71.0,40,132,25.0
+SUP-NAT-01,Industrial Bajio,NAVA,True,ordenes@industrial-bajio.com,55.0,16.0,7,34,6.5
+SUP-NAT-02,Refacciones del Norte,OBRE,True,ordenes@refacciones-del-norte.com,60.0,18.0,8,38,7.2
+SUP-LOC-01,Suministros Coahuila,NAVA,True,ordenes@suministros-coahuila.com,22.0,6.0,2,14,3.1
+SUP-LOC-02,Servicios Yaqui,OBRE,True,ordenes@servicios-yaqui.com,26.0,7.0,3,16,3.6

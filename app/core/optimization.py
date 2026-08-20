@@ -43,13 +43,13 @@ EOQ_MAX_COVERAGE_MONTHS = 6.0
 
 SHELF_LIFE_SAFETY_RATIO = 0.80
 
-SCENARIO_BUDGET_USD = 2500.0
+SCENARIO_BUDGET_USD = 250000.0
 
-BUDGET_OVERRUN_MAX_USD = 1500.0
+BUDGET_OVERRUN_MAX_USD = 75000.0
 
 SERVICE_FLOOR_BY_CRITICALITY = {"A": 1.00, "B": 0.80, "C": 0.50}
 
-STOCKOUT_COST_PER_DAY_USD = {"A": 400.0, "B": 80.0, "C": 10.0}
+STOCKOUT_COST_PER_EVENT_USD = {"A": 45000.0, "B": 4000.0, "C": 250.0}
 
 PLANNING_PERIOD_DAYS = 30
 
@@ -244,7 +244,8 @@ def stockout_cost(
         monthly_demand: demanda mensual proyectada.
         lead_time_days: plazo de reposicion en dias.
         criticality: criticidad A, B o C de la pieza.
-        issue_rate: proporcion de dias en que la pieza se pide realmente.
+        issue_rate: proporcion de dias en que la pieza se pide realmente. Se
+            conserva por compatibilidad de firma pero ya no interviene.
 
     Salida:
         Costo esperado del quiebre en USD, o cero si no hay exposicion.
@@ -256,26 +257,45 @@ def stockout_cost(
         igualdad de condiciones. Con esto, la criticidad deja de mover solo el
         inventario minimo y entra en la funcion objetivo.
 
-        No todos los dias sin existencias cuestan lo mismo. Un dia sin la pieza
-        solo interrumpe algo si ese dia alguien la pide, y en refacciones eso
-        ocurre en una minoria de los dias. Multiplicar por esa frecuencia es lo
-        que separa el costo esperado del peor caso: sin ella la valoracion
-        triplica el riesgo y produce cifras que nadie puede defender.
+        Un quiebre no cuesta por dia sino por evento. Cuando falta una refaccion
+        critica no se pierde un dia de margen: se para una linea y no vuelve a
+        arrancar hasta que la pieza llega. Por eso la valoracion es el producto
+        de dos cosas: la probabilidad de que alguien pida la pieza mientras no
+        esta, y lo que cuesta esa parada.
 
-        El costo por dia es un parametro de negocio, no una estimacion del
+        La probabilidad sale de un proceso de Poisson con la misma tasa que
+        produjo la proyeccion. Es lo que corrige el error de la version
+        anterior, que multiplicaba los dias expuestos por una tasa de salida
+        medida aparte. Sonaba razonable y descontaba dos veces la misma rareza:
+        los dias expuestos ya se calculan sobre la cobertura, que se deriva de la
+        demanda proyectada, de modo que una pieza que se mueve poco ya tiene
+        mucha cobertura y poca exposicion. Volver a multiplicar por la frecuencia
+        con que se pide hundia la valoracion de todo el catalogo intermitente
+        hasta cero y ninguna reposicion salia rentable.
+
+        Derivar la probabilidad de la misma tasa de la proyeccion tiene ademas la
+        ventaja de ser coherente con la etapa anterior: si la proyeccion dice
+        que la pieza consume `d` unidades al dia, la probabilidad de que haga
+        falta en `t` dias es `1 - exp(-d*t)` y no un parametro independiente que
+        pueda contradecirla.
+
+        El costo del evento es un parametro de negocio y no una estimacion del
         sistema: hay que validarlo con mantenimiento antes de darle poder sobre
         las compras, porque su magnitud decide por si sola cuanto pesa la
         criticidad frente al precio.
 
-        Sigue siendo una cota superior. Supone que cada dia en que la pieza se
-        pide y no esta, se pierde el dia entero, sin contar que en la practica se
-        canibaliza de otra maquina o se expedita la orden.
+        Sigue siendo una cota superior. Supone que la parada se pierde entera,
+        sin contar que en la practica se canibaliza la pieza de otra maquina o se
+        expedita la orden pagando de mas.
     """
-    per_day = STOCKOUT_COST_PER_DAY_USD.get(criticality, 0.0)
-    frequency = min(1.0, max(0.0, issue_rate))
-    return round(
-        stockout_days_avoided(on_hand, monthly_demand, lead_time_days) * frequency * per_day, 2
-    )
+    per_event = STOCKOUT_COST_PER_EVENT_USD.get(criticality, 0.0)
+    exposed = stockout_days_avoided(on_hand, monthly_demand, lead_time_days)
+    if exposed <= 0 or per_event <= 0 or monthly_demand <= 0:
+        return 0.0
+
+    daily_rate = monthly_demand / DAYS_PER_MONTH
+    probability = 1.0 - math.exp(-daily_rate * exposed)
+    return round(probability * per_event, 2)
 
 
 def _service_requirement(pool: list, affordable: list, criticality: str, floors: dict) -> int:
@@ -797,6 +817,56 @@ def planning_order_cost(offers: pd.DataFrame) -> float:
     return float(offers["freight_cost_usd"].mean())
 
 
+_offer_index_cache = {}
+
+
+def _offer_index(offers: pd.DataFrame, coverage: pd.DataFrame, suppliers: pd.DataFrame) -> tuple:
+    """Cruza una sola vez el catalogo de ofertas con la cobertura geografica.
+
+    Entrada:
+        offers: catalogo de ofertas proveedor-pieza.
+        coverage: cobertura geografica de los proveedores.
+        suppliers: catalogo de proveedores.
+
+    Salida:
+        Tupla (indice, vacio) donde el indice mapea cada par pieza-ciudad a sus
+        ofertas aplicables y vacio es un DataFrame con las mismas columnas y sin
+        filas, para devolver cuando el par no existe.
+
+    Funcionalidad:
+        Existe por una razon de escala que aparecio al cambiar de fuente. El
+        cruce se hacia dentro de la consulta de cada pieza, de modo que con
+        cuarenta series eran cuarenta uniones sobre una tabla de cincuenta filas
+        y no se notaba. Con mas de mil doscientas series sobre dos mil ofertas se
+        volvio el cuello de botella de la pantalla: armar la cola pasaba de
+        milisegundos a mas de siete segundos, que es tiempo que el comprador ve.
+
+        Hacer el cruce completo una vez y despues buscar por clave da el mismo
+        resultado y convierte mil doscientas uniones en una. El resultado se
+        conserva mientras las mismas tablas sigan en memoria; como la capa de
+        servicios ya las cachea, en la practica se calcula una vez por proceso y
+        se rehace solo cuando alguien recarga el dataset.
+    """
+    key = (id(offers), id(coverage), id(suppliers), len(offers), len(coverage), len(suppliers))
+    cached = _offer_index_cache.get(key)
+    if cached is not None:
+        return cached
+
+    active = suppliers[suppliers["active"]]
+    joined = offers.merge(coverage, on="supplier_id").merge(
+        active[["supplier_id", "name", "lead_time_avg_days"]], on="supplier_id"
+    )
+    if not joined.empty:
+        joined["lead_time_days"] = joined["lead_time_avg_days"] + joined["lead_time_extra_days"]
+
+    index = {pair: block for pair, block in joined.groupby(["sku_id", "city_id"])}
+    entry = (index, joined.iloc[0:0])
+
+    _offer_index_cache.clear()
+    _offer_index_cache[key] = entry
+    return entry
+
+
 def candidate_offers(
     sku: str, city: str, offers: pd.DataFrame, coverage: pd.DataFrame, suppliers: pd.DataFrame
 ) -> pd.DataFrame:
@@ -818,16 +888,8 @@ def candidate_offers(
         plazo de entrega suma los dias adicionales cuando la ciudad no es su
         sede, y solo se consideran proveedores activos.
     """
-    active = suppliers[suppliers["active"]]
-    result = (
-        offers[offers["sku_id"] == sku]
-        .merge(coverage[coverage["city_id"] == city], on="supplier_id")
-        .merge(active[["supplier_id", "name", "lead_time_avg_days"]], on="supplier_id")
-    )
-    if result.empty:
-        return result
-    result["lead_time_days"] = result["lead_time_avg_days"] + result["lead_time_extra_days"]
-    return result
+    index, empty = _offer_index(offers, coverage, suppliers)
+    return index.get((sku, city), empty)
 
 
 def offer_costs(
