@@ -110,21 +110,34 @@ def test_the_recommendation_carries_both_sides_of_the_decision():
     assert (buying.stockout_cost_usd > buying.total_cost_usd).all()
 
 
-def test_what_is_left_out_never_rendered_more_than_what_was_bought():
-    """Lo que ordena la decision es el beneficio neto, no el quiebre a secas.
+def test_nothing_is_bought_that_loses_money():
+    """La compra tiene que rendir mas de lo que cuesta, sin excepcion.
 
-    La version anterior comparaba solo el quiebre evitado y valia mientras todas
-    las reposiciones costaran parecido. Con un catalogo donde el flete va de
-    veintidos a doscientos diez dolares deja de valer: una pieza puede evitar mas
-    quiebre que otra y aun asi no compensar, porque reponerla cuesta mas de lo
-    que evita. Lo que si tiene que cumplirse es que nada descartado rinda mas que
-    algo comprado.
+    Una version anterior de este test comparaba el quiebre evitado de lo
+    comprado contra el de lo descartado, y valia mientras todas las reposiciones
+    costaran parecido. Con un catalogo donde el flete va de veintidos a
+    doscientos diez dolares deja de valer: una pieza puede evitar mas quiebre que
+    otra y aun asi no compensar.
+
+    Tampoco sirve comparar el beneficio neto entre ramas, porque en las filas
+    descartadas ese campo no significa lo mismo: al anular la compra el
+    optimizador lo reescribe con la exposicion completa, que es el riesgo que la
+    planta se queda encima, no el rendimiento de una orden que no se hizo.
     """
     rec = pd.read_csv("app/data/mvp/purchase_recommendations.csv")
     buying = rec[rec.decision == DECISION_BUY]
-    hold = rec[(rec.decision == DECISION_HOLD) & (rec.on_hand_qty < rec.inventory_min)]
 
-    if len(buying) and len(hold):
-        assert (hold.net_benefit_usd.max() <= 0) or (
-            buying.net_benefit_usd.min() >= hold.net_benefit_usd.max()
-        )
+    assert len(buying), "sin compras no hay nada que comprobar"
+    assert (buying.net_benefit_usd > 0).all()
+    assert (buying.stockout_cost_usd > buying.total_cost_usd).all()
+
+
+def test_a_rejected_purchase_states_both_sides_of_the_number():
+    """Descartar por no rentable exige mostrar contra que se comparo."""
+    rec = pd.read_csv("app/data/mvp/purchase_recommendations.csv")
+    rejected = rec[rec.reason.str.startswith("Replenishing costs more")]
+
+    if len(rejected):
+        assert rejected.reason.str.contains("USD").all()
+        assert (rejected.recommended_qty == 0).all()
+        assert (rejected.total_cost_usd == 0).all()

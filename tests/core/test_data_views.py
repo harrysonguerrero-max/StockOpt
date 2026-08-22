@@ -106,3 +106,24 @@ def test_a_table_in_a_subfolder_is_served(client):
 
     assert response.status_code == 200
     assert response.json()["title"] == "Outlier consumption months"
+
+
+def test_the_catalogue_classification_survives_being_serialised(client):
+    response = client.get("/api/v1/data/classification")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["totals"]["parts"] > 0
+    assert len(payload["parts"]) == payload["totals"]["parts"]
+
+
+def test_a_part_without_stock_reports_undefined_turns_and_not_a_broken_number():
+    without_stock = [
+        part
+        for part in data_views.classification_report()["parts"]
+        if part["on_hand_qty"] == 0
+    ]
+
+    assert without_stock, "el catalogo deberia tener piezas sin existencias"
+    for part in without_stock:
+        assert part["turns_per_year"] is None

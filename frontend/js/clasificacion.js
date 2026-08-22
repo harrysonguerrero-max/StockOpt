@@ -118,12 +118,12 @@ function scatterChart(parts, thresholds) {
   };
 
   const dots = parts.map((part) => `
-    <circle cx="${x(part.issue_rate).toFixed(1)}" cy="${y(part.annual_value_usd).toFixed(1)}"
+    <circle cx="${x(part.movement_share).toFixed(1)}" cy="${y(part.annual_value_usd).toFixed(1)}"
             r="${(5 + Math.sqrt(part.annual_units) / 4).toFixed(1)}"
             fill="${CRIT_COLOR[part.criticality] || "#667085"}" opacity=".55"
             stroke="${CRIT_COLOR[part.criticality] || "#667085"}" stroke-width="1.2">
       <title>${escape(part.sku_id)} — ${escape(part.description)}
-${usd(part.annual_value_usd)} USD/year · issued on ${percent(part.issue_rate)} of days
+${usd(part.annual_value_usd)} USD/year · moves in ${percent(part.movement_share)} of months
 criticality ${part.criticality} · value ${part.value_class} · rotation ${part.rotation_class}</title>
     </circle>`).join("");
 
@@ -147,7 +147,7 @@ criticality ${part.criticality} · value ${part.value_class} · rotation ${part.
       ${band(thresholds.rotation_fast_min, `S | F · ${percent(thresholds.rotation_fast_min)}`)}
       ${dots}
       <text x="${pad.left}" y="${height - 12}" font-size="10" fill="#667085">
-        rotation → share of days the part is issued</text>
+        rotation → share of months the part moves</text>
       <text x="${pad.left - 8}" y="${pad.top - 4}" text-anchor="end" font-size="10"
             fill="#667085">USD/year</text>
       <text x="${width - pad.right}" y="${height - 12}" text-anchor="end" font-size="10"
@@ -159,8 +159,21 @@ criticality ${part.criticality} · value ${part.value_class} · rotation ${part.
 
 /** Una celda vacia no se atenua: se deja en blanco. Lo que la matriz tiene que
  *  hacer visible es la celda ocupada que no deberia estarlo. */
+/* La matriz publica proporciones y no conteos.
+ *
+ * "44" no dice nada por si solo: hay que saber que el catalogo tiene 876
+ * referencias para entender que es una celda pequeña, y hay que hacer esa
+ * division mentalmente en cada una de las nueve. La proporcion ya trae esa
+ * comparacion hecha, y las nueve celdas suman cien, de modo que la matriz se
+ * lee como el reparto que es.
+ *
+ * El conteo no desaparece: sigue debajo, en pequeño, porque para decidir hace
+ * falta saber si ese 5 % son cuarenta piezas o cuatrocientas. Lo que cambia es
+ * cual de los dos numeros se lee primero.
+ */
 function matrix(rows, title, note, rowLabel, columnLabel) {
   const columns = rows[0] ? rows[0].cells.map((cell) => cell.column) : [];
+  const parts = rows.reduce((sum, row) => sum + row.total, 0) || 1;
   const most = Math.max(...rows.flatMap((row) => row.cells.map((cell) => cell.count)), 1);
 
   const body = rows.map((row) => `
@@ -169,15 +182,28 @@ function matrix(rows, title, note, rowLabel, columnLabel) {
       ${row.cells.map((cell) => {
     const weight = cell.count / most;
     const names = cell.parts.map((part) => `${part.sku_id} — ${part.description}`).join("\n");
+    const detail = cell.count
+      ? `${count(cell.count)} ${cell.count === 1 ? "part" : "parts"} · ${usd(cell.annual_value_usd)}`
+      : "";
     return `<td class="matrix__cell${cell.count ? "" : " matrix__cell--empty"}"
         style="--w:${weight.toFixed(2)}"
-        title="${cell.count ? escape(names) : "no parts"}">
-        <b>${cell.count || ""}</b>
-        ${cell.count ? `<span class="matrix__usd">${usd(cell.annual_value_usd)}</span>` : ""}
+        title="${cell.count
+      ? `${percent(cell.count / parts, 1)} of the catalogue\n${escape(names)}` : "no parts"}">
+        <b>${cell.count ? percent(cell.count / parts, 1) : "—"}</b>
+        ${detail ? `<span class="matrix__usd">${detail}</span>` : ""}
       </td>`;
   }).join("")}
-      <th scope="row" class="matrix__total">${row.total}</th>
+      <th scope="row" class="matrix__total">
+        <b>${percent(row.total / parts, 1)}</b>
+        <span class="matrix__usd">${count(row.total)}</span>
+      </th>
     </tr>`).join("");
+
+  const footer = columns.map((name, index) => {
+    const total = rows.reduce((sum, row) => sum + row.cells[index].count, 0);
+    return `<th><b>${percent(total / parts, 1)}</b>
+      <span class="matrix__usd">${count(total)}</span></th>`;
+  }).join("");
 
   return `
     <div class="matrix">
@@ -196,7 +222,18 @@ function matrix(rows, title, note, rowLabel, columnLabel) {
           </tr>
         </thead>
         <tbody>${body}</tbody>
+        <tfoot>
+          <tr>
+            <th scope="row" class="matrix__total">all</th>
+            ${footer}
+            <th class="matrix__total"><b>100%</b>
+              <span class="matrix__usd">${count(parts)}</span></th>
+          </tr>
+        </tfoot>
       </table>
+      <p class="matrix__legend">Each cell is its share of the ${count(parts)} references in the
+        catalogue, so the nine add up to 100%. Underneath, how many parts that is and what they
+        consume a year. Hover a cell to list them.</p>
     </div>`;
 }
 
@@ -230,15 +267,16 @@ function findings(data) {
      rotar poco y valer poco son señales distintas, y cualquiera de las dos
      apunta en contra de una pieza que aun asi hay que tener. */
   const conflicted = data.parts
-    .filter((part) => part.criticality === "A"
-      && (part.rotation_class === "N" || part.value_class === "C"))
+    .filter((part) => part.criticality === "A" && part.rotation_class === "N")
     .map((part) => ({
       ...part,
       against: [
-        part.rotation_class === "N" ? "rotation says non-moving" : null,
+        "rotation says non-moving",
         part.value_class === "C" ? "value puts it in the bottom 5%" : null,
       ].filter(Boolean).join(" and "),
-    }));
+    }))
+    .sort((a, b) => b.annual_value_usd - a.annual_value_usd)
+    .slice(0, 8);
 
   if (!conflicted.length) {
     return '<p class="finding">No criticality-A part currently sits in the low-value or '
@@ -249,16 +287,14 @@ function findings(data) {
   return `
     <div class="finding">
       <p><b>Where the three readings disagree.</b>
-      ${conflicted.length} criticality-A
-      ${conflicted.length === 1 ? "part sits" : "parts sit"} in a corner an economic
-      classification would write off: it barely moves, or it barely costs anything, so an
-      ABC on value or an FSN on rotation would both say do not invest. Both are wrong here,
-      because these stop a line when they run out. No single classification reaches that
-      conclusion — only the cross does.</p>
+      These criticality-A parts sit in the non-moving corner: they move in fewer than
+      8% of months, so an FSN reading on rotation alone would write them off as dead
+      stock. It is wrong here, because they stop a line when they run out. No single
+      classification reaches that conclusion — only the cross does.</p>
       <ul>${conflicted.map((part) => `
         <li><span class="mono">${escape(part.sku_id)}</span> ${escape(part.description)} —
-          ${usd(part.annual_value_usd)} USD/year, issued on ${percent(part.issue_rate)} of
-          days, ${part.on_hand_qty} on hand · <i>${escape(part.against)}</i></li>`).join("")}</ul>
+          ${usd(part.annual_value_usd)} USD/year, moving in ${percent(part.movement_share)} of
+          months, ${part.on_hand_qty} on hand · <i>${escape(part.against)}</i></li>`).join("")}</ul>
     </div>`;
 }
 
@@ -297,8 +333,7 @@ function paint(data) {
         its share of references would suggest.</p></section>
     <section class="subpanel"><h3>Rotation — how often it moves</h3>
       ${profileTable(data.profiles.rotation, "Class")}
-      <p class="meta">FSN over the issue rate, the share of days the part records any
-        consumption. It is what defines obsolescence risk and the replenishment
+      <p class="meta">FSN over the share of months the part records any consumption. It is what defines obsolescence risk and the replenishment
         rhythm.</p></section>`;
 
   el("class-matrices").innerHTML =

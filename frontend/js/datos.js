@@ -11,6 +11,7 @@
  */
 
 import { api, apiUrl, toast } from "./api.js";
+import { whileLoading } from "./cargando.js";
 import { escape } from "./format.js";
 
 const el = (id) => document.getElementById(id);
@@ -46,22 +47,43 @@ function paintIndex() {
   });
 }
 
+/* La tabla se pide entera, sin paginar en el servidor, y eso es deliberado: el
+   buscador y el paginado de esta pantalla trabajan sobre el conjunto completo,
+   que es lo que permite responder "cuantas filas cumplen esto" sin volver a la
+   API. El precio es que la historia de consumo —noventa y dos mil filas— tarda
+   varios segundos, y ese precio hay que enseñarlo mientras se paga. */
 async function openTable(name) {
-  try {
-    explorer.table = await api(`/data/tables/${name}`);
-    explorer.page = 0;
-    el("t-search").value = "";
-    el("t-title").textContent = explorer.table.title;
-    el("t-file").textContent = explorer.table.name;
-    el("t-summary").textContent = explorer.table.summary;
-    el("t-download").href = apiUrl(`/data/files/${name}`);
-    el("t-notes").innerHTML = (explorer.table.notes || [])
-      .map((note) => `<p class="note">${escape(note)}</p>`).join("");
-    paintIndex();
-    paintGrid();
-  } catch (error) {
-    toast(error.message, true);
-  }
+  const entry = el("table-list").querySelector(`[data-table="${name}"]`);
+  const title = entry ? entry.querySelector("span").textContent : name;
+
+  await whileLoading(
+    {
+      into: "t-status",
+      key: `tabla:${name}`,
+      message: `Loading ${title}…`,
+      disable: [...el("table-list").querySelectorAll(".tablelist__btn")],
+    },
+    async () => {
+      try {
+        const table = await api(`/data/tables/${name}`);
+        explorer.table = table;
+        explorer.page = 0;
+        el("t-search").value = "";
+        el("t-title").textContent = table.title;
+        el("t-file").textContent = table.name;
+        el("t-summary").textContent = table.summary;
+        el("t-download").href = apiUrl(`/data/files/${name}`);
+        el("t-notes").innerHTML = (table.notes || [])
+          .map((note) => `<p class="note">${escape(note)}</p>`).join("");
+        paintIndex();
+        paintGrid();
+        el("t-status").innerHTML = "";
+      } catch (error) {
+        el("t-status").innerHTML = "";
+        toast(error.message, true);
+      }
+    },
+  );
 }
 
 function visibleRows() {
@@ -106,15 +128,22 @@ function paintGrid() {
 
 export async function loadCatalog() {
   if (explorer.catalog.length) return;
-  try {
-    const data = await api("/data/tables");
-    explorer.catalog = data.tables;
-    paintIndex();
-    const first = explorer.catalog.find((table) => table.available);
-    if (first) openTable(first.name);
-  } catch (error) {
-    el("t-summary").textContent = error.message;
-  }
+  await whileLoading(
+    { into: "t-status", key: "catalogo", message: "Loading the dataset tables…" },
+    async () => {
+      try {
+        const data = await api("/data/tables");
+        explorer.catalog = data.tables;
+        paintIndex();
+        el("t-status").innerHTML = "";
+        const first = explorer.catalog.find((table) => table.available);
+        if (first) await openTable(first.name);
+      } catch (error) {
+        el("t-status").innerHTML = "";
+        el("t-summary").textContent = error.message;
+      }
+    },
+  );
 }
 
 export function initDatos() {

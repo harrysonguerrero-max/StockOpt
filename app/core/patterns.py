@@ -246,13 +246,16 @@ def trend_test(values: np.ndarray) -> tuple:
     return tau, pvalue
 
 
-def confidence_score(n_periods: int, cv: float, values: np.ndarray) -> float:
+def confidence_score(
+    n_periods: int, cv: float, values: np.ndarray, intermittent: bool = False
+) -> float:
     """Calcula la confianza que merece la proyeccion de una serie.
 
     Entrada:
         n_periods: numero de meses observados.
         cv: coeficiente de variacion de la serie.
         values: serie mensual ordenada cronologicamente.
+        intermittent: si la serie quedo clasificada en un regimen intermitente.
 
     Salida:
         Score entre 0 y 1 redondeado a dos decimales.
@@ -262,6 +265,25 @@ def confidence_score(n_periods: int, cv: float, values: np.ndarray) -> float:
         demanda y si los ultimos meses se despegan del comportamiento historico,
         lo que sugeriria un cambio de patron reciente. La dispersion pesa mas
         porque es lo que mas degrada la precision del forecast.
+
+        En una serie intermitente la dispersion se mide sobre el tamano de los
+        eventos y no sobre la serie completa. Es la misma correccion que separa
+        el intervalo del tamano en la clasificacion, y aqui importa igual: el
+        coeficiente de variacion de una serie con ochenta y siete por ciento de
+        ceros mide el patron de huecos, no la incertidumbre de la cantidad.
+        Aplicado sin corregir castigaba a todo el catalogo de refacciones por ser
+        lo que es, y dejaba el noventa y cuatro por ciento de las series marcadas
+        para revision humana, que equivale a no marcar ninguna.
+
+        Que una pieza se pida dos veces al año no la vuelve impredecible. Si cada
+        vez se piden diez unidades, la cantidad es perfectamente previsible y lo
+        unico incierto es cuando. Esa distincion es la que el score tiene que
+        recoger.
+
+        Lo mismo pasa con el factor reciente: sobre una serie intermitente la
+        media de los ultimos tres meses casi siempre es cero, de modo que la
+        comparacion contra la historia detecta un cambio de patron donde solo hay
+        un hueco. En regimen intermitente se compara sobre los eventos.
     """
     if n_periods < MIN_PERIODS:
         volume_factor = 0.20
@@ -272,19 +294,30 @@ def confidence_score(n_periods: int, cv: float, values: np.ndarray) -> float:
     else:
         volume_factor = 1.00
 
-    if cv <= 0.25:
+    spread = cv
+    reference = np.asarray(values, dtype=float)
+    if intermittent:
+        events = reference[reference > 0]
+        spread = (
+            float(events.std(ddof=0) / events.mean())
+            if len(events) >= 2 and events.mean() > 0
+            else 0.0
+        )
+        reference = events
+
+    if spread <= 0.25:
         volatility_factor = 1.00
-    elif cv <= CV_VOLATILE:
+    elif spread <= CV_VOLATILE:
         volatility_factor = 0.80
-    elif cv <= 1.00:
+    elif spread <= 1.00:
         volatility_factor = 0.50
     else:
         volatility_factor = 0.25
 
     recent_factor = 1.00
-    if len(values) >= RECENT_WINDOW * 2:
-        recent = float(np.mean(values[-RECENT_WINDOW:]))
-        historical = float(np.mean(values[:-RECENT_WINDOW]))
+    if len(reference) >= RECENT_WINDOW * 2:
+        recent = float(np.mean(reference[-RECENT_WINDOW:]))
+        historical = float(np.mean(reference[:-RECENT_WINDOW]))
         if historical > 0:
             shift = abs(recent - historical) / historical
             recent_factor = float(np.clip(1.0 - shift, 0.0, 1.0))
@@ -346,7 +379,9 @@ def classify_series(values) -> dict:
     else:
         pattern = STABLE
 
-    confidence = confidence_score(n_periods, cv, values)
+    confidence = confidence_score(
+        n_periods, cv, values, intermittent=pattern in (INTERMITTENT, LUMPY)
+    )
     if pattern == INSUFFICIENT:
         confidence = 0.0
 

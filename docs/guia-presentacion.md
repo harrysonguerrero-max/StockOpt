@@ -33,11 +33,16 @@ exceso, **porque el quiebre duele de inmediato y el sobrestock no**.
 El problema se agrava porque los factores que deberían gobernar la decisión son
 medibles pero no se están midiendo:
 
-- La demanda de refacciones es **intermitente** y de patrón heterogéneo — una
-  misma pieza es estable en una planta y estacional en la otra (**8 de 20 piezas**
-  cambian de patrón según la ciudad).
-- El lead time de los proveedores varía con **σ/μ ≈ 0,53** y su peor caso (20
-  días) casi duplica al promedio (10,6 días).
+- La demanda de refacciones es **intermitente**: el 87 % de los meses de este
+  catálogo no registra consumo alguno, y el intervalo mediano entre movimientos
+  es de **10,3 meses**. No es ruido en torno a un promedio; son eventos
+  separados por vacíos.
+- El patrón es además heterogéneo entre plantas: de las **407 piezas** que las dos
+  consumen, **198 cambian de patrón según la planta**. La misma referencia se
+  repone de forma periódica en Nava y de golpe en Obregón.
+- El lead time de los proveedores varía con **σ/μ ≈ 0,37** y su peor caso
+  declarado (132 días, importación OEM) cuadruplica al promedio ponderado
+  (30,0 días).
 - El presupuesto de cada corrida es finito, de modo que **reponer una pieza
   necesariamente desplaza a otra**.
 
@@ -59,20 +64,25 @@ espera oír.
 |---|---|---|
 | **Punto de reorden (ROP)** | Nivel que dispara la orden | «El punto de reorden es 13 unidades» |
 | **Stock de seguridad** | Colchón sobre la demanda esperada del lead time | «El safety stock absorbe la variabilidad del proveedor» |
-| **Lead time** | Plazo desde que se pide hasta que llega | «Lead time medio 10,6 días con sigma 5,45» |
+| **Lead time** | Plazo desde que se pide hasta que llega | «Lead time ponderado 30,0 días con sigma 11,07» |
 | **MOQ** | Cantidad mínima de orden del proveedor | «El MOQ de 100 supera el máximo de bodega» |
 | **Nivel de servicio de ciclo (α)** | Probabilidad de no quebrar en un ciclo | «Criticidad A opera a 95 % de servicio» |
 | **Fill rate (β)** | Fracción de demanda servida del stock | «Ojo: α y β no son lo mismo» |
 | **Stockout** | Quiebre de inventario | «El costo de stockout entra en la función objetivo» |
-| **Cobertura** | Meses o días que aguanta el stock actual | «Quedan 8 días de cobertura contra 10,6 de lead time» |
-| **Rotación / turnover** | Vueltas de inventario al año | «Rotación mínima del catálogo: 9,8 vueltas/año» |
-| **ABC (Pareto)** | Segmentación por valor | «El 40 % de las referencias es el 78 % del valor» |
+| **Cobertura** | Meses o días que aguanta el stock actual | «Quedan 8 días de cobertura contra 30 de lead time» |
+| **Rotación / turnover** | Vueltas de inventario al año | «Las piezas clase F se mueven en más de uno de cada cuatro meses» |
+| **ABC (Pareto)** | Segmentación por valor | «El 36 % de las referencias es el 80 % del valor» |
 | **VED / criticidad** | Segmentación por impacto de la falla | «Criticidad A para en línea de producción» |
 | **FSN** | Segmentación por rotación | «Los ítems N son candidatos a auditoría de existencia» |
-| **Intermitencia / ADI** | Cada cuánto hay consumo | «ADI mediano 1,00: sin espaciamiento» |
+| **Intermitencia / ADI** | Cada cuántos meses hay consumo | «ADI mediano 10,3: se mueve menos de una vez al año» |
+| **CV² del evento** | Dispersión del tamaño del pedido, medida solo en los meses con consumo | «CV² mediano 0,40: cuando se pide, se pide una cantidad parecida» |
+| **Cuadrante SBC** | Las cuatro categorías de demanda de Syntetos, Boylan y Croston | «Este catálogo es 63 % intermitente y 37 % irregular» |
+| **Croston / SBA** | Estimadores que separan tamaño e intervalo en vez de suavizar la serie | «Con 87 % de ceros, Croston es lo que hay que usar; la media móvil devuelve cero» |
 | **MILP** | Programación lineal entera mixta | «La selección de proveedor es un MILP de costo fijo» |
 | **Mochila / knapsack** | Asignar recurso escaso entre proyectos indivisibles | «El presupuesto se reparte como mochila 0/1» |
 | **WMAPE** | Error ponderado sobre el total | «WMAPE y no MAPE, porque hay meses en cero» |
+| **MASE** | Error absoluto escalado contra repetir el mes anterior | «MASE por debajo de 1 significa ganarle al método ingenuo» |
+| **Sesgo acumulado** | Unidades de más o de menos al cabo del periodo | «El sesgo acumulado es la métrica que decide, y dice cuánto faltaría en bodega» |
 | **Order-up-to** | Reponer hasta un nivel objetivo | «No reponemos al mínimo, sino al nivel objetivo» |
 
 ---
@@ -83,6 +93,20 @@ Estas son las únicas cinco que hay que poder escribir en un pizarrón.
 
 ### 3.1 Clasificación de patrón
 
+La primera pregunta no es qué forma tiene la serie sino **si la serie se mueve
+todos los meses**, porque de eso depende que los métodos clásicos sirvan de algo.
+Esa pregunta se responde con dos números, y se responde primero:
+
+```
+ADI  =  n / n_e                         cada cuántos meses hay consumo
+CV²  =  (sigma_e / mu_e)²               dispersión del tamaño, solo en los meses con consumo
+
+Intermitente si  ADI >= 1,32  y  CV² <  0,49
+Irregular    si  ADI >= 1,32  y  CV² >= 0,49
+```
+
+Solo si la serie **no** es intermitente se aplican los criterios clásicos:
+
 ```
 Estacional   si  F_s >= 0,45  y  p_Kruskal-Wallis < 0,05
 Tendencia    si  p_Mann-Kendall < 0,05
@@ -90,53 +114,115 @@ Volátil      si  CV = sigma/mu > 0,50
 Estable      en otro caso
 ```
 
-**Cómo se cuenta:** «Antes de proyectar, cada serie pieza-ciudad se clasifica.
-La estacionalidad exige **dos** condiciones a la vez, no una: con solo tres ciclos
-de historia, la descomposición clásica encuentra estacionalidad aparente incluso
-en ruido puro —fuerza media 0,32—, así que exigimos además significancia
-estadística del efecto de mes. Eso baja el falso positivo del 26 % al 2 %.»
+**Cómo se cuenta:** «Antes de proyectar, cada serie pieza-ciudad se clasifica, y
+el primer corte es el de Syntetos, Boylan y Croston: el intervalo medio entre
+consumos y la dispersión del tamaño del pedido. Los dos se miden sobre cosas
+distintas a propósito. El intervalo cuenta los huecos; la dispersión mira **solo**
+los meses que no son hueco. Un coeficiente de variación sobre la serie completa
+mezclaría las dos, y con 87 % de ceros lo que domina son los huecos —que es
+exactamente el error que hacía que el 94 % de este catálogo pareciera
+impredecible antes de separarlos.
+
+En este catálogo **las 1.283 series caen del lado intermitente**: 804
+intermitentes y 479 irregulares, ninguna en régimen suave. Los umbrales 1,32 y
+0,49 no son una convención: el artículo original los deriva del punto donde cada
+estimador supera a los otros.
+
+La estacionalidad, cuando se llega a evaluar, exige **dos** condiciones a la vez y
+no una: con pocos ciclos de historia la descomposición clásica encuentra
+estacionalidad aparente incluso en ruido puro —fuerza media 0,32—, así que se
+exige además significancia estadística del efecto de mes. Eso baja el falso
+positivo del 26 % al 2 %.»
 
 ### 3.2 Proyección según el patrón
 
 | Patrón | Método | Por qué ese |
 |---|---|---|
+| **Intermitente** | **Croston (1972)** | La media y la mediana móviles devuelven cero |
+| **Irregular** | **Croston-SBA (Syntetos & Boylan, 2005)** | Croston sesga al alza el cociente; SBA lo corrige |
 | Estable | Media móvil 6 meses | No hay estructura que aprender |
 | Volátil | Percentiles empíricos | La mediana no la arrastra un mes extremo |
 | Tendencia | Regresión lineal | Captura la deriva sostenida |
-| Estacional | Holt-Winters aditivo | Prophet sobreajusta con 3 ciclos |
+| Estacional | Holt-Winters aditivo | Prophet sobreajusta con pocos ciclos |
+
+Croston no suaviza la serie: la parte en dos y suaviza cada mitad por separado.
+
+```
+z_t  =  alpha·y_t  +  (1 - alpha)·z_(t-1)      cuánto se pide cuando se pide
+p_t  =  alpha·q_t  +  (1 - alpha)·p_(t-1)      cada cuántos meses ocurre
+D50  =  c · z_t / p_t
+
+c = 1        Croston, para la serie intermitente
+c = 1 - alpha/2 = 0,925   SBA, para la serie irregular
+```
+
+Las dos series se actualizan **solo en los meses en que algo se mueve**, y ahí
+está todo el método.
 
 **Cómo se cuenta:** «No aplicamos un solo modelo a todo. Es un modelo por
-regímenes: cada serie va al estimador que su patrón justifica. Solo 6 de 40
-series necesitan Holt-Winters; el 85 % se resuelve con métodos estadísticos
-simples, que es lo correcto para este volumen de datos.»
+regímenes: cada serie va al estimador que su patrón justifica. En este catálogo
+eso significa que **todas** van a Croston o a su aproximación, y no es un detalle
+técnico: suavizar la serie cruda converge a cero, porque la mayoría de los meses
+son cero, y afirmar que una pieza que se consume dos veces al año tiene demanda
+cero no es un pronóstico, es una renuncia. Con la mediana móvil, el 86 % de las
+series proyectaba demanda nula y el sistema no compraba nada. Ese fue el hallazgo
+que obligó a incorporar Croston, y está medido, no supuesto.
+
+La corrección de SBA existe porque el cociente de dos estimadores suavizados está
+sesgado al alza. Se aplica a las series irregulares porque es ahí donde ese sesgo
+inflaría el inventario de las piezas menos predecibles, que son las caras.»
 
 ### 3.3 Inventario mínimo — **la fórmula central**
 
+La media y la varianza de la demanda durante el plazo son las de Hadley y Whitin
+(1963), y son las mismas de siempre:
+
 ```
-Imin  =  d · L   +   z(k) · sqrt( L · sigma_d²  +  d² · sigma_L² )
-         └──┬─┘       └────────────────┬──────────────────────────┘
-       demanda durante        colchón que absorbe DOS incertidumbres:
-       el lead time           la de la demanda Y la del proveedor
+mu_LT  =  d · L
+var_LT =  L · sigma_d²  +  d² · sigma_L²
+          └──────┬────┘   └──────┬─────┘
+        incertidumbre de   incertidumbre del
+        la demanda         proveedor
+```
+
+Lo que cambió es **cómo se convierte esa media y esa varianza en un número de
+unidades**. Antes se usaba `Imin = mu_LT + z(k)·sqrt(var_LT)`, que es la
+aproximación normal. Ahora se toma el cuantil de una **binomial negativa**
+ajustada a esa misma media y varianza:
+
+```
+Imin  =  F⁻¹( alpha(k) ; r, p )       con   p = mu_LT / var_LT ,   r = mu_LT · p / (1 − p)
 ```
 
 | Símbolo | Qué es | Unidad | Valor actual |
 |---|---|---|---|
 | `d` | Demanda media diaria proyectada | unidades/día | Por serie |
-| `L` | Lead time medio | días | 10,6 |
+| `L` | Lead time medio ponderado | días | 30,0 |
 | `sigma_d` | Desviación de la demanda diaria | unidades/día | Por serie |
-| `sigma_L` | Desviación del lead time | días | 5,45 |
-| `z(k)` | Factor de servicio por criticidad | adimensional | A=1,65 · B=1,28 · C=0,84 |
+| `sigma_L` | Desviación del lead time | días | 11,07 |
+| `alpha(k)` | Nivel de servicio de ciclo por criticidad | fracción | A = 0,95 · B = 0,90 · C = 0,80 |
+| `r, p` | Parámetros de la binomial negativa ajustada a `mu_LT` y `var_LT` | — | Por serie |
 
-**Cómo se cuenta:** «Esta es la formulación canónica de Hadley & Whitin, 1963 —
-la misma que llevan los módulos MRP de SAP y Oracle. Lo importante es el segundo
-término bajo la raíz: está multiplicado por la **demanda al cuadrado**. Con
-σ/μ ≈ 0,53 en estos proveedores, **la mitad del riesgo de cada pieza no viene de
-la demanda, viene del proveedor**. Ignorar ese término dejaría el colchón un 30 a
-40 % corto creyendo tener 95 % de servicio.»
+**Cómo se cuenta:** «La media y la varianza son las canónicas de Hadley & Whitin,
+las mismas que llevan los módulos MRP de SAP y Oracle, y lo importante sigue
+siendo el segundo término: está multiplicado por la **demanda al cuadrado**, así
+que buena parte del riesgo de cada pieza no viene de la demanda sino del
+proveedor. Ignorar ese término dejaría el colchón corto creyendo tener 95 % de
+servicio.
 
-**El puente a negocio:** «Y ese `z` es una decisión de negocio, no técnica. 1,65
-significa 95 % de nivel de servicio. Es la única declaración de política de
-servicio que hace el sistema, y hoy está fijada por constante.»
+Lo que no se puede usar aquí es la aproximación normal. Con medias de dos o tres
+unidades y desviaciones mayores que la media, una normal centrada en `mu_LT`
+pone **una mediana del 39 % de su masa en demanda negativa** —más del 20 % en el
+99 % de las series— y compensa esa masa imposible estirando la cola derecha. El
+efecto medido era un catálogo inflado un 49 %: 16.241 unidades y 1,34 M USD
+frente a 7.789 unidades y 683 k USD, al mismo nivel de servicio declarado. La
+binomial negativa vive en los enteros no negativos, que es donde vive la demanda
+de refacciones.»
+
+**El puente a negocio:** «Y ese nivel de servicio es una decisión de negocio, no
+técnica. 0,95 significa que una de cada veinte reposiciones puede llegar tarde.
+Es la única declaración de política de servicio que hace el sistema, y hoy está
+fijada por constante.»
 
 ### 3.4 Selección de proveedor — MILP de costo fijo
 
@@ -187,82 +273,156 @@ argumento, no con intuición.»
 Esta es la sección donde se gana o se pierde la sala. **Adelantarse a la crítica
 es más fuerte que defenderse de ella.**
 
-### 4.1 Lo que sí es real
+### 4.1 De dónde salen los datos
+
+El histórico de consumo es **B2B-Parts-Rec** (Zenodo 19492687, licencia
+CC-BY-4.0): un libro de órdenes real y anonimizado de distribución de repuestos
+industriales. Se toma un solo cliente, `7478E086CC`, y se parte por línea de
+negocio: la línea mayor se asigna a Nava y las 53 restantes a Ciudad Obregón. No
+se usan dos clientes distintos porque su catálogo solapa solo un 41 %, y dos
+plantas que casi no comparten refacciones no permiten comparar nada.
 
 | Dato | Origen | Calidad |
 |---|---|---|
-| Lead times (10,6 d, σ 5,45) | 777 órdenes reales con fecha de pedido y entrega | Real, calculado |
-| Proveedores y precios | Dataset de compras | Real |
-| Patrón de demanda | Derivado del histórico | Calculado |
-| Defectuosos, cumplimiento | Dataset de compras | Real |
+| Historia de consumo (72 meses, 2024-01 a 2029-12) | Órdenes reales del libro B2B | **Real** |
+| Precios unitarios | Órdenes reales | **Real** |
+| Qué pieza va con qué máquina | Órdenes reales | **Real** |
+| Familia de la pieza | Derivada por rango de precio contra una composición declarada de 9 familias | Calculada |
+| Criticidad | Derivada del nº de máquinas que dependen de la pieza, por cuota 8/30/62 % | Calculada |
+| Patrón de demanda | Derivado del histórico (cuadrante SBC) | Calculado |
+
+**Escala del catálogo:** 876 referencias, 1.283 series pieza-planta, 92.376 filas
+de historia mensual, precio unitario mediano 46 USD y máximo 11.193 USD.
 
 ### 4.2 Lo que es sintético — decirlo antes de que pregunten
 
-Vida útil, stock actual, MOQ, capacidad y flete **los generó el build con semilla
-fija**. La interfaz los marca con un distintivo y los meses de histórico simulado
-se dibujan en trazo discontinuo.
+**Cero filas de las 92.376 de historia mensual son simuladas.** Esa es la
+diferencia con la versión anterior del MVP y conviene decirla con esas palabras.
 
-> **Frase para la presentación:** «Las decisiones del optimizador son correctas
-> *dado ese dato*, pero no son decisiones de compra reales. Lo digo explícitamente
-> para que nadie confunda el ejercicio con una recomendación operativa.»
+Lo que sí se genera con semilla fija: el nombre legible de cada pieza (el dataset
+trae identificadores anonimizados, no descripciones), la cantidad de cada evento
+—binomial negativa de media `60 / precio^0,45`, porque el libro de órdenes trae
+importes pero no siempre unidades—, el stock actual, el MOQ, la capacidad de
+bodega y el flete.
+
+Los seis proveedores son sintéticos pero **no arbitrarios**: se organizan en tres
+niveles con plazos separados —OEM de importación 62-71 días, nacional 16-18,
+local 6-7— y **la oferta se asigna por gama de precio, no al azar**. Un tornillo
+de 2 USD con flete OEM de 180 USD volvía antieconómico todo el catálogo barato, y
+eso era un artefacto del generador, no un hallazgo.
+
+> **Frase para la presentación:** «El consumo es real y el precio es real. Lo
+> sintético está en la envoltura logística —stock actual, lote mínimo, flete— y
+> está marcado en la interfaz. Las decisiones del optimizador son correctas *dado
+> ese dato*, pero no son órdenes de compra reales. Lo digo explícitamente para
+> que nadie confunda el ejercicio con una recomendación operativa.»
 
 ### 4.3 Los hallazgos de la limpieza — presentarlos como fortaleza
 
-La Etapa 0 encontró problemas reales que cualquier proyecto habría pasado por
-alto:
+La Etapa 0 parte de **219.777 filas crudas** y deja 219.359. Los descartes no son
+ruido de formato: son problemas que sesgaban cifras concretas.
 
-| Problema | Magnitud | Tratamiento | Impacto |
-|---|---|---|---|
-| **Órdenes canceladas contadas como entregas** | 130 de 689 | Filtradas por estado | Sesgaban el lead time ~0,2 días a la baja |
-| Órdenes sin fecha de pedido o entrega | 87 | Descartadas | Sin fechas no hay plazo medible |
-| `Defective_Units` nulo | 136 | Imputado cero | La ausencia significa que no se reportaron |
-| Mes con un solo día registrado | 200 filas | Descartado | Se leería como caída de demanda |
+| Problema | Tratamiento | Impacto |
+|---|---|---|
+| Órdenes canceladas contadas como entregas | Filtradas por estado | Sesgaban el lead time a la baja |
+| Órdenes sin fecha de pedido o de entrega | Descartadas | Sin fechas no hay plazo medible |
+| `Defective_Units` nulo | Imputado cero | La ausencia significa que no se reportaron |
+| Mes con un solo día registrado | Descartado | Se leería como caída de demanda |
+| Referencias con menos de 8 eventos en 72 meses | Descartadas del catálogo | Una serie de 3 puntos no admite ninguna clasificación |
+| Piezas de precio unitario < 0,50 USD | Descartadas | Producían órdenes de 0 USD y decisiones sin sentido |
 
 **Dos decisiones que demuestran criterio:**
 
-1. **Los atípicos de sensor se marcan, no se eliminan** (44.860 lecturas). Una
-   vibración o temperatura extrema suele ser justamente la señal de que la máquina
-   va a fallar — el evento que anticipa el consumo. Borrarlas eliminaría la
+1. **Los atípicos de sensor se marcan, no se eliminan.** Una vibración o
+   temperatura extrema suele ser justamente la señal de que la máquina va a
+   fallar — el evento que anticipa el consumo. Borrarlas eliminaría la
    información más valiosa del conjunto.
 
-2. **Los meses de consumo atípico se reportan, no se corrigen** (9 casos),
-   evaluados contra la propia serie y no contra el conjunto, porque una pieza de
-   100 unidades al mes y otra de 2 tienen escalas incomparables. Requieren
-   confirmación de mantenimiento: puede haber sido una parada mayor real.
+2. **Los meses de consumo atípico se reportan, no se corrigen**, evaluados contra
+   la propia serie y no contra el conjunto, porque una pieza de 100 unidades al
+   mes y otra de 2 tienen escalas incomparables. Requieren confirmación de
+   mantenimiento: puede haber sido una parada mayor real.
 
-### 4.4 La limitación honesta: el histórico no es intermitente
+### 4.4 El perfil del catálogo: intermitente, y eso cambia el método
 
-**Esta es la crítica que un experto hará. Adelantarse.**
+**Esta era la limitación honesta de la versión anterior y ya no lo es.** El MVP
+corría antes sobre 40 piezas de consumo prácticamente continuo —3,3 % de meses en
+cero, ADI mediano 1,00— que es el perfil de un insumo, no el de una refacción. La
+crítica que un experto haría era exactamente esa, y la migración a B2B-Parts-Rec
+se hizo para responderla.
 
-| Métrica | Medido | Esperado en MRO real | Lectura |
+| Métrica | Antes (40 piezas) | **Ahora (876 piezas)** | Esperado en MRO real |
 |---|---|---|---|
-| Meses con demanda cero | **3,3 %** | 40–70 % | El histórico no es intermitente |
-| ADI mediano | **1,00** | > 1,32 | Consumo todos los meses |
-| CV² mediano | **0,11** | > 1,0 | Tamaños de evento muy estables |
-| Demanda media | **18,3 u/mes** | 0,1–3 u/mes | Perfil de insumo, no de refacción |
-| Rotación mínima | **9,8 vueltas/año** | ítems N rotan < 1 | Ningún ítem inmóvil |
+| Meses con demanda cero | 3,3 % | **87,0 %** | 40-70 % |
+| ADI mediano | 1,00 | **10,29** | > 1,32 |
+| CV² mediano del evento | 0,11 | **0,40** | — |
+| Demanda media | 18,3 u/mes | **2,74 u/mes** | 0,1-3 u/mes |
+| Tamaño mediano del evento | — | **11 u** | — |
+| Cuadrante SBC | 38 de 40 «suave» | **804 intermitentes · 479 irregulares · 0 suaves** | mayoría lumpy/intermitente |
+| Referencias | 40 | **876** | cientos a miles |
+| Filas de historia simuladas | mayoría | **0 de 92.376** | — |
 
-Clasificación ADI/CV² (Syntetos, Boylan & Croston, 2005): **38 de 40 series caen
-en «Suave»** y **cero en «Lumpy»**, que es el cuadrante donde vive la mayoría del
-MRO real.
+> **Frase para la presentación:** «El catálogo ahora tiene el perfil que la
+> literatura describe: la mayoría de los meses no pasa nada, y cuando pasa se
+> lleva once unidades de golpe. Eso no es un dato peor, es el dato correcto — y
+> obligó a cambiar cinco cosas del sistema, porque los métodos que funcionaban
+> con consumo continuo fallan aquí de formas que solo se ven con este dato.»
 
-> **Frase para la presentación:** «El dato crudo diario sí tenía la intermitencia
-> esperada —90 % de días en cero, 86 % de eventos de una unidad— y nuestro
-> perfilado lo midió. Esa intermitencia se perdió al agregar a mes. Lo que esto
-> acota es qué demuestra el MVP: **valida la arquitectura de decisión, no la
-> capacidad de pronosticar demanda intermitente**. Con dato real habría que
-> incorporar Croston o SBA, que están fuera del alcance actual pero identificados.»
+### 4.5 Los cinco fallos que el dato intermitente destapó
 
-### 4.5 El hallazgo del modelo — no taparlo
+Esta es la sección más fuerte de la presentación técnica, porque son fallos
+**medidos y corregidos**, no anticipados en abstracto.
 
-> «El modelo de gradient boosting mejora **28,2 %** sobre repetir el último mes,
-> pero solo **3,2 %** sobre el promedio móvil. Con 36 meses y series mayormente
-> planas, no hay mucha estructura que aprender. Hay tres caminos: más historia,
-> variables externas —órdenes de trabajo programadas, paros de planta, plan de
-> producción, que es la mejora con mayor retorno esperado— o **aceptar el
-> resultado**: si el promedio móvil basta, el valor del sistema está en la
-> optimización y la trazabilidad, no en el forecast. Es una conclusión legítima y
-> prefiero decirla.»
+| # | Qué falló | Por qué | Cómo se corrigió |
+|---|---|---|---|
+| 1 | **El 86 % de las series proyectaba demanda cero** | La mediana móvil de una serie con 87 % de ceros es cero | Croston y Croston-SBA, con la clasificación SBC decidiendo cuál |
+| 2 | **La valoración del quiebre descontaba dos veces la rareza** | Multiplicaba por la tasa de salida una exposición que ya se deriva de la cobertura | `P(Poisson) × costo del evento`, con costo por evento (45.000 / 4.000 / 250 USD) y no por día |
+| 3 | **El 94 % de las series se marcaba para revisión humana** | El score de confianza usaba el CV de la serie completa, que sobre 87 % de ceros mide los huecos y no la incertidumbre del tamaño | En régimen intermitente usa el CV del tamaño de evento (confianza media 0,42 → **0,75**) |
+| 4 | **El inventario mínimo estaba inflado un 49 %** | La aproximación normal, centrada en una media pequeña con desviación grande, pone **una mediana del 39 % de su masa en demanda negativa** y compensa esa masa imposible estirando la cola derecha | Cuantil de una binomial negativa ajustada a la media y varianza compuestas: 16.241 u / 1,34 M USD → **7.789 u / 683 k USD**, al mismo nivel de servicio |
+| 5 | **Las 876 piezas caían en clase N de FSN** | Los umbrales eran de consumo continuo (fracción de días con salida: 0,003 a 0,08 para todas) | Fracción de **meses** con movimiento: F ≥ 25 %, S 8-25 %, N < 8 % |
+
+> **Frase para la presentación, sobre el punto 4:** «Este es el que más me
+> interesa contar, porque **yo esperaba lo contrario**. La hipótesis era que un
+> cuantil correcto subiría el inventario mínimo respecto de la aproximación
+> normal. La medición dijo que lo baja, en dos de cada tres series, y la causa es
+> que la normal reparte probabilidad sobre demanda negativa —más del 20 % de la
+> masa en el 99 % de las series— y la compensa por el lado derecho. No era
+> conservadora, era inválida. Lo digo así porque la diferencia entre un modelo
+> defendible y uno decorativo es exactamente esto: que la medición pueda
+> contradecir a quien lo escribió.»
+
+### 4.6 El hallazgo del modelo — no taparlo
+
+El WMAPE del modelo es **180 %**, y esa cifra por sí sola parece descalificarlo.
+No lo hace, pero hay que saber explicar por qué.
+
+**Por qué el WMAPE es tan alto:** divide el error absoluto entre el total
+consumido. Con el 87 % de los meses en cero, cualquier unidad pronosticada en un
+mes vacío es error puro sin nada que la compense, y el denominador es pequeño
+porque casi todos los meses aportan cero. Un WMAPE superior al 100 % es el
+resultado normal de esta métrica sobre demanda intermitente, para **cualquier**
+método: el promedio móvil marca 160 % y repetir el último mes, 189 %.
+
+**La trampa que hay detrás, y que conviene contar:** las métricas construidas
+sobre error absoluto —WMAPE y también MASE— se minimizan con la **mediana**, y
+sobre estas series la mediana es cero. Un pronosticador que dijera que ninguna
+pieza se consume nunca, y que dejaría las dos plantas sin refacciones, puntúa
+**mejor** que cualquier método honesto. Por eso la comparación se hace con las
+métricas que se minimizan con la **media**, que es lo que la política de
+inventario consume:
+
+| Método | RMSE | MASE | Sesgo acumulado en 6 meses |
+|---|---|---|---|
+| **Modelo (gradient boosting + estadístico)** | **16,53** | 0,842 | **+351 u** |
+| Promedio móvil 6 meses | 17,28 | **0,746** | **−4.125 u** |
+| Repetir el último mes | 23,58 | 0,882 | −321 u |
+
+> **Frase para la presentación:** «El promedio móvil gana en las métricas de
+> error absoluto y pierde en las dos que importan. Su sesgo acumulado es de
+> **menos 4.125 unidades** sobre 7.698 observaciones de validación: al cabo de
+> seis meses habría dejado a las plantas cortas en cuatro mil piezas. El modelo
+> se queda en +351. Cuando la métrica y la consecuencia operativa apuntan en
+> direcciones distintas, la que manda es la consecuencia.»
 
 ---
 
@@ -286,25 +446,36 @@ porque solo uno de los dos costos tiene doliente.
 ### 5.2 Cómo el sistema lo pone en la misma moneda
 
 ```
-Costo_quiebre  =  dias_expuestos  ×  tasa_de_salida  ×  costo_por_dia(criticidad)
+Costo_quiebre  =  ( 1 − exp( −d · dias_expuestos ) )  ×  c_evento(criticidad)
+                  └──────────────┬─────────────────┘
+                  probabilidad de que llegue al menos
+                  un pedido durante la exposición (Poisson)
 ```
 
 | Símbolo | Qué es | Unidad | Valor |
 |---|---|---|---|
 | `dias_expuestos` | Días de quiebre que evita reponer ahora en vez de esperar a la siguiente corrida | días | Calculado |
-| `tasa_de_salida` | Proporción de días en que la pieza se pide realmente | fracción 0–1 | Medida por serie |
-| `costo_por_dia` | Costo diario del quiebre según criticidad | USD/día | A = 400 · B = 80 · C = 10 |
+| `d` | Demanda media diaria proyectada de la pieza | unidades/día | Por serie |
+| `c_evento` | Costo de **un** evento de quiebre según criticidad | USD/evento | A = 45.000 · B = 4.000 · C = 250 |
 
-**La sutileza que vale la pena explicar:** «Multiplicamos por la tasa de salida
-porque **no todos los días sin existencias cuestan lo mismo**. Un día sin la pieza
-solo interrumpe algo si ese día alguien la pide, y en refacciones eso ocurre en
-una minoría de los días. Sin esa corrección, la valoración triplica el riesgo y
-produce cifras que nadie puede defender frente a finanzas.»
+**La corrección que hubo que hacer, y que vale la pena contar:** «La versión
+anterior multiplicaba los días expuestos por la tasa de salida de la pieza, con
+el argumento de que un día sin existencias solo cuesta si ese día alguien la
+pide. El argumento es correcto pero **la rareza ya estaba descontada**: los días
+expuestos se calculan sobre la cobertura, que se deriva de la demanda proyectada,
+de modo que una pieza rara ya aparecía con menos días. Multiplicar otra vez por
+la rareza la descontaba dos veces, y con este catálogo el efecto fue visible al
+instante: el quiebre mediano valía 0,00 USD y el sistema no compraba nada.
+
+Ahora la probabilidad de que ocurra al menos un pedido durante la exposición se
+calcula con un proceso de Poisson, que es el modelo estándar de llegadas, y se
+multiplica por lo que cuesta **un evento**, no un día. Parar una línea de
+embotellado no cuesta 400 USD: cuesta el turno perdido.»
 
 ### 5.3 La pregunta que hay que hacerle a la sala
 
-> **«Los 400 USD/día de una pieza crítica son un parámetro que pusimos nosotros.
-> ¿Cuánto cuesta realmente una hora de paro en Nava? Esa cifra la tiene
+> **«Los 45.000 USD por evento de una pieza crítica son un parámetro que pusimos
+> nosotros. ¿Cuánto cuesta realmente una hora de paro en Nava? Esa cifra la tiene
 > operaciones, y cambiaría el orden de prioridades del sistema entero.»**
 
 Esto convierte la presentación de un monólogo en una conversación, y traslada la
@@ -329,15 +500,24 @@ b  =  ( h · Q )  /  ( D · ( 1 − alpha ) )
 > «Cuando alguien dice "quiero 98 % de servicio", está declarando implícitamente
 > cuánto cree que cuesta un quiebre, aunque no lo sepa. Esta fórmula, corrida al
 > revés, revela ese número y permite contrastarlo con lo que operaciones dice que
-> cuesta parar la línea. Si el sistema asume 6,67 USD por unidad faltante y
-> operaciones dice 400, el nivel de servicio está gravemente mal calibrado.»
+> cuesta parar la línea. Si el sistema asume unos pocos dólares por unidad
+> faltante y operaciones dice que el turno perdido son decenas de miles, el nivel
+> de servicio está gravemente mal calibrado — y esa discrepancia es exactamente
+> la conversación que hay que provocar.»
 
 ### 5.5 La composición del catálogo, en una frase
 
-> «Cuatro piezas —el **20 % de las referencias**— concentran el **44,6 % del
-> gasto anual** *y* son de criticidad A. Ahí es donde el sistema se paga solo. En
-> el otro extremo, seis referencias son el 30 % de la variedad y el 4,2 % del
-> valor: ahí la política correcta es stock generoso y dejar de pensar en ellas.»
+> «**44 piezas** —el 5 % de las referencias— son a la vez clase A de valor y
+> criticidad A: mueven el 9,8 % del gasto anual *y* paran una línea si faltan. Ahí
+> es donde el sistema se paga solo. En el otro extremo, **201 referencias** son el
+> 23 % de la variedad y el 3,7 % del valor: ahí la política correcta es stock
+> generoso y dejar de pensar en ellas.»
+
+**Y la celda que solo aparece al cruzar las tres dimensiones:** hay **19 piezas de
+criticidad A en clase N de rotación** — se mueven en menos del 8 % de los meses.
+ABC las ignoraría por valor y FSN las marcaría como candidatas a depurar. Las dos
+lecturas se equivocan a la vez, porque paran una línea cuando faltan y, al moverse
+tan poco, es cuando más probable es que nadie se haya acordado de reponerlas.
 
 ---
 
@@ -366,12 +546,12 @@ intuición:
    precisamente para que unos meses en cero no arrastren la proyección hacia
    abajo.
 
-**La limitación honesta:** con muchos ceros —más del 40 % de los meses— ningún
-método clásico funciona bien y hay que pasar a **Croston** o **SBA**, que
-descomponen la serie en *cada cuánto ocurre* y *cuánto se lleva cuando ocurre*, y
-suavizan cada parte por separado. **Hoy no está implementado**, porque el
-histórico actual solo tiene 3,3 % de meses en cero y no lo justifica. Está
-identificado como el paso siguiente si el dato real resulta intermitente.
+**Lo que esto obligó a implementar:** con muchos ceros —aquí son el 87 % de los
+meses— ningún método clásico funciona, y hay que pasar a **Croston** o **SBA**,
+que descomponen la serie en *cada cuánto ocurre* y *cuánto se lleva cuando
+ocurre*, y suavizan cada parte por separado. **Están implementados y son el
+camino por defecto de este catálogo**: las 1.283 series se proyectan por uno de
+los dos. No es una mejora pendiente, es lo que hace que el sistema compre algo.
 
 **Y una salvaguarda que sí existe:** si una serie tiene menos de 6 meses de
 historia o media cero, se marca `Insuficiente`, **no se proyecta automáticamente**
@@ -392,7 +572,15 @@ La volatilidad pesa más porque es lo que más degrada la precisión. Y ese scor
 validación retrospectiva —WMAPE > 50 %— la confianza se multiplica por 0,65.
 
 Toda serie con confianza < 0,5 se marca `needs_review = 1` y la interfaz la pone
-en la banda de «requiere una persona». Hoy son 7 de 40.
+en la banda de «requiere una persona». Hoy son el **1,3 %** de las 1.283 series,
+con una confianza media de 0,75.
+
+**Un ajuste que hubo que hacer con el dato intermitente:** el término de
+volatilidad usaba el coeficiente de variación de la serie completa, que sobre
+87 % de ceros mide el patrón de huecos y no la incertidumbre del tamaño del
+pedido. Marcaba el **94 %** del catálogo para revisión, que en la práctica es no
+marcar nada. En régimen intermitente ahora usa el CV del tamaño de evento, y la
+confianza media pasó de 0,42 a 0,75.
 
 ---
 
@@ -426,20 +614,25 @@ el total en el denominador una sola vez y admite ceros individuales.
 **P: ¿Cómo se obtiene actualmente el inventario mínimo?**
 
 ```
-Imin  =  d · L  +  z(k) · sqrt( L · sigma_d²  +  d² · sigma_L² )
+mu_LT  =  d · L                            consumo esperado durante el plazo
+Var_LT =  L · sigma_d²  +  d² · sigma_L²   varianza compuesta
+
+Imin   =  cuantil( alpha(k) ) de una binomial negativa ajustada a mu_LT y Var_LT
 ```
 
 En palabras: **lo que espero consumir mientras llega el pedido, más un colchón
 que absorbe dos incertidumbres a la vez** — que la demanda sea mayor de lo
 previsto y que el proveedor entregue más tarde de lo habitual.
 
-Con números reales del sistema: lead time 10,6 días, σ del lead time 5,45 días.
-Para una pieza con demanda de 15 unidades/mes y criticidad A (`z = 1,65`), el
-mínimo sale alrededor de 13 unidades — de las cuales unas 5,8 son la demanda del
-lead time y 6,6 el colchón.
+Con números reales del sistema: lead time ponderado 30,0 días, σ del lead time
+11,07 días.
 
-**Es la fórmula estándar de la industria**, Hadley & Whitin 1963, la misma que
-usan los módulos MRP de SAP y Oracle. No es una invención del proyecto.
+**La media y la varianza son las estándar de la industria**, Hadley & Whitin
+1963, las mismas que usan los módulos MRP de SAP y Oracle. Lo que este proyecto
+cambió es el último paso: en vez de leer el cuantil sobre una normal, se lee
+sobre una binomial negativa ajustada a esa media y esa varianza, porque con
+demandas de dos o tres unidades la normal reparte una parte grande de su
+probabilidad sobre demanda negativa. Ver §3.3 y §9.4.8 para la medición.
 
 ---
 
@@ -510,8 +703,8 @@ distingue criticidad y no incorpora la variabilidad del proveedor. El sistema:
 
 - Recalcula el mínimo cada corrida contra la demanda proyectada.
 - Diferencia el colchón por criticidad (95/90/80 %).
-- Incorpora σ del lead time, que **con σ/μ ≈ 0,53 aporta la mitad de la varianza**.
-  Un mínimo fijo que ignore esto queda 30–40 % corto.
+- Incorpora σ del lead time, que **con σ/μ ≈ 0,37 aporta una parte sustancial de
+  la varianza**. Un mínimo fijo que ignore esto queda corto.
 
 **2. Donde el sistema gana con seguridad es en las tres decisiones que un
 min-max simple no toma:**
@@ -694,13 +887,24 @@ En orden de lo que bloquea, no de lo que sería vistoso:
 
 1. Autenticación y persistencia fuera de la imagen — sin eso no hay auditoría.
 2. `run_id` en cada decisión — barato, y sin él la mochila no es reconstruible.
-3. **Continuidad de producción como restricción dura** en vez de presupuesto
-   primero (§14 del spec).
-4. **Chat de trazabilidad** para responder contrafactuales: «¿cuánto presupuesto
+3. **Validar `c_evento(k)` con mantenimiento.** Es el parámetro que más manda
+   sobre las prioridades del sistema y hoy es una declaración nuestra.
+4. **Deconvolucionar el lote de compra**: el histórico registra lo que se pidió,
+   no lo que se consumió, y eso infla el tamaño del evento.
+5. **Ajustar `alpha` de Croston por serie** — hoy es una constante única para todo
+   el catálogo, y es la mejora de mayor retorno esperado en el pronóstico.
+6. **Chat de trazabilidad** para responder contrafactuales: «¿cuánto presupuesto
    necesito para no aplazar nada?» (§15 del spec).
-5. Bucle de feedback — lo que convierte el MVP en un sistema que aprende.
-6. Traslado entre plantas — el ahorro está medido.
-7. Variables externas en el modelo — la única vía para que el forecast mejore.
+7. Bucle de feedback — lo que convierte el MVP en un sistema que aprende.
+8. Traslado entre plantas — el ahorro está medido.
+9. Variables externas en el modelo — la vía con más recorrido para el forecast.
+
+**Ya no está en esta lista, y conviene decirlo:** la continuidad de producción
+como restricción dura (§14 del spec) **está implementada**. Las piezas de
+criticidad A se financian antes de que la mochila reparta nada, con un excedente
+autorizado y acotado por encima del presupuesto, y cuando ni así alcanzan, la
+decisión no es «aplazado» sino `ESCALAR` — que es una petición explícita de más
+presupuesto y no un silencio.
 
 ---
 
@@ -709,12 +913,17 @@ En orden de lo que bloquea, no de lo que sería vistoso:
 | Min | Bloque | Mensaje clave |
 |---|---|---|
 | 0–2 | **El problema** | «Dos costos opuestos, uno con doliente y otro sin él» |
-| 2–3 | **Los datos** | «Qué es real, qué es sintético, y qué encontramos al limpiar» |
-| 3–5 | **La composición** | «El 20 % de las referencias es el 44,6 % del gasto y además para línea» |
-| 5–7 | **Cómo decide** | Las tres fórmulas: inventario mínimo, MILP, mochila |
-| 7–8 | **El resultado** | «2.500 USD evitan 12.486 de quiebre: 5,1×» |
-| 8–9 | **Las limitaciones** | Intermitencia, modelo vs. promedio móvil, dato sintético |
+| 2–3 | **Los datos** | «876 referencias, 72 meses, cero filas de consumo simuladas — y el 87 % de los meses en cero» |
+| 3–4 | **La composición** | «El 36 % de las referencias es el 80 % del gasto; el 8 % para línea» |
+| 4–6 | **Cómo decide** | Las cuatro fórmulas: Croston, inventario mínimo, MILP, mochila |
+| 6–7 | **El resultado** | «40.000 USD evitan 511.000 de quiebre, y las 11 reposiciones críticas quedan financiadas» |
+| 7–9 | **Los fallos que el dato destapó** | Los cinco de §4.5 — con el del inventario mínimo, donde la medición contradijo la hipótesis |
 | 9–10 | **La pregunta** | «¿Cuánto cuesta realmente una hora de paro en Nava?» |
+
+Si la audiencia es de producto o de negocio y no de datos, cambia el bloque de
+7-9 por **§10, el diseño de la pantalla**: los tres semáforos, por qué el titular
+es el peor de ellos, y qué se quitó de la lista para que deje de haber fatiga de
+alertas.
 
 **Cierre sugerido:**
 
@@ -734,9 +943,12 @@ En orden de lo que bloquea, no de lo que sería vistoso:
 | [`docs/diagnostico-piezas.html`](diagnostico-piezas.html) | Gráficas de composición, matriz criticidad × valor, FSN, calidad del dato |
 | [`Spec.md` §13](../Spec.md) | Formulación matemática completa con glosarios |
 | [`Spec.md` §13.11](../Spec.md) | Mapa fórmula → archivo → función |
-| [`Spec.md` §13.12](../Spec.md) | Los 12 supuestos del modelo y su consecuencia si fallan |
+| [`Spec.md` §13.12](../Spec.md) | Los supuestos del modelo y su consecuencia si fallan |
+| [`Spec.md` §13.13](../Spec.md) | Diagnóstico del dataset: el perfil medido, antes y después de la migración |
 | [`Spec.md` §14](../Spec.md) | Diseño: continuidad de producción como restricción dura |
 | [`Spec.md` §15](../Spec.md) | Diseño: chat de explicabilidad y trazabilidad |
+| [`Spec.md` §16](../Spec.md) | Diseño: la pantalla del turno como soporte de decisión |
+| [§10 de esta guía](#10-la-pantalla-cómo-se-defiende-el-diseño) | Cómo defender el diseño de la interfaz |
 
 ---
 
@@ -874,13 +1086,60 @@ la política de inventario.
 
 **Aclaración importante:** Este es solo el stock de arranque que escribe el build.
 El punto de reorden real que el sistema calcula opera sobre el lead time verdadero
-(días), no sobre el mes calendario. La fórmula completa está en §9.4.1.
+(días), no sobre el mes calendario. La fórmula completa está en §9.4.2.
 
 ---
 
 ### 9.3 Etapa 2 · Clasificación de patrones de demanda
 
-#### 9.3.1 Coeficiente de variación (CV)
+#### 9.3.1 Cuadrante de intermitencia e irregularidad (SBC)
+
+**Qué hace:** Decide, antes que cualquier otra prueba, si la serie se mueve todos
+los meses o a intervalos. De esa respuesta depende que los estimadores clásicos
+sirvan o devuelvan cero.
+
+```
+ADI  =  n / n_e ,     CV²  =  (σ_e / μ_e)²
+
+ADI ≥ 1,32  ∧  CV² <  0,49   ⟹  Intermitente
+ADI ≥ 1,32  ∧  CV² ≥ 0,49   ⟹  Irregular
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `n` | Meses de historia de la serie | meses |
+| `n_e` | De esos, los meses con algún consumo | meses |
+| `ADI` | Intervalo medio entre demandas: se mueve un mes de cada ADI | meses por evento |
+| `σ_e`, `μ_e` | Desviación y media del tamaño del evento, medidas **solo** sobre los meses con consumo | unidades |
+| `CV²` | Dispersión relativa al cuadrado del tamaño del evento | adimensional |
+| `1,32` | Intervalo por encima del cual los estimadores clásicos dejan de funcionar | meses por evento |
+| `0,49` | Dispersión por encima de la cual el tamaño deja de ser predecible | adimensional |
+
+**Fuente:** Syntetos, A.A., Boylan, J.E. & Croston, J.D. (2005). On the
+categorization of demand patterns. *Journal of the Operational Research Society*,
+56(5), 495-503.
+
+**Por qué se usa:** Las dos cifras miden cosas distintas a propósito, y ahí está
+toda la regla. El intervalo cuenta los huecos; la dispersión mira solo los meses
+que **no** son hueco. Un coeficiente de variación sobre la serie completa
+mezclaría las dos, y con 87 % de ceros lo dominarían los huecos — que es
+exactamente el error que hacía que el 94 % de este catálogo pareciera
+impredecible antes de separarlas.
+
+Los umbrales no son convencionales: el artículo los deriva del punto donde el
+error cuadrático de cada estimador supera al de los otros.
+
+**Medido en este catálogo:** ADI mediano 10,29 y CV² mediano 0,40. Las 1.283
+series caen del lado intermitente — 804 intermitentes y 479 irregulares, ninguna
+suave.
+
+**Cuándo falla:** Con menos de dos eventos no hay dispersión que medir y la serie
+va a «Historial insuficiente», que es una etiqueta propia y no un valor por
+defecto. Es la primera de la precedencia, por delante de la intermitencia.
+
+---
+
+#### 9.3.2 Coeficiente de variación (CV)
 
 **Qué hace:** Mide la dispersión relativa de la serie. Si CV > 0,5, la serie se
 clasifica como Volátil.
@@ -905,7 +1164,7 @@ para comparar piezas de distinta escala.
 
 ---
 
-#### 9.3.2 Fuerza estacional de la descomposición
+#### 9.3.3 Fuerza estacional de la descomposición
 
 **Qué hace:** Mide qué fracción de la varianza de la señal (estacional + residuo)
 se explica por el componente estacional. Si Fₛ ≥ 0,45, la condición de fuerza se
@@ -937,7 +1196,7 @@ prueba de Kruskal-Wallis.
 
 ---
 
-#### 9.3.3 Prueba de efecto de mes (Kruskal-Wallis)
+#### 9.3.4 Prueba de efecto de mes (Kruskal-Wallis)
 
 **Qué hace:** Verifica si el mes del calendario explica de forma estadísticamente
 significativa las diferencias de consumo. Si p < 0,05, el efecto es real.
@@ -967,7 +1226,7 @@ ambas condiciones baja del 26 % al 2 %.
 
 ---
 
-#### 9.3.4 Score de confianza del patrón (γ)
+#### 9.3.5 Score de confianza del patrón (γ)
 
 **Qué hace:** Combina tres señales en un número de 0 a 1 que mide cuánto se puede
 confiar en la etiqueta asignada. Si γ < 0,5, la serie se marca para revisión humana.
@@ -994,9 +1253,63 @@ son una declaración de criterio, no un ajuste de datos.
 
 ### 9.4 Etapa 3 · Proyección de demanda e inventario mínimo
 
-#### 9.4.1 Los cuatro estimadores centrales (uno por patrón)
+#### 9.4.1 Croston y la aproximación de Syntetos-Boylan
 
-**Qué hace:** Selecciona el método de proyección según el patrón de la serie.
+**Qué hace:** Proyecta las series intermitentes separando la serie en dos —cuánto
+se pide cuando se pide, y cada cuántos meses ocurre— y suavizando cada una por
+separado.
+
+```
+z_t  =  α·y_t  +  (1 − α)·z_(t−1)          tamaño suavizado del evento
+p_t  =  α·q_t  +  (1 − α)·p_(t−1)          intervalo suavizado entre eventos
+
+D₅₀  =  c · z_t / p_t
+
+c = 1            Croston original, patrón Intermitente
+c = 1 − α/2      aproximación SBA, patrón Irregular      (= 0,925 con α = 0,15)
+```
+
+| Símbolo | Qué es | Unidad |
+|---|---|---|
+| `y_t` | Tamaño del evento de demanda observado en el mes t | unidades |
+| `q_t` | Meses transcurridos desde el evento anterior | meses |
+| `z_t` | Estimador suavizado de cuánto se lleva cuando se lleva algo | unidades |
+| `p_t` | Estimador suavizado de cuántos meses pasan entre eventos | meses |
+| `α` | Constante de suavizado, la misma para ambos componentes | 0,15 adimensional |
+| `c` | Corrección de sesgo del cociente | adimensional |
+| `D₅₀` | Consumo esperado por mes | unidades/mes |
+
+**Fuente:** Croston, J.D. (1972). Forecasting and stock control for intermittent
+demands. *Operational Research Quarterly*, 23(3), 289-303. Corrección: Syntetos,
+A.A. & Boylan, J.E. (2005). The accuracy of intermittent demand estimates.
+*International Journal of Forecasting*, 21(2), 303-314.
+
+**Por qué se usa:** Ambas series se actualizan **solo en los meses en que algo se
+mueve**, y ahí está el método entero. Suavizar la serie cruda converge a cero,
+porque la mayoría de los meses son cero. Antes de incorporarlo, el 86 % de las
+series de este catálogo proyectaba demanda nula y el optimizador no compraba
+nada: la mediana móvil de una serie con 87 % de ceros es cero, y afirmar que una
+pieza que se consume dos veces al año tiene demanda cero no es un pronóstico.
+
+La corrección `1 − α/2` existe porque el cociente de dos estimadores suavizados
+está sesgado al alza. Se aplica al patrón irregular porque es donde ese sesgo
+inflaría el stock de las piezas menos predecibles.
+
+**Cuándo falla:** Con un solo evento en toda la historia no hay intervalo que
+suavizar y el estimador cae al nivel medio de la serie. Y α es una constante
+única para todo el catálogo: ajustarla por serie es una mejora identificada y no
+implementada — está declarada como supuesto abierto.
+
+**El intervalo de la proyección** sale de la dispersión de los **tamaños
+observados**, no de la serie completa: sobre una serie de ceros la desviación mide
+el patrón de huecos, que ya lo mide `p_t`, y no la incertidumbre del tamaño.
+
+---
+
+#### 9.4.2 Los cuatro estimadores para series que se mueven todos los meses
+
+**Qué hace:** Selecciona el método de proyección para las series que el
+cuadrante SBC ya descartó del régimen intermitente.
 
 ```
 D₅₀  =  ⎧ (1/6) · Σₜ yₜ          si Estable
@@ -1022,16 +1335,23 @@ D₅₀  =  ⎧ (1/6) · Σₜ yₜ          si Estable
 
 **Por qué se usa:** El método lo decide el patrón, no se ajusta por serie. Eso
 hace el pronóstico reproducible: el motivo de cada cifra es la etiqueta, que la
-etapa anterior ya publicó. Solo 6 de 40 series necesitan Holt-Winters; el 85 % se
-resuelve con métodos estadísticos simples, que es lo correcto para este volumen.
+etapa anterior ya publicó.
 
-**Por qué no Prophet:** Con 36 observaciones mensuales y 3 ciclos, Prophet está
-sobredimensionado y sobreajusta. Además exige compilar Stan, que en Windows
-complica la demo. Holt-Winters viene en statsmodels y es igualmente explicable.
+**El orden importa, y es la lección de la migración.** Los cuatro colapsan a cero
+sobre una serie que es casi toda ceros —la mediana primero y la media detrás—, así
+que ninguno se evalúa antes de que el cuadrante SBC haya descartado el régimen
+intermitente. En el catálogo actual ese corte se lleva las 1.283 series, y estos
+cuatro quedan para las referencias que de verdad se mueven todos los meses. En un
+catálogo mixto, que es lo que habría en la cervecera real, ambos regímenes
+convivirían y por eso los cuatro siguen implementados.
+
+**Por qué no Prophet:** Con esta cantidad de ciclos Prophet está sobredimensionado
+y sobreajusta. Además exige compilar Stan, que en Windows complica la demo.
+Holt-Winters viene en statsmodels y es igualmente explicable.
 
 ---
 
-#### 9.4.2 Intervalo de incertidumbre del pronóstico
+#### 9.4.3 Intervalo de incertidumbre del pronóstico
 
 **Qué hace:** Construye el escenario bajo (D₂₅) y alto (D₇₅) alrededor del punto
 central.
@@ -1054,7 +1374,7 @@ que es frecuente en refacciones. No es cosmético.
 
 ---
 
-#### 9.4.3 Error ponderado del método — validación con origen móvil
+#### 9.4.4 Error ponderado del método — validación con origen móvil
 
 **Qué hace:** Mide el error del método como fracción del volumen total movido,
 evitando la división por cero del MAPE clásico.
@@ -1081,7 +1401,7 @@ de menor demanda — que son los menos importantes operativamente.
 
 ---
 
-#### 9.4.4 Combinación de los dos pronósticos
+#### 9.4.5 Combinación de los dos pronósticos
 
 **Qué hace:** Mezcla el pronóstico del modelo global de ML con el del método
 estadístico del patrón, con peso igual para ambos.
@@ -1109,7 +1429,7 @@ para no sobreajustar la combinación a los datos de validación.
 
 ---
 
-#### 9.4.5 Base diaria de la demanda
+#### 9.4.6 Base diaria de la demanda
 
 **Qué hace:** Convierte el pronóstico mensual en tasa y desviación diarias para
 alimentar el cálculo del inventario mínimo.
@@ -1134,7 +1454,7 @@ que esta conversión subestima el colchón en las series más correlacionadas.
 
 ---
 
-#### 9.4.6 Varianza de la demanda sobre un lead time aleatorio
+#### 9.4.7 Varianza de la demanda sobre un lead time aleatorio
 
 **Qué hace:** Descompone el riesgo total del reorden en dos fuentes independientes:
 la incertidumbre de la demanda y la incertidumbre del proveedor.
@@ -1155,57 +1475,74 @@ Whitin, T.M. (1963). *Analysis of Inventory Systems*. Prentice-Hall. También en
 Silver, E.A., Pyke, D.F. & Peterson, R. (1998). *Inventory Management and
 Production Planning and Scheduling*. Wiley.
 
-**El dato que lo hace importante:** Con σ_L/L ≈ 0,53 en estos proveedores, los dos
-términos son del mismo orden de magnitud: **la mitad del riesgo de cada pieza no
-viene de la demanda, viene del proveedor**. Un cálculo de inventario mínimo que
-ignore el segundo término queda 30–40 % corto creyendo tener el nivel de servicio
-declarado.
+**El dato que lo hace importante:** Con σ_L/L ≈ 0,37 en estos proveedores —y hasta
+0,35 en el proveedor OEM, cuyo plazo va de 34 a 118 días— los dos términos son del
+mismo orden de magnitud: **una parte grande del riesgo de cada pieza no viene de la
+demanda, viene del proveedor**. Un cálculo de inventario mínimo que ignore el
+segundo término queda corto creyendo tener el nivel de servicio declarado.
 
 ---
 
-#### 9.4.7 Punto de reorden — el inventario mínimo (fórmula central)
+#### 9.4.8 Punto de reorden — el inventario mínimo (fórmula central)
 
 **Qué hace:** Calcula el nivel de existencias al que se debe lanzar la orden de
 compra para que, con la probabilidad declarada por criticidad, el stock no se agote
 antes de que llegue el pedido.
 
 ```
-Imin  =  ceil( d · L  +  z(k) · √( L · σ_d²  +  d² · σ_L² ) )
-          └────┬────┘     └─────────────────┬─────────────────┘
-          consumo durante          colchón de seguridad que absorbe
-          el lead time             la variabilidad de demanda Y de proveedor
+μ_LT  =  d · L                              consumo esperado mientras llega el pedido
+Var_LT = L · σ_d²  +  d² · σ_L²             varianza compuesta (demanda Y proveedor)
+
+p  =  μ_LT / Var_LT ,    r  =  μ_LT · p / (1 − p)
+
+Imin  =  F⁻¹( α(k) ; r, p )                 cuantil de la binomial negativa
 ```
 
 | Símbolo | Qué es | Unidad | Valor actual |
 |---|---|---|---|
 | `d` | Demanda media diaria proyectada | unidades/día | Por serie |
-| `L` | Lead time medio | días | ≈ 10,6 |
+| `L` | Lead time medio ponderado | días | ≈ 30,0 |
 | `σ_d` | Desviación de la demanda diaria | unidades/día | Por serie |
-| `σ_L` | Desviación del lead time | días | ≈ 5,45 |
-| `z(k)` | Factor de servicio por criticidad | adimensional | A 1,65 (95%) · B 1,28 (90%) · C 0,84 (80%) |
+| `σ_L` | Desviación del lead time | días | ≈ 11,07 |
+| `α(k)` | Nivel de servicio de ciclo por criticidad | fracción | A 0,95 · B 0,90 · C 0,80 |
+| `r, p` | Parámetros de la binomial negativa ajustada a `μ_LT` y `Var_LT` | — | Por serie |
 | `Imin` | Nivel al que se lanza la orden | unidades enteras | — |
 
-**Fuente:** Hadley, G. & Whitin, T.M. (1963). *Analysis of Inventory Systems*.
-Prentice-Hall. Es la formulación canónica implementada en los módulos MRP de SAP,
-Oracle y la mayoría de los ERP industriales.
+**Fuente:** La media y la varianza son Hadley, G. & Whitin, T.M. (1963).
+*Analysis of Inventory Systems*. Prentice-Hall — la formulación canónica de los
+módulos MRP de SAP, Oracle y la mayoría de los ERP industriales. El cuantil
+compuesto sigue a Eppen, G.D. & Martin, R.K. (1988). Determining safety stock in
+the presence of stochastic lead time and demand. *Management Science*, 34(11).
 
-**Por qué se usa esta y no solo `d · L`:** El primer término (`d · L`) es el
-mínimo absoluto: lo que se consume mientras llega el pedido. No hay colchón ahí.
-El segundo término es el colchón, y está bajo la raíz cuadrada porque las
-varianzas se suman cuando las incertidumbres son independientes. Ignorar el término
-`d² · σ_L²` equivale a asumir que todos los proveedores son perfectamente
-puntuales — supuesto que el propio dataset refuta (σ_L/μ_L = 0,53).
+**Por qué se usa esto y no solo `d · L`:** El primer término es el mínimo
+absoluto: lo que se consume mientras llega el pedido, sin colchón ninguno. La
+varianza compuesta suma las dos incertidumbres porque son independientes. Ignorar
+el término `d² · σ_L²` equivale a asumir que todos los proveedores son
+perfectamente puntuales — supuesto que el propio dataset refuta (σ_L/μ_L = 0,37).
 
-**Los valores de `z` son la única declaración de política de servicio en el
-sistema.** No hay otra palanca. Si mantenimiento dice que una pieza A vale 600
-USD/día de paro en vez de 400, el nivel de servicio para esa pieza debería ser
-mayor que 95 %. Hoy está fijado por constante.
+**Por qué el cuantil y no `μ + z·σ` — y por qué el resultado sorprendió.** La
+aproximación normal es válida cuando la media es grande frente a la desviación.
+Aquí no lo es: con medias de dos o tres unidades y desviaciones mayores, una
+normal centrada en `μ_LT` pone **una mediana del 39 % de su masa en demanda
+negativa**, y más del 20 % en el 99 % de las series. Esa masa imposible se
+compensa estirando la cola derecha, así que el cuantil sale inflado.
 
-**Limitación estadística conocida:** Eppen, G.D. & Martin, R.K. (1988) demuestran
-que la demanda sobre un lead time aleatorio sigue una distribución mezcla
-asimétrica, no una normal. El factor `z` de la normal subestima sistemáticamente
-el stock de seguridad real necesario para alcanzar el nivel de servicio declarado.
-El sistema no corrige esto.
+La hipótesis de partida de este proyecto era la contraria: que corregir la
+distribución **subiría** el inventario mínimo, porque la literatura advierte que
+la normal subestima el colchón. Medido sobre este catálogo, lo **baja** en dos de
+cada tres series. El catálogo pasó de 16.241 unidades y 1,34 M USD a **7.789
+unidades y 683 k USD**, un 49 % menos, al mismo nivel de servicio declarado. La
+normal no era conservadora, era inválida a estas medias.
+
+La binomial negativa se ajusta por momentos a la misma media y varianza y vive en
+los enteros no negativos, que es donde vive la demanda de refacciones. Cuando la
+varianza no supera a la media, el ajuste degenera y se usa Poisson.
+
+**Trampa operativa a recordar:** dos etapas distintas llaman a esta función —la
+construcción del inventario actual y la proyección—. Si se cambia la definición
+de mínimo hay que **re-correr el dataset entero**, no solo la proyección, o las
+dos etapas dejan de compartir la definición. Existe un test que lo detecta:
+`test_inventory_minimum_has_no_systematic_bias_against_reorder_point`.
 
 ---
 
@@ -1355,32 +1692,52 @@ que ser ejecutable por una persona sin coordinar dos suministros simultáneos.
 presupuesto pueda comparar piezas en la misma moneda.
 
 ```
-Cq  =  ( max(0, P + L − cobertura)  −  max(0, L − cobertura) )  ×  r  ×  c(k)
+días_expuestos  =  max(0, P + L − cobertura)  −  max(0, L − cobertura)
+
+Cq  =  ( 1 − exp( −d · días_expuestos ) )  ×  c_evento(k)
+       └──────────────┬──────────────────┘
+       P(al menos un pedido durante la exposición), Poisson
 ```
 
 | Símbolo | Qué es | Unidad | Valor actual |
 |---|---|---|---|
 | `cobertura` | Días que aguanta el stock actual a la tasa de pronóstico | días | Por serie |
 | `P` | Período de planificación hasta la siguiente corrida | días | 30 |
-| `L` | Lead time de reposición | días | ≈ 10,6 |
-| `r` | Tasa de salida: proporción de días en que la pieza se pide realmente | fracción 0–1 | Por serie |
-| `c(k)` | Costo de un día sin la pieza, por criticidad | USD/día | A 400 · B 80 · C 10 |
+| `L` | Lead time de reposición | días | ≈ 30,0 |
+| `d` | Demanda media diaria proyectada | unidades/día | Por serie |
+| `c_evento(k)` | Costo de **un** evento de quiebre, por criticidad | USD/evento | A 45.000 · B 4.000 · C 250 |
 | `Cq` | Valor del quiebre que evita reponer ahora en vez de esperar | USD | — |
 
-**Fuente:** Valoración determinista. Los `c(k)` son parámetros de negocio
-declarados, no estimados.
+**Fuente:** Proceso de Poisson para las llegadas de demanda, que es el modelo
+estándar de la teoría de inventarios de repuestos. Los `c_evento(k)` son
+parámetros de negocio declarados, no estimados.
 
-**La sutileza del factor `r`:** Un día sin existencias solo cuesta dinero si ese
-día alguien pide la pieza. Sin el factor `r`, la valoración asume que la pieza se
-pide todos los días y aproximadamente triplica el riesgo en piezas de baja rotación.
-Con él, el costo es proporcional a la frecuencia real de solicitud. El resultado
-es más defendible frente a finanzas.
+**El fallo que el dato intermitente destapó, y que hay que saber contar.** La
+versión anterior era `días_expuestos × tasa_de_salida × costo_por_día(k)`, con el
+argumento de que un día sin existencias solo cuesta si ese día alguien pide la
+pieza. El argumento es correcto, pero **la rareza ya estaba contada una vez**:
+los días expuestos se derivan de la cobertura, y la cobertura se deriva de la
+demanda proyectada, de modo que una pieza rara ya aparecía con más cobertura y
+menos exposición. Multiplicar otra vez por la tasa de salida la descontaba dos
+veces.
+
+Con el catálogo anterior el efecto pasaba desapercibido porque la tasa de salida
+rondaba la unidad. Con este, se derrumbó a 0,005 y el quiebre mediano quedó
+valorado en **0,00 USD**: el optimizador no compraba nada, y no porque no hiciera
+falta.
+
+La corrección tiene dos partes. La probabilidad de que ocurra al menos un pedido
+durante la ventana de exposición se calcula con Poisson, que es donde esa
+probabilidad corresponde. Y la constante pasó de costo **por día** a costo **por
+evento**, con una recalibración de dos órdenes de magnitud: parar una línea de
+embotellado no cuesta 400 USD, cuesta el turno.
 
 **Limitaciones conocidas:**
-1. Es determinista: asume que la demanda llega exactamente a la tasa de pronóstico.
-   Subestima el riesgo en las series menos predecibles.
-2. `c(k)` es un parámetro fijo, no una estimación. Su magnitud decide cuánto pesa
-   la criticidad frente al precio. Tiene que ser validado con mantenimiento.
+1. Poisson asume llegadas independientes a tasa constante. En una pieza cuya
+   falla dispara varias solicitudes seguidas, subestima el riesgo.
+2. `c_evento(k)` es un parámetro fijo, no una estimación. Su magnitud decide
+   cuánto pesa la criticidad frente al precio, y **es el número que hay que
+   validar con mantenimiento antes de operar el sistema**.
 
 ---
 
@@ -1460,29 +1817,127 @@ realmente alcanzado se publica junto al declarado.
 
 | Número en pantalla | Fórmula que lo produce | Sección |
 |---|---|---|
+| Régimen intermitente o irregular | Cuadrante SBC: ADI y CV² del evento | §9.3.1 |
 | Patrón de la serie | CV, Fₛ, Kruskal-Wallis, Mann-Kendall | §9.3 |
-| Confianza en el patrón (γ) | Score compuesto ponderado | §9.3.4 |
-| Pronóstico central (D₅₀) | Media / percentil / OLS / Holt-Winters + combinación ML | §9.4.1–4 |
-| Intervalo D₂₅–D₇₅ | Cuantil normal ±0,674·S | §9.4.2 |
-| Error WMAPE | Error ponderado sobre volumen total | §9.4.3 |
-| Inventario mínimo (Imin) | Hadley & Whitin: d·L + z·√(L·σ_d²+d²·σ_L²) | §9.4.7 |
+| Confianza en el patrón (γ) | Score compuesto ponderado | §9.3.5 |
+| Pronóstico de series intermitentes | Croston · Croston-SBA | §9.4.1 |
+| Pronóstico del resto (D₅₀) | Media / percentil / OLS / Holt-Winters + combinación ML | §9.4.2–5 |
+| Intervalo D₂₅–D₇₅ | Cuantil normal ±0,674·S | §9.4.3 |
+| Error WMAPE, MASE y sesgo acumulado | Validación con origen móvil | §9.4.4 |
+| Inventario mínimo (Imin) | Cuantil de la binomial negativa compuesta | §9.4.8 |
 | Lote económico (Q*) | EOQ de Wilson: √(2·K·D/h) | §9.5.1 |
 | Inventario máximo (Imax) | Nivel order-up-to: Imin + Q | §9.5.2 |
 | Techo por vida útil | Anti-obsolescencia: d·0,8·V − q | §9.5.3 |
 | Proveedor y cantidad | MILP de costo fijo, solver CBC | §9.5.4 |
-| Costo del quiebre (Cq) | Días expuestos × tasa salida × c(k) | §9.5.5 |
+| Costo del quiebre (Cq) | P(Poisson de quiebre) × costo del evento c(k) | §9.5.5 |
 | COMPRAR / APLAZADO / ESCALAR | Mochila 0/1 con restricción de continuidad | §9.5.6 |
 | Nivel de servicio alcanzado vs. declarado | Piso por clase θₖ | §9.5.7 |
 
 ---
 
-### 9.7 Los tres supuestos que hay que poder defender
+### 9.7 Los supuestos que hay que poder defender
 
 Estos son los supuestos implícitos más cuestionables. Si alguien los señala, hay
-que tenerlos reconocidos.
+que tenerlos reconocidos. Los tres primeros son los abiertos; el cuarto se
+cerró con la migración y se deja documentado porque la corrección es en sí misma
+un argumento.
 
 | Supuesto | Dónde aplica | Consecuencia si falla |
 |---|---|---|
-| **La demanda diaria es independiente entre días** | Conversión mensual → diaria (§9.4.5) | El colchón se subestima en series con días de alta correlación. El exponent real es entre 0,6 y 0,8, no 0,5 |
-| **La distribución de demanda sobre el lead time es normal** | Inventario mínimo (§9.4.7) | Eppen & Martin (1988): la distribución real es mezcla asimétrica. El factor z subestima el stock de seguridad real |
-| **Los parámetros c(k) del costo de quiebre son correctos** | Valoración del quiebre (§9.5.5) y mochila (§9.5.6) | Si A = 400 USD/día está muy lejos del costo real de un paro de línea, las prioridades del sistema entero cambian |
+| **La demanda diaria es independiente entre días** | Conversión mensual → diaria (§9.4.7) | El colchón se subestima en series con días de alta correlación. El exponente real está entre 0,6 y 0,8, no 0,5 |
+| **α = 0,15 vale para todo el catálogo** | Croston y SBA (§9.4.1) | Una constante única suaviza igual una pieza de reposición periódica y una de falla esporádica. Ajustarla por serie es la mejora identificada de mayor retorno en el pronóstico |
+| **El lote de compra observado es la demanda** | Historia de consumo (§4.2) | El libro de órdenes registra lo que se pidió, no lo que se consumió. Si el cliente pide de a lotes, el tamaño del evento está inflado y el intervalo estirado. Deconvolucionarlo está identificado y no implementado |
+| **Los parámetros c(k) del costo de quiebre son correctos** | Valoración del quiebre (§9.5.5) y mochila (§9.5.6) | Si el paro de línea no cuesta 45.000 USD por evento, las prioridades del sistema entero cambian. Es el número que hay que validar con negocio antes de operar |
+| ~~La distribución de demanda sobre el lead time es normal~~ | ~~Inventario mínimo~~ | **Cerrado.** Se midió que la normal ponía una mediana del 39 % de su masa en demanda negativa e inflaba el catálogo un 49 %. Sustituida por el cuantil de una binomial negativa ajustada a la media y varianza compuestas (§9.4.8) |
+
+---
+
+## 10. La pantalla: cómo se defiende el diseño
+
+Esta sección es para cuando alguien pregunte por qué la interfaz se ve así. No es
+decoración: cada decisión responde a un problema medido sobre la versión
+anterior, y contarlo convierte una demo en una defensa.
+
+### 10.1 El problema que resolvió el rediseño
+
+> «La pantalla decía **"Production is covered"** y justo debajo tenía setenta y
+> ocho casos en rojo. Las dos cosas eran verdad —las piezas críticas estaban
+> financiadas *y* había trabajo pendiente— pero el titular respondía una pregunta
+> y las alertas otra. Una pantalla que parece contradecirse deja de usarse para
+> decidir, y entonces da igual lo bueno que sea el optimizador de detrás.»
+
+### 10.2 Tres semáforos, y el titular es el peor
+
+| Luz | Pregunta que responde | Cuándo se pone en rojo |
+|---|---|---|
+| **Production continuity** | ¿Puede pararse una línea? | Alguna criticidad A sin financiar |
+| **Run budget** | ¿El dinero dio, y a costa de qué? | Se consumió excedente autorizado |
+| **Waiting for you** | ¿Cuánto espera a una persona? | Entre lo pendiente hay criticidad A |
+
+**Frase para la sala:** «El titular es la peor de las tres, nunca un promedio.
+Promediar un rojo con dos verdes da ámbar, y un ámbar no mueve a nadie. El riesgo
+no se compensa: que el presupuesto esté sano no baja la probabilidad de que se
+pare una línea.»
+
+**El detalle que demuestra criterio:** cada luz lleva su palabra —`Clear`,
+`Watch`, `Act now`— además del color. Uno de cada doce hombres no distingue rojo
+de verde, y una captura en blanco y negro tiene que seguir diciendo lo mismo.
+
+### 10.3 Lo que se quitó de la lista, y por qué
+
+La fatiga de alertas es un problema **de diseño**, no de disciplina: una alerta
+que no exige acción entrena a ignorar las que sí.
+
+| Antes | Ahora |
+|---|---|
+| Banda con **1.117** piezas en «No action» | Una línea con enlace al catálogo completo |
+| **73** compras automáticas pidiendo Aprobar/Rechazar | Plegadas, sin botones, «comprometidas por el sistema» |
+| **78** casos planos con idéntica causa | Agrupados por criticidad, solo el grupo A abierto |
+
+**Frase para la sala:** «Pedirle a un comprador setenta y tres firmas sobre
+compras que el optimizador resolvió sin ambigüedad no es control, es el ruido que
+hace que se firme sin mirar. Nacen comprometidas y la traza queda: aprobadas por
+el sistema, bajo una regla que se puede leer. Lo que sí pide firma es lo que
+exige criterio.»
+
+### 10.4 La tarjeta: riesgo, plan, decisión
+
+El orden no es estético, es el orden en que se decide:
+
+1. **Riesgo** — qué pasa si falta y cuánto queda al ritmo actual. Sin cifras en
+   dólares: la urgencia la marca el tiempo, no el importe.
+2. **Medidor** — una escala con el stock, el punto de reorden y el nivel de
+   reposición *en su posición*, no una barra con los números en una frase aparte.
+3. **Plan** — cantidad, proveedor, importe y plazo en una línea, con el proveedor
+   marcado como el mejor de las ofertas comparadas.
+4. **Decisión** — el titular (`I would buy`) y los botones. El razonamiento vive
+   en el detalle.
+
+**Frase para la sala:** «Ninguna cifra aparece dos veces. El beneficio neto se
+dice como múltiplo —*83 veces lo que cuesta el lote*— y no como un tercer importe,
+porque con el costo y el riesgo ya en pantalla una tercera cantidad obliga a
+restar mentalmente, que es justo la cuenta que la tarjeta debería ahorrar.»
+
+### 10.5 El mapa: previsualizar y fijar
+
+Pasar el ratón previsualiza la planta; hacer clic la fija y filtra los casos; el
+foco de teclado hace lo mismo que el ratón.
+
+**Frase para la sala, si preguntan por accesibilidad:** «Hover-solo habría sido
+una violación de WCAG 2.1. Una previsualización que solo existe bajo el cursor no
+existe en un móvil ni para quien navega con tabulador. Las tres vías hacen lo
+mismo a propósito, y el clic sigue siendo el que tiene consecuencia.»
+
+### 10.6 Las tres limitaciones de la pantalla
+
+Reconocerlas antes de que las señalen:
+
+1. **El rojo de continuidad es binario por criticidad, no por tiempo.** Una pieza
+   A con dos semanas de cobertura pinta igual que una con dos días. Lo correcto
+   sería comparar la cobertura contra el plazo de entrega de esa serie.
+2. **No hay acción en lote.** Aprobar setenta y ocho revisiones siguen siendo
+   setenta y ocho clics. La agrupación por criticidad prepara el terreno, pero el
+   botón de grupo no existe.
+3. **El reparto por planta es descriptivo.** Dice a dónde fue el dinero, no si
+   ese reparto fue el correcto: la mochila tiene un presupuesto único y global,
+   sin restricciones por planta.

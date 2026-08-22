@@ -226,6 +226,43 @@ const DATASET = [
 
 const PATTERNS = [
   {
+    name: "Intermittency and lumpiness quadrant",
+    theory: "Syntetos, Boylan & Croston (2005), On the categorization of demand patterns",
+    math: (p) => block(
+      mi("ADI"), eq, frac(mi("n"), sub(mi("n"), mi("e"))), comma, gap,
+      sup(mi("CV"), mn(2)), eq,
+      sup(par(frac(sub(mi("σ"), mi("e")), sub(mi("μ"), mi("e")))), mn(2)),
+    ) + block(
+      mi("ADI"), mo("≥"), mn(p.adi_intermittent ?? 1.32), mo("∧"),
+      sup(mi("CV"), mn(2)), mo("<"), mn(p.cv2_lumpy ?? 0.49),
+      mo("⟹"), mtext("intermittent"), gap,
+      mi("ADI"), mo("≥"), mn(p.adi_intermittent ?? 1.32), mo("∧"),
+      sup(mi("CV"), mn(2)), mo("≥"), mn(p.cv2_lumpy ?? 0.49),
+      mo("⟹"), mtext("lumpy"),
+    ),
+    where: [
+      ["n", "Months of history in the series", "months"],
+      ["nₑ", "Of those, the months with any consumption at all", "months"],
+      ["ADI", "Average demand interval: one month in every ADI sees movement",
+        "months per event"],
+      ["σₑ, μₑ", "Deviation and mean of the event size, measured only on the months "
+        + "with consumption", "units"],
+      ["CV²", "Squared relative dispersion of the event size", "dimensionless"],
+      ["1.32", "Interval above which the classical estimators stop working",
+        "months per event"],
+      ["0.49", "Dispersion above which the size stops being predictable",
+        "dimensionless"],
+    ],
+    note: "The two are measured on different things on purpose, and that is the whole "
+      + "point of the rule. The interval counts the gaps; the dispersion looks only at "
+      + "the months that are not a gap. A coefficient of variation over the full series "
+      + "would mix both, and with 87% zeros the gaps would drown out the sizes — which "
+      + "is exactly the mistake that made 94% of this catalogue look unpredictable "
+      + "before the two were separated. The thresholds are the ones the original paper "
+      + "derives from the point where each estimator overtakes the others, not a "
+      + "convention.",
+  },
+  {
     name: "Coefficient of variation",
     theory: "Descriptive statistic. Threshold declared as business policy",
     math: (p) => block(
@@ -311,7 +348,45 @@ const PATTERNS = [
 
 const MODEL = [
   {
-    name: "The four point estimators, one per pattern",
+    name: "Croston and the Syntetos–Boylan approximation",
+    theory: "Croston (1972); Syntetos & Boylan (2005)",
+    math: (p) => block(
+      sub(mi("z"), mi("t")), eq,
+      mi("α"), times, sub(mi("y"), mi("t")), plus,
+      par(row(mn(1), minus, mi("α"))), times, sub(mi("z"), row(mi("t"), minus, mn(1))),
+      comma, gap,
+      sub(mi("p"), mi("t")), eq,
+      mi("α"), times, sub(mi("q"), mi("t")), plus,
+      par(row(mn(1), minus, mi("α"))), times, sub(mi("p"), row(mi("t"), minus, mn(1))),
+    ) + block(
+      sub(mi("D"), mn(50)), eq,
+      mi("c"), times, frac(sub(mi("z"), mi("t")), sub(mi("p"), mi("t"))), comma, gap,
+      mi("c"), eq, mn(1), gap, mtext("intermittent"), mo(";  "),
+      mi("c"), eq, mn(1), minus, frac(mi("α"), mn(2)), eq,
+      mn(p.sba_correction ?? 0.925), gap, mtext("lumpy"),
+    ),
+    where: (p) => [
+      ["yₜ", "Size of the demand event observed in month t", "units"],
+      ["qₜ", "Months elapsed since the previous event", "months"],
+      ["zₜ", "Smoothed estimate of how much is taken when something is taken", "units"],
+      ["pₜ", "Smoothed estimate of how many months pass between events", "months"],
+      ["α", "Smoothing constant, applied to both components alike",
+        `${p.croston_alpha ?? 0.15} (dimensionless)`],
+      ["c", "Bias correction on the ratio: 1 for Croston, 1 − α/2 for the approximation",
+        "dimensionless"],
+      ["D₅₀", "Expected consumption per month", "units/month"],
+    ],
+    note: "Both series are updated only in the months where something moves, and that "
+      + "is the entire method. Smoothing the raw series instead converges to zero, "
+      + "because most months are zero — and saying a part consumed twice a year has no "
+      + "demand is not a forecast, it is a refusal. The correction exists because the "
+      + "ratio of two smoothed estimates is biased upward; Syntetos and Boylan derive "
+      + "1 − α/2 as the factor that removes it, and it is applied to the lumpy series "
+      + "because that is where the bias would inflate the stock of the least "
+      + "predictable parts.",
+  },
+  {
+    name: "The four estimators for series that move every month",
     theory: "Moving average · moving median · OLS · Holt-Winters (1960)",
     math: () => block(
       sub(mi("D"), mn(50)), eq,
@@ -333,9 +408,14 @@ const MODEL = [
         "units/month"],
       ["D₅₀", "Central forecast for next month", "units/month"],
     ],
-    note: "The method is chosen by the pattern rather than fitted per series, so the "
-      + "forecast is reproducible and the reason for each figure is the label, which "
-      + "the previous stage already published.",
+    note: "These four only apply once the quadrant above has ruled the series out of "
+      + "the intermittent regime, and the order matters: all four collapse to zero on a "
+      + "series that is mostly zeros — the median first and the average close behind. "
+      + "On this catalogue that test sends most of the references to Croston, and these "
+      + "four are left for the parts that genuinely move every month. The method is "
+      + "chosen by the pattern rather than fitted per series, so the forecast is "
+      + "reproducible and the reason for each figure is the label, which the previous "
+      + "stage already published.",
   },
   {
     name: "Plausible range of the forecast",
@@ -371,6 +451,39 @@ const MODEL = [
     note: "Weighting by volume avoids the trap of MAPE, which explodes on the months a "
       + "part barely moves and would rank a method by its behaviour on the least "
       + "important months.",
+  },
+  {
+    name: "Scaled error, and why it is still not enough",
+    theory: "Hyndman & Koehler (2006), mean absolute scaled error",
+    math: () => block(
+      mi("MASE"), eq,
+      frac(
+        row(sum("j", row(mo("|"), sub(mi("e"), mi("j")), mo("|"))), mo("/"), mi("n")),
+        row(sum("t", row(mo("|"), sub(mi("y"), mi("t")), minus,
+          sub(mi("y"), row(mi("t"), minus, mn(1))), mo("|"))), mo("/"),
+          par(row(mi("n"), minus, mn(1)))),
+      ),
+    ),
+    where: [
+      ["eⱼ", "Error of month j: forecast minus observed", "units"],
+      ["yₜ − yₜ₋₁", "Change the series makes on its own from one month to the next, "
+        + "measured inside each series and never across two", "units"],
+      ["MASE", "Error measured against what repeating last month would cost. Below 1 "
+        + "beats that reference", "dimensionless"],
+    ],
+    note: "WMAPE cannot be read on intermittent demand the way it reads elsewhere: every "
+      + "method lands above 100%, including doing nothing, because the error is dominated "
+      + "by the months where something is forecast and nothing is ordered — predicting two "
+      + "units against a consumption of zero is an error of infinite percent of zero. The "
+      + "scaled error fixes the scale problem: it divides by what the series does on its "
+      + "own, so it neither breaks on zeros nor depends on the size of the part. "
+      + "<b>It does not fix the criterion.</b> Both metrics are built on absolute error, "
+      + "and absolute error is minimised by the median — which on these series is zero. A "
+      + "forecaster claiming no part is ever consumed, one that would leave both plants "
+      + "with nothing, scores better on either than any honest method. What discriminates "
+      + "here is the squared error, minimised by the mean that the inventory policy "
+      + "actually consumes, and the cumulative bias, which says in units how short the "
+      + "plant would end up.",
   },
   {
     name: "Combination of the two forecasts",
@@ -429,27 +542,40 @@ const MODEL = [
   },
   {
     name: "Reorder point: the inventory minimum",
-    theory: "Safety stock under stochastic demand and lead time. Hadley & Whitin (1963)",
+    theory: "Negative-binomial quantile over the lead time. Hadley & Whitin (1963); "
+      + "Eppen & Martin (1988)",
     math: () => block(
       sub(mi("I"), mtext("min")), eq,
-      ceilOf(
-        mi("d"), times, mi("L"), plus,
-        fn("z", "k"), times, root(row(mi("L"), times, sup(sub(mi("σ"), mi("d")), mn(2)),
-          plus, sup(mi("d"), mn(2)), times, sup(sub(mi("σ"), mi("L")), mn(2)))),
-      ),
+      ceilOf(row(mtext("NegBin"), sup(mo("−"), mn(1)), par(row(
+        mi("α"), par(mi("k")), comma, gap,
+        mi("μ"), eq, mi("d"), times, mi("L"), comma, gap,
+        sup(mi("σ"), mn(2)), eq, mi("L"), times, sup(sub(mi("σ"), mi("d")), mn(2)),
+        plus, sup(mi("d"), mn(2)), times, sup(sub(mi("σ"), mi("L")), mn(2)),
+      )))),
     ),
     where: [
       ["d · L", "What gets consumed while the replenishment is in transit. Not a "
         + "buffer: the bare minimum", "units"],
-      ["z(k)", "Service factor by criticality: A 1.65 (95%) · B 1.28 (90%) · C 0.84 (80%)",
-        "dimensionless"],
+      ["σ²", "Variance of that demand, demand and lead time composed together", "units²"],
+      ["α(k)", "Service level by criticality: A 95% · B 90% · C 80%", "0 to 1"],
+      ["NegBin⁻¹", "Quantile of a negative binomial fitted to that mean and variance",
+        "units"],
       ["Imin", "Level at which an order is placed", "whole units"],
     ],
-    note: "The three z values are the only declaration of service policy in the whole "
-      + "system, and they are set by constant rather than derived from a shortage cost. "
-      + "Eppen & Martin (1988): demand over a random lead time is a mixture and is "
-      + "skewed, so the real service sits below the nominal one. The system does not "
-      + "correct for that.",
+    note: "The variance is composed exactly as before; what changed is how it becomes "
+      + "units. Adding z·σ assumes demand over the lead time is normal, and with "
+      + "intermittent consumption it is not. The measured consequence is blunt: on this "
+      + "catalogue a normal centred on that mean puts a median 39% of its probability "
+      + "mass on negative demand, and above 20% on 99% of the series. A third of the "
+      + "distribution living on impossible values has to come from somewhere, and the "
+      + "normal pays for it by stretching the right tail far past where the true quantile "
+      + "sits — which inflated the reorder point across the catalogue by 49%, some "
+      + "660,000 USD of capital. It was not being conservative, it was being invalid. "
+      + "Taking the quantile of a negative binomial — the overdispersed Poisson — puts the "
+      + "level where the distribution actually asks for it: lower here, slightly higher on "
+      + "the high-volume series where the normal does approximate well, which is the "
+      + "direction Eppen & Martin (1988) describe. The declared service levels did not "
+      + "change; they are simply reached now, and reached with half the capital.",
   },
 ];
 

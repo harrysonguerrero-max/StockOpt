@@ -21,7 +21,15 @@ export const state = {
   openKey: null,
   view: "turno",
   focusPlant: null,
+  /* La planta fijada con un clic frente a la que solo se esta mirando de
+     paso. Separarlas es lo que permite previsualizar sin perder el filtro. */
+  hoverPlant: null,
   tableFilter: null,
+  /* Presupuesto del escenario. Nulo significa el que trae la corrida del
+     pipeline; cualquier otro valor lo recalcula el servidor sin volver a
+     proyectar nada, porque el reparto solo mira columnas ya escritas. */
+  budget: null,
+  overrun: null,
 };
 
 export const keyOf = (item) => `${item.sku_id}|${item.city_id}`;
@@ -38,7 +46,12 @@ export async function api(path, options) {
 }
 
 export async function loadQueue(refresh = false) {
-  const data = await api(`/recommendations${refresh ? "?refresh=true" : ""}`);
+  const query = new URLSearchParams();
+  if (refresh) query.set("refresh", "true");
+  if (state.budget !== null) query.set("budget", state.budget);
+  if (state.overrun !== null) query.set("overrun", state.overrun);
+
+  const data = await api(`/recommendations${query.toString() ? `?${query}` : ""}`);
   state.items = data.items;
   state.filters = data.filters;
   state.summary = data.summary;

@@ -195,15 +195,19 @@ def classification_report(refresh: bool = False) -> dict:
 
     Funcionalidad:
         Se resuelve en vivo sobre las tablas cacheadas en lugar de publicarse
-        como artefacto, porque son veinte piezas y el calculo es un agregado.
+        como artefacto, porque es un agregado sobre unos cientos de piezas.
         Publicarlo obligaria a acordarse de regenerarlo cada vez que cambia la
         proyeccion, que es como se producen las pantallas que contradicen al
         dato que tienen al lado.
+
+        La clasificacion de patrones entra porque de ella sale el intervalo entre
+        demandas, que es lo que mide la rotacion en un catalogo de refacciones.
     """
     return build_classification(
         parts=load_table("parts_master.csv", refresh=refresh),
         forecast=load_table("demand_forecast.csv", refresh=refresh),
         inventory=load_table("inventory_current.csv", refresh=refresh),
+        patterns=load_table("demand_patterns.csv", refresh=refresh),
     )
 
 

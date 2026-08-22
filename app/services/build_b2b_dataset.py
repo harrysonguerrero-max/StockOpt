@@ -30,6 +30,8 @@ Funcionalidad:
     Uso: python -m app.services.build_b2b_dataset
 """
 
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -63,6 +65,10 @@ MIN_EVENTS_PER_SKU = 8
 MIN_EVENTS_PER_SERIES = 3
 
 MIN_UNIT_COST_USD = 0.5
+
+QUALITY_DIR = "quality"
+
+QUALITY_FILE = "data_quality_report.json"
 
 SUPPLY_TIERS = [
     (150.0, ["SUP-LOC-01", "SUP-LOC-02", "SUP-NAT-01"]),
@@ -170,7 +176,7 @@ def select_catalogue(lines: pd.DataFrame) -> pd.DataFrame:
         lines: lineas de pedido ya asignadas a planta.
 
     Salida:
-        Las lineas de las piezas que superan el minimo de eventos.
+        Tupla con las lineas conservadas y la bitacora de reglas aplicadas.
 
     Funcionalidad:
         Dos tercios de las referencias de la fuente se piden una sola vez en
@@ -188,18 +194,129 @@ def select_catalogue(lines: pd.DataFrame) -> pd.DataFrame:
         aparte— y sobre ellas el sistema no puede decidir nada: el costo de
         mantener sale del valor de la pieza, asi que con valor cero la cantidad
         economica se dispara y la comparacion entre ofertas pierde sentido.
+
+        Devuelve tambien la bitacora de los tres cortes. Un recorte que se lleva
+        dos tercios de las referencias no se puede aplicar en silencio: la etapa
+        de limpieza del pipeline publica exactamente estas cifras, con el
+        enunciado de la regla al lado, para que se pueda juzgar si el catalogo
+        que quedo es el catalogo que habia.
     """
+    rules = []
+
+    def cut(frame, keep_mask, rule, reason):
+        """Aplica un corte anotando cuantas lineas se lleva.
+
+        Entrada:
+            frame: lineas antes del corte.
+            keep_mask: mascara booleana de lo que se conserva.
+            rule: enunciado de la regla.
+            reason: por que se aplica.
+
+        Salida:
+            Las lineas conservadas.
+
+        Funcionalidad:
+            Anota siempre, incluso cuando la regla no descarta nada. Una regla
+            con cero filas es informacion: dice que la fuente ya venia limpia
+            en ese aspecto, y omitirla haria pensar que no se comprobo.
+        """
+        kept = frame[keep_mask]
+        rules.append({
+            "regla": rule,
+            "motivo": reason,
+            "filas": int(len(frame) - len(kept)),
+        })
+        return kept
+
     priced = lines.groupby("sku_id").PRICE_EXACT.median()
-    lines = lines[lines.sku_id.isin(priced[priced >= MIN_UNIT_COST_USD].index)]
+    lines = cut(
+        lines,
+        lines.sku_id.isin(priced[priced >= MIN_UNIT_COST_USD].index),
+        f"Discard references with a median price below {MIN_UNIT_COST_USD} USD",
+        "Zero-amount lines are samples, warranties or charges billed apart. Holding "
+        "cost derives from the value of the part, so at zero value the economic "
+        "order quantity diverges and comparing offers stops meaning anything",
+    )
 
     by_sku = lines.groupby("sku_id").size()
-    keep = by_sku[by_sku >= MIN_EVENTS_PER_SKU].index
-    lines = lines[lines.sku_id.isin(keep)]
+    lines = cut(
+        lines,
+        lines.sku_id.isin(by_sku[by_sku >= MIN_EVENTS_PER_SKU].index),
+        f"Discard references with fewer than {MIN_EVENTS_PER_SKU} events in the window",
+        "Two thirds of the source references are ordered once in several years. They "
+        "are real and they are the tail of the catalogue, but with a single event "
+        "there is nothing to project",
+    )
 
     by_series = lines.groupby(["sku_id", "city_id"]).size()
     pairs = set(by_series[by_series >= MIN_EVENTS_PER_SERIES].index)
-    mask = [(sku, city) in pairs for sku, city in zip(lines.sku_id, lines.city_id, strict=False)]
-    return lines[mask].reset_index(drop=True)
+    lines = cut(
+        lines,
+        [(sku, city) in pairs for sku, city in zip(lines.sku_id, lines.city_id, strict=False)],
+        f"Discard part-and-plant series with fewer than {MIN_EVENTS_PER_SERIES} events",
+        "A reference active in one complex can appear once loose in the other, and "
+        "that series is not projectable either even though the part is",
+    )
+
+    return lines.reset_index(drop=True), rules
+
+
+def write_quality_report(orders, lines, rules, years, directory) -> None:
+    """Publica lo que la construccion del dataset descarto y por que.
+
+    Entrada:
+        orders: lineas crudas tal como salieron de la fuente.
+        lines: lineas que sobrevivieron a los cortes.
+        rules: bitacora devuelta por `select_catalogue`.
+        years: anos de la fuente que se leyeron.
+        directory: carpeta del dataset publicado.
+
+    Salida:
+        Ninguna. Escribe el informe de calidad en disco.
+
+    Funcionalidad:
+        La etapa de limpieza del pipeline es la unica cuyo valor esta en lo que
+        quito. Sin este archivo esa etapa no tiene nada que contar sobre la
+        fuente actual, y antes contaba lo de la fuente anterior: seguia
+        publicando descartes de un CSV sintetico que ya no interviene en nada.
+
+        El formato es el que consume `cleaning_summary`, deliberadamente: el
+        constructor cambio de fuente, pero el contrato con el pipeline no tiene
+        por que cambiar con el.
+    """
+    name = SOURCE_TEMPLATE.format(year=f"{years[0]}-{years[-1]}")
+    report = {
+        "antes": {
+            "b2b": {
+                "name": name,
+                "rows": int(len(orders)),
+                "columns": int(orders.shape[1]),
+            }
+        },
+        "despues": {
+            "b2b": {
+                "name": name,
+                "rows": int(len(lines)),
+                "columns": int(lines.shape[1]),
+            }
+        },
+        "limpieza": {
+            "b2b": [
+                *rules,
+                {
+                    "regla": "RESULTADO",
+                    "motivo": "Order lines kept for the catalogue",
+                    "filas": int(len(lines)),
+                },
+            ]
+        },
+    }
+
+    folder = directory / QUALITY_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / QUALITY_FILE).write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def build_parts_master(lines: pd.DataFrame) -> pd.DataFrame:
@@ -417,7 +534,7 @@ def main() -> None:
 
     rng = np.random.default_rng(SEED)
     orders = load_orders(years)
-    lines = select_catalogue(split_into_plants(orders))
+    lines, rules = select_catalogue(split_into_plants(orders))
 
     parts = build_parts_master(lines)
     demand = build_demand_history(lines, rng)
@@ -440,12 +557,16 @@ def main() -> None:
     for name, frame in tables.items():
         frame.to_csv(OUT_DIR / name, index=False)
     write_data_dictionary(OUT_DIR)
+    write_quality_report(orders, lines, rules, years, OUT_DIR)
 
     months = sorted(demand.period_month.unique())
     series = demand.groupby(["sku_id", "city_id"]).ngroups
     zero_share = (demand.qty_issued == 0).mean()
 
     print(f"Dataset B2B generado en {OUT_DIR}")
+    print(f"  lineas crudas    : {len(orders):,}  ->  {len(lines):,} conservadas")
+    for rule in rules:
+        print(f"    -{rule['filas']:>8,}  {rule['regla']}")
     print(f"  anos usados      : {years[0]}-{years[-1]}  ({len(months)} meses, 0 % sintetico)")
     print(f"  cliente          : {CUSTOMER_ID}")
     print(f"  piezas           : {len(parts):,}")

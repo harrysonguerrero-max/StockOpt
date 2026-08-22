@@ -17,6 +17,7 @@
     <button class="navlink navlink--on" data-view="turno" type="button">The shift</button>
     <button class="navlink" data-view="tabla" type="button">All parts</button>
     <button class="navlink" data-view="modelo" type="button">Model &amp; pipeline</button>
+    <button class="navlink" data-view="datos" type="button">Raw data</button>
   </nav>
   <div class="topbar__nav">
     <a class="navlink" id="export-all" href="#">Download CSV</a>
@@ -24,23 +25,27 @@
   </div>
 </header>
 
-<!-- El turno: que amenaza la produccion, donde esta, y solo entonces la lista. -->
+<!-- El turno: primero si estoy bien, luego que decidir, y el mapa al lado.
+     El mapa baja a la columna estrecha porque son dos plantas: ocupaba media
+     pantalla para decir algo que cabe en una ficha, y empujaba los casos —que
+     son el trabajo— por debajo del pliegue. -->
 <main id="view-turno">
-  <section class="opening">
-    <p class="opening__lead">Production-continuity replenishment · Nava and Ciudad Obregón</p>
-    <h2 class="display" id="opening-line">Loading the shift…</h2>
-    <div class="opening__note" id="opening-note"></div>
+  <section class="health" id="health" aria-label="Shift status">
+    <p class="health__lead">Production-continuity replenishment · Nava and Ciudad Obregón</p>
+    <h2 class="health__verdict">Loading the shift…</h2>
   </section>
 
-  <section class="atlas" aria-label="Cases by location">
-    <div class="atlas__map" id="map"></div>
-    <div class="atlas__side">
-      <div id="plant-card"></div>
-      <p class="meta atlas__filter" id="map-filter"></p>
+  <div class="shift">
+    <div class="shift__cases">
+      <section id="bands" aria-label="Cases waiting for a decision"></section>
     </div>
-  </section>
 
-  <section id="bands" aria-label="Cases"></section>
+    <aside class="shift__side" aria-label="Plants">
+      <div class="scope" id="map-filter"></div>
+      <div class="atlas__map" id="map"></div>
+      <div id="plant-card"></div>
+    </aside>
+  </div>
 </main>
 
 <!-- La tabla completa sigue existiendo, pero como destino y no como portada. -->
@@ -105,17 +110,26 @@
         <h3>Follow one part through the pipeline</h3>
         <p class="meta">From its consumption history to the purchase decision, step by step.</p>
       </div>
-      <div class="tracer__pick">
-        <label class="field">
-          <span class="label">Part</span>
-          <select id="tr-sku"></select>
-        </label>
-        <label class="field">
-          <span class="label">Plant</span>
-          <select id="tr-city"></select>
-        </label>
-      </div>
     </header>
+
+    <!-- Ochocientas setenta y seis referencias en un desplegable sin filtrar no
+         son una eleccion, son una lista. La busqueda por codigo o descripcion la
+         recorta antes de que haya que abrirla. -->
+    <div class="tracer__pick tracer__pick--main">
+      <label class="field field--grow">
+        <span class="label">Find a part</span>
+        <input type="search" id="tr-search" placeholder="Code or description"
+               autocomplete="off">
+      </label>
+      <label class="field field--grow">
+        <span class="label">Part <span class="meta" id="tr-matches"></span></span>
+        <select id="tr-sku"></select>
+      </label>
+      <label class="field">
+        <span class="label">Plant</span>
+        <select id="tr-city"></select>
+      </label>
+    </div>
     <div class="trace" id="trace"></div>
   </section>
 </main>
@@ -154,7 +168,7 @@
 
       <section class="card">
         <h3>Value against rotation</h3>
-        <p class="meta">Each bubble is a part. Right means it moves often, up means it
+        <p class="meta">Each bubble is a part. Right means it moves in more months, up means it
           moves money. Colour is criticality — the one dimension neither axis can
           derive, because it is a maintenance judgement and not a measurement.</p>
         <div id="class-scatter"></div>
@@ -164,6 +178,33 @@
     <div class="classify__profiles" id="class-profiles"></div>
     <div class="classify__matrices" id="class-matrices"></div>
     <div id="class-finding"></div>
+  </section>
+
+  <!-- El presupuesto es un control y no una constante: moverlo reparte otra vez
+       sin volver a proyectar, que es la unica forma de ver la restriccion de
+       continuidad actuando. Vive junto al dato en crudo porque es un parametro
+       del escenario, del mismo orden que las tablas de las que se alimenta, y no
+       una cifra que el turno tenga que estar mirando. -->
+  <section class="card budget" aria-label="Run budget">
+    <h3>Run budget</h3>
+    <p class="meta">The money available for this run and the overrun already authorised.
+      Changing either reallocates the whole catalogue in place — no forecast is recomputed,
+      because the knapsack only reads columns that are already written. Lower it and the
+      continuity rule becomes visible: criticality-A parts stop being deferred and start
+      being escalated instead.</p>
+    <form class="budgetbar" id="budget-bar">
+      <label class="field">
+        <span class="label">Run budget · USD</span>
+        <input type="number" id="budget-amount" min="0" step="500" inputmode="numeric">
+      </label>
+      <label class="field">
+        <span class="label">Authorised overrun · USD</span>
+        <input type="number" id="budget-overrun" min="0" step="500" inputmode="numeric">
+      </label>
+      <button class="btn btn--go" id="budget-apply" type="submit">Reallocate</button>
+      <button class="btn btn--quiet" id="budget-reset" type="button" hidden>Back to the run</button>
+      <span class="budgetbar__hint" id="budget-hint"></span>
+    </form>
   </section>
 
   <section class="explorer">
@@ -195,6 +236,7 @@
           <tbody id="t-body"></tbody>
         </table>
       </div>
+      <div id="t-status"></div>
 
       <footer class="explorer__foot">
         <span class="meta" id="t-count"></span>

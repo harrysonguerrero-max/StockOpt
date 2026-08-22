@@ -96,26 +96,39 @@ def health_check():
 
 
 @router.get("/recommendations")
-def read_recommendations(refresh: bool = False):
+def read_recommendations(
+    refresh: bool = False, budget: float | None = None, overrun: float | None = None
+):
     """Devuelve la cola completa de recomendaciones.
 
     Entrada:
         refresh: vuelve a leer los archivos del pipeline si es verdadero.
+        budget: presupuesto de la corrida. Si no se indica, el del pipeline.
+        overrun: excedente autorizado para cubrir lo critico.
 
     Salida:
         Diccionario con el resumen, los filtros disponibles y la lista de items.
 
     Funcionalidad:
         Es la unica llamada que necesita la pantalla principal para pintarse.
+
+        El presupuesto se acepta por parametro porque el reparto se puede
+        recalcular sin volver a correr el pipeline: la mochila solo mira columnas
+        que ya estan escritas. Asi la pantalla puede ofrecerlo como un control y
+        ensenar en vivo que reposiciones se aplazan y cuales obligan a escalar,
+        que con el presupuesto holgado no se ve nunca.
     """
     if not dataset_is_available():
         raise HTTPException(
             status_code=503,
             detail="The dataset has not been generated. Run the pipeline in app/data.",
         )
-    queue = build_queue(refresh=refresh)
+    if budget is not None and budget < 0:
+        raise HTTPException(status_code=400, detail="The budget cannot be negative")
+
+    queue = build_queue(refresh=refresh, budget=budget, overrun_max=overrun)
     return {
-        "summary": build_summary(queue),
+        "summary": build_summary(queue, budget=budget, overrun_max=overrun),
         "filters": filter_options(queue),
         "items": queue,
     }
@@ -329,7 +342,12 @@ def read_training_chart(name: str):
     path = training.ARTIFACT_DIR / filename
     if not path.exists():
         raise HTTPException(status_code=503, detail="That chart has not been generated yet.")
-    return FileResponse(path, media_type="image/png")
+
+    return FileResponse(
+        path,
+        media_type="image/png",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 @router.get("/data/tables")
@@ -461,13 +479,25 @@ def read_pipeline_chart(name: str):
     Funcionalidad:
         Solo sirve nombres declarados en la configuracion, igual que la ruta de
         las graficas de entrenamiento.
+
+        La cabecera obliga a revalidar en cada carga. El nombre del recurso no
+        cambia cuando se regenera el pipeline —siempre es la misma clave
+        logica— asi que sin ella el navegador se queda con la imagen anterior
+        indefinidamente: se corrige una grafica, se vuelve a generar, y la
+        pantalla sigue mostrando la vieja. Es indistinguible de que el arreglo
+        no se hubiera hecho, y cuesta horas de diagnostico.
     """
     path = pipeline_report.chart_path(name)
     if path is None:
         raise HTTPException(status_code=404, detail=f"Unknown chart: {name}")
     if not path.exists():
         raise HTTPException(status_code=503, detail="That chart has not been generated yet.")
-    return FileResponse(path, media_type="image/png")
+
+    return FileResponse(
+        path,
+        media_type="image/png",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 @router.get("/pipeline/trace/{sku_id}/{city_id}")

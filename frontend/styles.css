@@ -192,287 +192,678 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 
 /* Centrada: es una sola frase y es lo primero que se lee. Alineada a la
    izquierda competia con el borde de la pagina y no parecia un titular. */
-.opening { padding: 54px 0 34px; max-width: 68ch; margin: 0 auto; text-align: center; }
+/* ---------- El estado de salud ----------
+ *
+ * Un veredicto en grande y tres luces debajo. El veredicto es la peor de las
+ * tres, de modo que no puede decir que todo va bien mientras una esta en rojo:
+ * ese era exactamente el problema de la version anterior, que afirmaba
+ * "produccion cubierta" encima de setenta y ocho alertas.
+ */
 
-.opening__lead {
-  color: var(--text-secondary);
+.health {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--line-strong);
+  border-radius: 3px;
+  padding: 18px 22px 16px;
+  margin-bottom: 16px;
+}
+
+.health--stop { border-top-color: var(--danger); }
+.health--hold { border-top-color: var(--warning); }
+.health--go { border-top-color: var(--success); }
+
+.health__lead {
+  margin: 0 0 6px;
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  margin: 0 0 18px;
-  font-family: var(--mono);
-}
-
-.opening .display { max-width: none; margin: 0 auto; }
-.opening__note { margin-left: auto; margin-right: auto; max-width: 62ch; }
-
-/* La desviacion se marca en el titular, no en una caja aparte: es lo unico que
-   cambia si el comprador tiene que hacer algo hoy. */
-.display--alert { color: var(--danger); }
-
-.opening__note { margin: 16px 0 0; font-size: 14px; color: var(--text-secondary); }
-.lede { display: block; margin-top: 7px; line-height: 1.55; }
-.lede b { color: var(--text-primary); font-family: var(--mono); font-weight: 600; }
-
-.figure-link {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
   font-weight: 700;
-  border-bottom: 2px solid var(--primary-light);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
-.figure-link:hover { border-bottom-color: var(--secondary); }
-.figure-link--go { color: var(--success); border-bottom-color: #C7E2C9; }
-.figure-link--hold { color: var(--warning); border-bottom-color: #F0DDB4; }
-.figure-link--stop { color: var(--danger); border-bottom-color: #EFC9C9; }
+.health__verdict {
+  margin: 0 0 14px;
+  font-size: clamp(22px, 2.6vw, 30px);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.18;
+  color: var(--text-primary);
+  max-width: 30ch;
+}
+
+.health--stop .health__verdict { color: #8A1F1F; }
+
+/* Las tres luces. Cada una lleva su palabra ademas del color: uno de cada doce
+   hombres no distingue rojo de verde, y una captura en blanco y negro tiene que
+   seguir diciendo lo mismo. */
+.health__lights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.light {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 11px 13px 12px;
+  background: var(--background);
+}
+
+.light__head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+
+.light__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-secondary);
+}
+
+.light__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.light__word {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.light__figure {
+  display: block;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+
+.light__note {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.light--stop { border-color: #E8B4B4; background: #FDF6F6; }
+.light--stop .light__dot { background: var(--danger); }
+.light--stop .light__word { background: #FBE9E9; color: #8A1F1F; }
+
+.light--hold { border-color: #E7D3A6; background: #FEFBF4; }
+.light--hold .light__dot { background: var(--warning); }
+.light--hold .light__word { background: #FBF2DF; color: #7A4E00; }
+
+.light--go { border-color: #C4DEC6; background: #FAFDFA; }
+.light--go .light__dot { background: var(--success); }
+.light--go .light__word { background: #E7F2E8; color: #1B5E20; }
+
+/* Los puntos concretos, en vinetas. Antes eran cinco frases seguidas con seis
+   importes dentro: informacion correcta imposible de escanear.
+
+   En pantalla ancha van en columnas porque son categorias paralelas —lo
+   comprometido, lo que espera, lo frenado— y apilados empujaban el primer caso
+   por debajo del pliegue. El orden de lectura sigue siendo el de importancia. */
+.health__points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 10px;
+}
+
+.point {
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--line-strong);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.point b { display: block; font-weight: 700; color: var(--text-primary); }
+.point span { color: var(--text-secondary); }
+.point--stop { border-left-color: var(--danger); }
+.point--hold { border-left-color: var(--warning); }
+.point--go { border-left-color: var(--success); }
+
+/* ---------- El reparto del turno ----------
+   Los casos son el trabajo y se llevan la columna ancha. El mapa son dos
+   ciudades: en la columna estrecha dice lo mismo y deja de empujar la lista por
+   debajo del pliegue. */
+
+/* El mapa manda en el reparto. Son dos plantas, pero es el unico sitio donde se
+   ve que estan a mil kilometros con bodegas y proveedores distintos, y esa es la
+   informacion que no cabe en ninguna lista. La columna de casos se estrecha y
+   sus tarjetas se compactan: la lista sirve para recorrer, y lo que hace falta
+   para estudiar un caso lo da la vista previa. */
+.shift {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.shift__side {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 10px;
+}
 
 /* ---------- El mapa ----------
-   Dos columnas decian el grano de la decision pero no que Nava y Obregon estan
-   a mil kilometros, con bodega propia y proveedores distintos. La burbuja lo
-   dice sin escribirlo. */
-
-/* El mapa es el protagonista y la ficha va encima, no al lado: dos bloques
-   contiguos se leian como dos cosas, y son la misma. `isolation` crea un
-   contexto de apilamiento propio para que los paneles de Leaflet —que usan
-   z-index altos— no se cuelen por encima del panel lateral. */
-.atlas {
-  position: relative;
-  isolation: isolate;
-  z-index: 0;
-  margin: 8px 0 38px;
+ *
+ * Mas bajo que la version original —ocupaba media pantalla para decir algo que
+ * cabe en un tercio— pero no diminuto: por debajo de unos 340 px las dos
+ * burbujas se tocan y el pais deja de reconocerse.
+ *
+ * Sin controles de zoom ni arrastre. Son dos plantas fijas: la unica
+ * interaccion util es senalar una, y un mapa que se puede desencuadrar solo
+ * ofrece formas de perderse. */
+.atlas__map {
+  height: 560px;
+  min-height: 560px;
+  background: #EEF2F6;
   border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
 }
 
-.atlas__map { height: 520px; min-height: 520px; background: var(--surface); }
+.atlas__map .leaflet-container { background: #EEF2F6; font: inherit; }
 
-.atlas__side {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 300px;
-  max-width: calc(100% - 32px);
-  z-index: 500;
+/* La etiqueta cuelga debajo de la burbuja. Encima tapaba el circulo justo donde
+   hay que pinchar. */
+.bubble-label {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
   pointer-events: none;
+  text-align: center;
+  transition: opacity 0.15s ease;
 }
 
-.atlas__side > * { pointer-events: auto; }
-
-.atlas__filter {
-  margin: 10px 0 0;
-  text-align: right;
-  background: rgba(255,255,255,0.92);
-  padding: 7px 11px;
-  border: 1px solid var(--line);
+.bubble-label__n {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-primary);
 }
 
-.leaflet-container { height: 100%; width: 100%; font: inherit; background: var(--surface); }
-.leaflet-container a { color: var(--secondary); }
-.bubble { cursor: pointer; transition: fill-opacity 0.15s ease; }
-.bubble:hover { fill-opacity: .45; }
+.bubble-label__name {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.86);
+  border-radius: 2px;
+  padding: 1px 5px;
+}
 
-.bubble-label { text-align: center; pointer-events: none; line-height: 1.15; }
-.bubble-label__n { display: block; font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--text-primary); }
-.bubble-label__name { display: block; font-size: 11px; font-weight: 600; color: var(--text-primary); }
+.bubble-label__usd {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.86);
+  border-radius: 2px;
+  padding: 0 4px;
+}
 
-/* Ficha de la planta: lo que se pregunta al pinchar una burbuja. */
-.pcard {
+.bubble-label--on .bubble-label__n { font-size: 19px; }
+.bubble-label--off { opacity: 0.35; }
+
+.bubble { cursor: pointer; transition: fill-opacity 0.15s ease, stroke-width 0.15s ease; }
+
+.atlas__map .leaflet-interactive:focus { outline: 2px solid var(--secondary); }
+
+/* La barra de alcance: tres botones y el estado actual en palabras. Sustituye a
+   la instruccion "haz clic en una planta", que pedia una accion para dar
+   informacion en vez de darla ya. */
+.scope { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.scope__btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
   border: 1px solid var(--line-strong);
-  background: rgba(255,255,255,0.96);
-  padding: 16px 18px 14px;
-  box-shadow: 0 10px 30px rgba(31,41,51,0.14);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.pcard__head h3 { margin: 0 0 2px; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
-.pcard__stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin-top: 16px; }
-.pstat__n { display: block; font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--primary); margin: 2px 0 1px; }
-.pcard__bar { height: 7px; background: #EDF1F6; border: 1px solid var(--line-strong); margin-top: 16px; }
-.pcard__fill { display: block; height: 100%; }
-.pcard__fill--go { background: var(--success); }
-.pcard__fill--hold { background: var(--warning); }
-.pcard__fill--stop { background: var(--danger); }
 
-/* ---------- Bandas ----------
-   Tres franjas ordenadas por quien debe actuar. La primera dice de forma
-   explicita que ahi hace falta una persona, y eso es lo que resuelve el
-   "no se por donde empezar". */
+.scope__btn:hover { border-color: var(--secondary); color: var(--secondary); }
+.scope__btn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 1px; }
 
-.band { margin-bottom: 3px; }
+.scope__btn--on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--surface);
+}
 
-/* La cabecera se queda pegada arriba al desplazar. Antes, al desplegar una
-   banda las demas se iban tan abajo que dejaban de existir; ahora sus cabeceras
-   se apilan bajo la barra y siempre se ve donde esta cada cosa. */
+.scope__note { font-size: 11.5px; color: var(--text-secondary); }
+
+/* El boton que lleva de la cifra a los casos que la producen. Decir "3 criticas
+   esperan" y dejar que se busquen entre setenta y ocho es la clase de alerta que
+   se aprende a ignorar. */
+.point__go {
+  display: inline-block;
+  margin-top: 5px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--secondary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.point__go:hover { color: var(--primary); }
+.point__go:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+
+.pcard__use { margin: 6px 0 0; font-size: 11px; }
+.pcard--both .pstat__n--stop { color: var(--danger); }
+.pcard--both .pstat__n--hold { color: var(--warning); }
+.pcard--both .pstat__n--go { color: var(--success); }
+.pcard__hint { margin: 10px 0 0; font-size: 11.5px; }
+
+/* La linea de lo que no pide nada. Mil ciento diecisiete tarjetas plegadas
+   seguian ocupando un titulo, un contador y un sitio en el orden de lectura. */
+.quiet {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  border-radius: 3px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.quiet b { color: var(--text-primary); }
+
+@media (max-width: 1080px) {
+  .shift { grid-template-columns: 1fr; }
+  .shift__side { position: static; }
+}
+
+.band { margin-bottom: 10px; }
+
 .band__head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   width: 100%;
-  padding: 14px 18px;
-  border: 0;
   font: inherit;
   text-align: left;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--surface);
   cursor: pointer;
-  position: sticky;
-  top: 58px;
-  z-index: 4;
-  background: var(--background);
-  color: var(--text-primary);
-  border-left: 6px solid var(--line-strong);
 }
 
-.band__title { font-size: 15px; font-weight: 650; letter-spacing: -0.015em; }
+.band__text { flex: 1 1 auto; min-width: 0; }
+.band__title { display: block; font-size: 14.5px; font-weight: 700; letter-spacing: -0.015em; }
 
-/* El semaforo va en macizo, no en tinte: el color plano de la izquierda y el
-   contador en su color son lo que se ve antes de leer nada. */
+.band__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 400;
+  opacity: .8;
+}
+
+.band--escalar .band__head { background: var(--primary-light); border-left-color: var(--primary); color: var(--primary); }
 .band--decide .band__head { background: #FBF0DC; border-left-color: var(--warning); color: #7A4E00; }
 .band--aplazado .band__head { background: #F9DEDE; border-left-color: var(--danger); color: #8A1F1F; }
-.band--auto .band__head { background: #E2F0E3; border-left-color: var(--success); color: #1B5E20; }
 .band--curso .band__head { background: var(--primary-light); border-left-color: var(--secondary); color: var(--primary); }
-.band--muted .band__head { background: var(--surface); border-left-color: var(--line); color: var(--text-secondary); }
-.band--muted .band__title { font-weight: 600; font-size: 13.5px; }
+.band--auto .band__head { background: var(--surface); border-left-color: var(--success); color: var(--text-secondary); }
+.band--muted .band__title { font-weight: 650; font-size: 13.5px; }
 
 .band__head:hover { filter: brightness(0.97); }
+.band__head:focus-visible { outline: 2px solid var(--secondary); outline-offset: 1px; }
 
 .band__caret {
-  font-size: 10px;
-  transition: transform 0.14s ease;
-  display: inline-block;
-  opacity: .7;
+  font-size: 9px;
+  flex: none;
+  transition: transform 0.15s ease;
 }
 
-.band[data-open="true"] .band__caret { transform: rotate(90deg); }
+.band[data-open="true"] > .band__head .band__caret,
+.group[data-open="true"] > .group__head .band__caret { transform: rotate(90deg); }
+
+/* El contador de criticas se separa del total: doce casos de los que dos paran
+   una linea no es lo mismo que doce que no. */
+.band__crit {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 2px;
+  background: #FBE9E9;
+  color: #8A1F1F;
+  white-space: nowrap;
+}
 
 .band__n {
-  margin-left: auto;
   font-family: var(--mono);
-  font-size: 21px;
-  font-weight: 600;
-  line-height: 1;
+  font-size: 17px;
+  font-weight: 700;
+  flex: none;
+  min-width: 2.2ch;
+  text-align: right;
 }
 
-.band--muted .band__n { font-size: 15px; }
-.band__body { display: none; padding: 14px 0 26px; }
+.band__body { display: none; padding: 12px 0 18px; }
+.band[data-open="true"] > .band__body { display: block; }
 
-.band[data-open="true"] .band__body {
+/* ---------- Los grupos por criticidad ----------
+ * Setenta y ocho casos con la misma causa no son setenta y ocho problemas. La
+ * practica de gestion de alertas dice agrupar lo correlacionado en un incidente;
+ * aqui el eje que decide es la criticidad, y solo el grupo que para lineas llega
+ * abierto.
+ */
+
+.group { margin-bottom: 8px; }
+
+.group__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--background);
+  cursor: pointer;
+}
+
+.group__head:hover { background: #EEF2F7; }
+.group__head:focus-visible { outline: 2px solid var(--secondary); outline-offset: 1px; }
+
+.group__letter {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 800;
+  width: 24px;
+  height: 24px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
-  gap: 14px;
+  place-items: center;
+  border-radius: 3px;
+  flex: none;
 }
 
-/* ---------- La tarjeta de un caso ---------- */
+.group__head--A .group__letter { background: #FBE9E9; color: #8A1F1F; }
+.group__head--B .group__letter { background: #FBF2DF; color: #7A4E00; }
+.group__head--C .group__letter { background: #EEF1F5; color: var(--text-secondary); }
 
-/* La tarjeta ya no es un recuadro con borde: es una columna de contenido con
-   una marca de estado arriba. Veintiun rectangulos identicos era la firma mas
-   clara de plantilla, y una franja que se usa en todo no significa nada. */
+.group__means { flex: 1 1 auto; font-size: 12.5px; font-weight: 650; }
+
+.group__n {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.group__usd {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 9ch;
+  text-align: right;
+}
+
+.group__body { display: none; padding: 10px 0 6px 10px; }
+.group[data-open="true"] > .group__body { display: block; }
+
+/* ---------- La tarjeta de un caso ----------
+ *
+ * Una fila, no una ficha. En unos 78 px caben la criticidad, la pieza, una barra
+ * de existencias sin rotular, la planta, el importe y los botones. Lo que no
+ * cabe —el riesgo redactado, el medidor con cifras, el plan completo— lo da la
+ * vista previa al pasar el raton, y el detalle entero lo da el clic.
+ *
+ * Tres niveles en vez de dos: asi la lista se puede recorrer de un vistazo sin
+ * renunciar a la informacion.
+ */
+
 .case {
-  display: block;
-  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 64px auto auto;
+  grid-template-areas:
+    "crit id bar plant usd"
+    "crit id bar end   end";
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
   width: 100%;
   text-align: left;
   font: inherit;
   color: inherit;
   background: var(--surface);
-  padding: 15px 16px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: 3px;
+  padding: 8px 11px;
+  margin-bottom: 6px;
   cursor: pointer;
-  border: 1px solid transparent;
-  border-top: 0;
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
-.case:hover { border-color: var(--line); background: #FAFCFE; }
-.case:focus-visible { border-color: var(--secondary); }
+.case--stop { border-left-color: var(--danger); }
+.case--hold { border-left-color: var(--warning); }
+.case--escalate { border-left-color: var(--primary); }
+.case--go { border-left-color: var(--success); }
+.case--off { border-left-color: var(--line); }
+.case--done { background: #FCFDFE; }
 
-.case__mark { display: block; height: 4px; margin: 0 -16px 13px; background: var(--line-strong); }
-.case--go .case__mark { background: var(--success); }
-.case--hold .case__mark { background: var(--warning); }
-.case--stop .case__mark { background: var(--danger); }
-.case--off .case__mark { background: var(--line); }
+.case:hover, .case:focus-visible { background: #F4F8FC; border-color: var(--secondary); }
+.case:focus-visible { outline: 2px solid var(--secondary); outline-offset: 1px; }
 
-.case--hold, .case--stop { border-color: var(--line); }
-.case--hold:hover { border-color: var(--warning); }
-.case--stop:hover { border-color: var(--danger); }
+.case--flash { animation: case-flash 1.6s ease; }
 
-.case__light {
-  padding: 3px 7px;
-  color: var(--surface);
+@keyframes case-flash {
+  0%, 60% { box-shadow: 0 0 0 3px var(--warning); }
+  100% { box-shadow: none; }
 }
 
-.case__light--go { background: var(--success); }
-.case__light--hold { background: var(--warning); }
-.case__light--stop { background: var(--danger); }
-.case__light--off { background: transparent; color: var(--text-secondary); padding-left: 0; padding-right: 0; }
+.case__crit {
+  grid-area: crit;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 800;
+}
 
-.case__part { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
-.case__glyph { flex: none; color: var(--text-secondary); line-height: 0; padding-top: 1px; }
-.case--go .case__glyph { color: var(--primary); }
-.case__top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.case__sku { font-family: var(--mono); font-size: 13px; font-weight: 600; }
-.case__name { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.case__crit--A { background: #FBE9E9; color: #8A1F1F; }
+.case__crit--B { background: #FBF2DF; color: #7A4E00; }
+.case__crit--C { background: #EEF1F5; color: var(--text-secondary); }
 
-.case__light {
-  margin-left: auto;
-  font-size: 10px;
+.case__id { grid-area: id; min-width: 0; }
+.case__sku { display: block; font-family: var(--mono); font-size: 11.5px; font-weight: 650; }
+
+.case__name {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La barra sin rotular: en la lista solo tiene que decir si el stock esta antes
+   o despues de la marca de reorden. Las cifras las pone la vista previa. */
+.case__bar {
+  grid-area: bar;
+  position: relative;
+  height: 7px;
+  background: #EDF1F6;
+  border: 1px solid var(--line-strong);
+  border-radius: 1px;
+}
+
+.case__bar__fill { position: absolute; inset: 0 auto 0 0; }
+.case__bar__fill--critico { background: var(--danger); }
+.case__bar__fill--ajustado { background: var(--warning); }
+.case__bar__fill--holgado { background: var(--success); }
+
+.case__bar__min {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--text-primary);
+}
+
+.case__plant {
+  grid-area: plant;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
-.case__light--go { color: var(--success); }
-.case__light--hold { color: var(--warning); }
-.case__light--stop { color: var(--danger); }
-.case__light--off { color: var(--text-secondary); }
-
-/* Lo que el sistema haria, en los casos que no puede cerrar solo. */
-.advice {
-  display: block;
-  font-size: 12.5px;
-  margin-top: 11px;
-  padding-left: 11px;
-  border-left: 2px solid var(--line-strong);
-  color: var(--text-secondary);
+.case__usd {
+  grid-area: usd;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
 }
 
-.advice b { color: var(--text-primary); }
-.advice--buy { border-left-color: var(--success); }
-.advice--hold { border-left-color: var(--text-secondary); }
-.advice i { display: block; font-style: normal; font-size: 11px; margin-top: 3px; opacity: .8; }
+.case__end { grid-area: end; justify-self: end; }
 
-/* Barra de decision de la tarjeta. Aprobar se resuelve aqui; rechazar lleva al
-   panel, porque exige un motivo y el motivo se registra. */
-.case__decide {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 13px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+.case__foot { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.case__foot .btn { padding: 4px 10px; font-size: 11px; }
+
+.case__call {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 2px;
+  white-space: nowrap;
 }
 
-.case__decide .btn { padding: 7px 13px; font-size: 12px; }
+.case__call--go { background: #E7F2E8; color: #1B5E20; }
+.case__call--hold { background: #FBF2DF; color: #7A4E00; }
+.case__call--stop { background: #FBE9E9; color: #8A1F1F; }
 
-/* La pista de que hay mas detras. Quieta y tenue hasta que el puntero entra en
-   la tarjeta; entonces avanza. Sin ella nada indicaba que la tarjeta se abre. */
+.case__done { font-size: 10.5px; font-weight: 650; color: var(--success); white-space: nowrap; }
+.case__done--stop { color: var(--danger); }
+
 .case__more {
-  margin-left: auto;
-  font-size: 11.5px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--text-secondary);
   white-space: nowrap;
-  opacity: .55;
-  transition: opacity 0.15s ease, color 0.15s ease;
+  opacity: .5;
 }
 
-.case__more i { font-style: normal; display: inline-block; transition: transform 0.18s ease; }
+.case__more i { font-style: normal; }
 .case:hover .case__more { opacity: 1; color: var(--primary); }
-.case:hover .case__more i { transform: translateX(4px); }
-.case:focus-visible .case__more { opacity: 1; color: var(--primary); }
+
+/* ---------- La vista previa ----------
+ *
+ * Centrada y fija. Anclada a la tarjeta quedaria fuera de pantalla en las de
+ * abajo; siguiendo al cursor obligaria a perseguirla. En el centro siempre cabe
+ * y siempre esta donde se la dejo.
+ */
+
+.peek {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, 90vw);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-top: 4px solid var(--line-strong);
+  border-radius: 4px;
+  box-shadow: 0 22px 60px rgba(16, 32, 48, 0.28);
+  z-index: 1500;
+  cursor: pointer;
+  animation: peek-in 0.12s ease;
+}
+
+@keyframes peek-in {
+  from { opacity: 0; transform: translate(-50%, -46%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+.peek--stop { border-top-color: var(--danger); }
+.peek--hold { border-top-color: var(--warning); }
+.peek--escalate { border-top-color: var(--primary); }
+.peek--go { border-top-color: var(--success); }
+.peek--off { border-top-color: var(--line); }
+
+.peek__head { display: flex; align-items: center; gap: 10px; padding: 13px 15px 11px; }
+.peek__id { flex: 1 1 auto; min-width: 0; }
+.peek__id b { display: block; font-family: var(--mono); font-size: 12.5px; }
+.peek__id span { display: block; font-size: 13px; color: var(--text-secondary); margin-top: 1px; }
+
+.peek__block { padding: 11px 15px; border-top: 1px solid var(--line); }
+.peek__block .label { display: block; margin-bottom: 5px; }
+.peek__block .case__risk, .peek__block .case__plan { font-size: 12.5px; line-height: 1.45; margin: 0; }
+.peek__block .case__risk b, .peek__block .case__plan b { font-family: var(--mono); }
+
+.peek__foot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 15px 12px;
+  border-top: 1px solid var(--line);
+  background: #FBFCFD;
+}
+
+.peek__foot .case__more { margin-left: auto; opacity: 1; color: var(--primary); }
+
+.case__snag { display: block; margin-top: 4px; font-size: 11.5px; color: var(--text-secondary); }
+
+.pick {
+  font-family: var(--sans);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--success);
+  background: #E7F2E8;
+  border-radius: 2px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .case__more, .case__more i { transition: none; }
+  .case { transition: none; }
+  .case--flash, .peek { animation: none; }
 }
 
 .crit {
@@ -488,44 +879,48 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 .crit--B { color: var(--warning); }
 .crit--C { color: var(--text-secondary); }
 
-.case__state {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.case__action { display: block; font-size: 14.5px; font-weight: 650; margin: 12px 0 3px; letter-spacing: -0.01em; }
-.case__action--go { color: var(--success); }
-.case__action--hold { color: var(--warning); }
-.case__action--stop { color: var(--danger); }
-.case__action--none { color: var(--text-secondary); font-weight: 600; }
-.case__why { display: block; font-size: 12.5px; color: var(--text-secondary); max-width: 46ch; }
-
-.case__foot {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-  padding-top: 9px;
-  border-top: 1px solid var(--line);
-  font-size: 11.5px;
-  color: var(--text-secondary);
-}
-
-.case__foot b { font-family: var(--mono); color: var(--text-primary); font-weight: 650; }
-
 /* ---------- Medidor de existencias ----------
-   Es el mejor elemento que tenia la interfaz anterior. Alli era la tercera
-   columna de una tabla de siete; aqui es el centro de la tarjeta. */
+ *
+ * Es una escala, no una barra de progreso, y se dibuja como tal: las cifras van
+ * sobre la posicion que ocupan. El stock encima de donde termina el relleno, el
+ * punto de reorden sobre su marca negra, y el nivel de reposicion al final.
+ *
+ * Antes era una barra media llena con una frase debajo que repetia los tres
+ * numeros sueltos. La barra no decia donde estaba cada cosa y la frase obligaba
+ * a emparejar cada cifra con su sitio de memoria.
+ */
 
-.gauge { display: block; }
+.gauge { display: block; padding-top: 15px; }
+
+.gauge__scale {
+  display: block;
+  position: relative;
+  height: 14px;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.gauge__scale--under { margin-top: 5px; height: 13px; }
+.gauge__scale b { font-family: var(--mono); font-weight: 700; color: var(--text-primary); }
+
+.gauge__now {
+  position: absolute;
+  bottom: 1px;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.gauge__now--mid { transform: translateX(-50%); }
+.gauge__now--start { transform: none; }
+.gauge__now--end { transform: translateX(-100%); }
 
 .gauge__track {
   display: block;
   position: relative;
   width: 100%;
-  height: 9px;
+  height: 10px;
   background: #EDF1F6;
   border: 1px solid var(--line-strong);
   border-radius: 1px;
@@ -536,20 +931,31 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 .gauge__fill--ajustado { background: var(--warning); }
 .gauge__fill--holgado { background: var(--success); }
 
+/* La marca del punto de reorden sobresale por arriba y por abajo para que se
+   lea como una linea de referencia y no como parte del relleno. */
 .gauge__min {
   display: block;
   position: absolute;
-  top: -3px;
-  bottom: -3px;
+  top: -5px;
+  bottom: -5px;
   width: 2px;
-  background: var(--primary);
+  background: var(--text-primary);
 }
 
-.gauge__read { display: block; margin-top: 6px; font-size: 11.5px; color: var(--text-secondary); }
-.gauge__read b { font-family: var(--mono); color: var(--text-primary); }
+.gauge__zero { position: absolute; left: 0; }
+.gauge__max { position: absolute; right: 0; white-space: nowrap; }
 
+.gauge__mark {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.gauge--lg { padding-top: 18px; }
 .gauge--lg .gauge__track { height: 16px; }
-.gauge--lg .gauge__read { font-size: 12.5px; margin-top: 9px; }
+.gauge--lg .gauge__scale { font-size: 12px; }
 
 /* ---------- Panel del caso ----------
    Pantalla propia y no fila desplegada. El detalle antes vivia dentro de la
@@ -994,6 +1400,12 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 
 .pipe__step { flex: 1 1 0; min-width: 152px; display: flex; }
 
+/* Cada etapa es un boton que abre su detalle, y tiene que parecerlo. Antes eran
+   tarjetas planas de borde fino: se leian como un diagrama del proceso, que es
+   informacion, no como algo sobre lo que se pueda hacer clic. La diferencia la
+   hacen tres cosas juntas —el relieve, el movimiento al pasar por encima y una
+   linea que dice en palabras lo que va a pasar— y ninguna de las tres basta
+   sola. */
 .pipe__btn {
   display: flex;
   flex-direction: column;
@@ -1001,26 +1413,63 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
   width: 100%;
   font: inherit;
   text-align: left;
-  padding: 13px 15px;
+  padding: 13px 15px 11px;
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-top: 3px solid var(--line-strong);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(16, 32, 48, 0.06);
   cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease,
+    background 0.12s ease;
 }
 
-.pipe__btn:hover { background: #FAFCFE; }
-.pipe__btn--on { border-top-color: var(--primary); background: var(--primary-light); }
+.pipe__btn:hover {
+  background: #FAFCFE;
+  border-color: var(--secondary);
+  border-top-color: var(--secondary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(16, 32, 48, 0.12);
+}
+
+.pipe__btn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+.pipe__btn:active { transform: translateY(0); box-shadow: 0 1px 0 rgba(16, 32, 48, 0.06); }
+
+.pipe__btn--on {
+  border-color: var(--primary);
+  border-top-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  transform: none;
+}
+
+.pipe__btn--on:hover { transform: none; box-shadow: inset 0 0 0 1px var(--primary); }
 
 .pipe__num {
   font-family: var(--mono);
   font-size: 10.5px;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--text-secondary);
 }
 
 .pipe__btn--on .pipe__num { color: var(--primary); }
 .pipe__name { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
 .pipe__fig { font-family: var(--mono); font-size: 11.5px; color: var(--text-secondary); }
+
+.pipe__go {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dotted var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+.pipe__btn--on .pipe__go { color: var(--text-secondary); font-weight: 500; }
+.pipe__btn:hover .pipe__go { text-decoration: underline; }
+.pipe__btn--on:hover .pipe__go { text-decoration: none; }
 
 .pipe__link {
   flex: 0 0 74px;
@@ -1084,6 +1533,91 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 
 .stage__detail { margin-top: 20px; display: grid; gap: 18px; }
 .subpanel h3 { margin: 0 0 8px; font-size: 13px; font-weight: 650; }
+.subpanel__lead { margin: 0 0 10px; max-width: 84ch; }
+
+/* ---------- El detalle plegable ---------- */
+
+.drill { margin-top: 12px; border-top: 1px solid var(--line); }
+
+.drill__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.drill__head::-webkit-details-marker { display: none; }
+
+.drill__head::before {
+  content: "▸";
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.drill[open] > .drill__head::before { transform: rotate(90deg); }
+.drill__head:hover { text-decoration: underline; }
+.drill__head:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+
+.drill__count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--primary-light);
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+
+/* Con la lista abierta, el desplazamiento vive dentro del bloque y no empuja
+   toda la pagina: abrir un detalle no puede costar la posicion de lectura. */
+.drill__body {
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.drill__body .mini thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+/* ---------- El estado de carga ---------- */
+
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.loading__spin {
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--secondary);
+  border-radius: 50%;
+  animation: loading-turn 0.7s linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes loading-turn { to { transform: rotate(360deg); } }
+
+/* Mientras algo carga, lo que quedo bloqueado tiene que parecer bloqueado. */
+.tablelist__btn:disabled { opacity: 0.45; cursor: progress; }
+.is-loading { cursor: progress; }
+
+@media (prefers-reduced-motion: reduce) {
+  .loading__spin { animation-duration: 2.4s; }
+}
 
 .mini { width: 100%; border-collapse: collapse; font-size: 12px; }
 .mini th {
@@ -1160,7 +1694,44 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 
 .trace__decision { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
 
-.kv--wide { grid-template-columns: minmax(0, 1fr) auto; gap: 5px 14px; }
+/* La lista de definiciones se maqueta en rejilla, y la rejilla hay que
+   declararla. Estaban las columnas pero no el `display: grid` que las activa, de
+   modo que el navegador caia al comportamiento por defecto de `dl`: el termino en
+   una linea y el valor en la siguiente, sangrado. Cada dato del rastreador
+   ocupaba dos renglones y no se veia a que cifra correspondia cada etiqueta. */
+.kv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.kv dt { color: var(--text-secondary); min-width: 0; }
+
+.kv dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Una linea punteada entre etiqueta y valor: con la etiqueta a la izquierda y la
+   cifra a la derecha, el ojo necesita algo que las una o empareja mal en cuanto
+   hay mas de cuatro filas. */
+.kv dt::after {
+  content: "";
+  display: inline-block;
+  width: 100%;
+  margin-left: 6px;
+  border-bottom: 1px dotted var(--line-strong);
+  transform: translateY(-3px);
+}
+
+.kv--wide { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; }
 .kv--wide dd { text-align: right; }
 
 .sparkline { width: 100%; height: auto; display: block; }
@@ -1637,8 +2208,40 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 
 .tracer__head h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--primary); }
 .tracer__head .sub { display: block; margin-top: 2px; }
-.tracer__pick { display: flex; gap: 12px; }
-.tracer__pick select { min-width: 210px; }
+.tracer__pick { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.tracer__pick select { min-width: 190px; }
+
+/* La eleccion de pieza va en su propia fila y a lo ancho: la descripcion de una
+   refaccion no cabe en el hueco que sobra al lado de tres filtros. */
+.tracer__pick--main {
+  margin: 14px 0 16px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.tracer__pick--main select { min-width: 0; }
+.field--grow { flex: 1 1 260px; min-width: 0; }
+
+.tracer__pick input[type="search"] {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.tracer__pick input[type="search"]:focus-visible,
+.tracer__pick select:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 1px;
+}
+
+.tracer__pick select:disabled { opacity: 0.5; }
 
 .trace {
   display: grid;
@@ -1670,8 +2273,8 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
 
 .trace__step h3 { margin: 0; font-size: 13px; font-weight: 700; }
 
-.kv--wide { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 5px 14px; }
-.kv--wide dd { word-break: break-word; }
+.kv--wide { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; }
+.kv--wide dd { text-align: right; overflow-wrap: anywhere; white-space: normal; }
 
 .trace__decision { margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
@@ -2007,4 +2610,46 @@ main { padding: 0 26px 72px; max-width: var(--shell); margin: 0 auto; }
   .classify__matrices { grid-template-columns: 1fr; }
   .formula__head { flex-direction: column; }
   .formula__theory { text-align: left; }
+}
+
+/* ---------- El presupuesto como control ----------
+   Vive dentro de la apertura porque no es un filtro de la tabla sino un
+   supuesto del escenario: cambiarlo cambia la frase que encabeza la pantalla. */
+
+/* El presupuesto es una tarjeta mas de la vista de datos crudos, entre la
+   lectura del catalogo y las tablas de las que sale. */
+.budget { margin-bottom: 26px; }
+.budget h3 { margin: 0 0 4px; }
+.budget > .meta { max-width: 82ch; margin: 0; }
+
+.budgetbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.budgetbar .field { max-width: 190px; }
+
+.budgetbar input {
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.budgetbar input:focus-visible { outline: 2px solid var(--secondary); outline-offset: 1px; }
+
+.budgetbar__hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-bottom: 8px;
+  max-width: 42ch;
 }

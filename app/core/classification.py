@@ -19,6 +19,8 @@ Funcionalidad:
     optimizador, y esta clasificacion es el contexto con que se lee su salida.
 """
 
+import math
+
 import pandas as pd
 
 MONTHS_PER_YEAR = 12
@@ -26,8 +28,8 @@ MONTHS_PER_YEAR = 12
 VALUE_CLASS_A_MAX = 0.80
 VALUE_CLASS_B_MAX = 0.95
 
-ROTATION_FAST_MIN = 0.50
-ROTATION_SLOW_MIN = 0.15
+ROTATION_FAST_MIN = 0.25
+ROTATION_SLOW_MIN = 0.08
 
 VALUE_CLASSES = ["A", "B", "C"]
 ROTATION_CLASSES = ["F", "S", "N"]
@@ -40,9 +42,9 @@ VALUE_LABELS = {
 }
 
 ROTATION_LABELS = {
-    "F": "F · fast, issued on 50%+ of days",
-    "S": "S · slow, 15–50% of days",
-    "N": "N · non-moving, under 15%",
+    "F": "F · fast, moves in 25%+ of months",
+    "S": "S · slow, moves in 8–25% of months",
+    "N": "N · non-moving, under 8% of months",
 }
 
 CRITICALITY_LABELS = {
@@ -50,6 +52,36 @@ CRITICALITY_LABELS = {
     "B": "B · degrades output",
     "C": "C · tolerable until the next run",
 }
+
+
+def defined_number(value) -> float:
+    """Convierte a nulo explicito cualquier numero que no exista.
+
+    Entrada:
+        value: numero que puede venir ausente o indefinido.
+
+    Salida:
+        El numero como flotante, o None si no esta definido.
+
+    Funcionalidad:
+        Hay razones que no existen. Las vueltas al año de una pieza sin
+        existencias no valen cero ni valen infinito: no estan definidas, porque
+        dividir el consumo entre un inventario vacio no responde a nada.
+
+        El problema es que una columna de pandas con numeros no sabe guardar esa
+        ausencia. Al mezclar None con flotantes convierte el None en NaN, que es
+        un flotante mas, y el catalogo sale con dieciseis NaN camuflados entre
+        las cifras. JSON no admite NaN —no esta en la norma— asi que la pantalla
+        recibia un error del servidor en lugar del catalogo, y las graficas de
+        criticidad, valor y rotacion aparecian vacias.
+
+        Esta funcion devuelve la ausencia a su forma explicita justo antes de
+        publicar, que es el unico punto donde vuelve a caber.
+    """
+    if value is None:
+        return None
+    number = float(value)
+    return None if not math.isfinite(number) else number
 
 
 def value_class(cumulative_share: float) -> str:
@@ -74,11 +106,11 @@ def value_class(cumulative_share: float) -> str:
     return "C"
 
 
-def rotation_class(issue_rate: float) -> str:
+def rotation_class(movement_share: float) -> str:
     """Asigna la clase FSN de rotacion segun la frecuencia de salida.
 
     Entrada:
-        issue_rate: proporcion de dias del mes en que la pieza registra consumo.
+        movement_share: fraccion de meses en que la pieza registra consumo.
 
     Salida:
         Etiqueta F para rapida, S para lenta y N para practicamente inmovil.
@@ -86,18 +118,21 @@ def rotation_class(issue_rate: float) -> str:
     Funcionalidad:
         FSN mide cada cuanto se mueve la pieza, no cuanto vale ni que pasa si
         falta. Es la dimension que gobierna el riesgo de obsolescencia y el ritmo
-        al que conviene reponer: un item que sale todos los dias tolera lotes
-        grandes, y uno que sale una vez al trimestre no.
+        al que conviene reponer: un item que se mueve casi todos los meses tolera
+        lotes grandes, y uno que se mueve una vez al año no.
     """
-    if issue_rate >= ROTATION_FAST_MIN:
+    if movement_share >= ROTATION_FAST_MIN:
         return "F"
-    if issue_rate >= ROTATION_SLOW_MIN:
+    if movement_share >= ROTATION_SLOW_MIN:
         return "S"
     return "N"
 
 
 def classify_parts(
-    parts: pd.DataFrame, forecast: pd.DataFrame, inventory: pd.DataFrame
+    parts: pd.DataFrame,
+    forecast: pd.DataFrame,
+    inventory: pd.DataFrame,
+    patterns: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """Clasifica cada pieza del catalogo en las tres dimensiones.
 
@@ -120,6 +155,18 @@ def classify_parts(
         y no contra un inventario medio historico, que no se tiene. Es una
         aproximacion declarada: sirve para ordenar el catalogo, no para auditar
         capital inmovilizado.
+
+        La clase FSN se mide en meses con movimiento y no en dias con salida. La
+        version anterior usaba la proporcion de dias del mes en que la pieza se
+        pide, que con consumo continuo separa bien y con refacciones no separa
+        nada: en este catalogo vale entre 0,003 y 0,08 para todas, de modo que
+        los umbrales clasicos dejaban las 876 piezas en clase N y la
+        clasificacion no distinguia nada de nada.
+
+        La fraccion de meses en que la pieza se mueve —el inverso del intervalo
+        entre demandas— si separa: hay referencias que se mueven un mes de cada
+        dos y otras uno de cada veinte, y esa diferencia es exactamente el riesgo
+        de obsolescencia que FSN existe para detectar.
     """
     demand = (
         forecast.groupby("sku_id")
@@ -129,13 +176,33 @@ def classify_parts(
         )
         .reset_index()
     )
+
+    if patterns is not None and "adi" in patterns:
+        movement = (
+            patterns.groupby("sku_id")["adi"]
+            .mean()
+            .rdiv(1.0)
+            .clip(upper=1.0)
+            .rename("movement_share")
+            .reset_index()
+        )
+    else:
+        movement = demand[["sku_id"]].assign(movement_share=demand["issue_rate"])
     stock = inventory.groupby("sku_id")["on_hand_qty"].sum().rename("on_hand_qty").reset_index()
 
     frame = (
         parts[["sku_id", "description", "category", "criticality", "unit_cost_usd"]]
         .merge(demand, on="sku_id", how="left")
+        .merge(movement, on="sku_id", how="left")
         .merge(stock, on="sku_id", how="left")
-        .fillna({"monthly_demand": 0.0, "issue_rate": 0.0, "on_hand_qty": 0})
+        .fillna(
+            {
+                "monthly_demand": 0.0,
+                "issue_rate": 0.0,
+                "movement_share": 0.0,
+                "on_hand_qty": 0,
+            }
+        )
     )
 
     frame["annual_units"] = (frame["monthly_demand"] * MONTHS_PER_YEAR).round(1)
@@ -152,7 +219,7 @@ def classify_parts(
     frame["value_share"] = (frame["annual_value_usd"] / total).round(4) if total else 0.0
     frame["value_cum_share"] = frame["value_share"].cumsum().round(4)
     frame["value_class"] = [value_class(share) for share in frame["value_cum_share"]]
-    frame["rotation_class"] = [rotation_class(rate) for rate in frame["issue_rate"]]
+    frame["rotation_class"] = [rotation_class(share) for share in frame["movement_share"]]
     frame["issue_rate"] = frame["issue_rate"].round(4)
     return frame
 
@@ -245,7 +312,10 @@ def class_profile(frame: pd.DataFrame, column: str, order: list, labels: dict) -
 
 
 def build_classification(
-    parts: pd.DataFrame, forecast: pd.DataFrame, inventory: pd.DataFrame
+    parts: pd.DataFrame,
+    forecast: pd.DataFrame,
+    inventory: pd.DataFrame,
+    patterns: pd.DataFrame = None,
 ) -> dict:
     """Compone el analisis completo del catalogo en las tres dimensiones.
 
@@ -264,7 +334,7 @@ def build_classification(
         clasificacion: se puede ver que pieza quedo al borde de un corte y por
         cuanto.
     """
-    frame = classify_parts(parts, forecast, inventory)
+    frame = classify_parts(parts, forecast, inventory, patterns)
 
     return {
         "parts": [
@@ -280,8 +350,9 @@ def build_classification(
                 "value_cum_share": record["value_cum_share"],
                 "value_class": record["value_class"],
                 "issue_rate": record["issue_rate"],
+                "movement_share": round(float(record["movement_share"]), 4),
                 "rotation_class": record["rotation_class"],
-                "turns_per_year": record["turns_per_year"],
+                "turns_per_year": defined_number(record["turns_per_year"]),
                 "on_hand_qty": int(record["on_hand_qty"]),
                 "stock_value_usd": record["stock_value_usd"],
             }

@@ -196,7 +196,8 @@ def test_remote_delivery_costs_more_and_takes_longer(published):
 
 
 def test_recommendations_cover_every_series(recommendations):
-    assert len(recommendations) == len(published['demand_forecast.csv'])
+    forecast = pd.read_csv(OUT_DIR / "demand_forecast.csv")
+    assert len(recommendations) == len(forecast)
     assert list(recommendations.columns) == COLUMNS
     assert not recommendations.duplicated(["sku_id", "city_id"]).any()
 

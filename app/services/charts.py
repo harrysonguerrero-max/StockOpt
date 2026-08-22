@@ -97,8 +97,14 @@ def _save(figure, filename: str, directory=None):
     return path
 
 
+BASELINE_NAMES = {
+    "ultimo_mes": "Repeat last month",
+    "promedio_movil": "Moving average, 6 months",
+}
+
+
 def chart_model_vs_baselines(metrics: dict, baselines: dict):
-    """Compara el error del modelo contra las referencias.
+    """Compara el modelo contra las referencias en las metricas que deciden.
 
     Entrada:
         metrics: metricas del modelo entrenado.
@@ -108,36 +114,118 @@ def chart_model_vs_baselines(metrics: dict, baselines: dict):
         Ruta de la imagen generada.
 
     Funcionalidad:
-        Muestra el error ponderado de cada alternativa en barras horizontales.
-        Es la grafica que responde a la pregunta de si el modelo aporta algo
-        sobre lo que ya habia.
+        Dibuja dos paneles porque una sola cifra aqui enganaria.
+
+        El de la izquierda es el error cuadratico, que se minimiza con la media
+        —y la media es exactamente lo que consume la politica de inventario,
+        porque la demanda durante el plazo se construye con ella—.
+
+        El de la derecha es el sesgo acumulado, que dice en unidades cuanto
+        quedaria de mas o de menos en bodega al cabo de la validacion. Es la
+        cifra con consecuencia operativa directa y la unica que distingue un
+        metodo que se equivoca en las dos direcciones de uno que se equivoca
+        siempre hacia el mismo lado.
+
+        La version anterior mostraba el error ponderado, y sobre demanda
+        intermitente ese ranking esta invertido: el error absoluto se minimiza
+        con la mediana, que aqui es cero, asi que premia al metodo que proyecta
+        menos. Un pronosticador que dijera que nada se consume nunca ganaba esa
+        grafica, y dejaria las dos plantas sin refacciones.
     """
-    labels = ["Global model"] + [name.replace("_", " ").capitalize() for name in baselines]
-    values = [metrics["wmape"]] + [reference["wmape"] for reference in baselines.values()]
-    colors = [SUCCESS if values[0] == min(values) else WARNING] + [MUTED] * len(baselines)
+    labels = ["Global model"] + [
+        BASELINE_NAMES.get(name, name.replace("_", " ").capitalize()) for name in baselines
+    ]
+    rmse = [metrics["rmse"]] + [reference["rmse"] for reference in baselines.values()]
+    drift = [metrics.get("cumulative_bias", 0.0)] + [
+        reference.get("cumulative_bias", 0.0) for reference in baselines.values()
+    ]
 
-    figure, axes = plt.subplots(figsize=(7.2, 2.6 + 0.4 * len(labels)))
-    bars = axes.barh(labels, values, color=colors, height=0.55)
-    axes.invert_yaxis()
-    axes.set_xlabel("WMAPE on validation (lower is better)")
-    axes.set_title(
-        "Model error against the baselines", fontsize=12, fontweight="bold", loc="left"
+    figure, (left, right) = plt.subplots(
+        1, 2, figsize=(10.4, 2.4 + 0.5 * len(labels)), gridspec_kw={"width_ratios": [1, 1]}
     )
-    axes.xaxis.set_major_formatter(lambda x, _: f"{x:.0%}")
 
-    for bar, value in zip(bars, values, strict=False):
-        axes.text(
-            value + max(values) * 0.015,
+    best = min(rmse)
+    bars = left.barh(
+        labels,
+        rmse,
+        color=[SUCCESS if value == best else MUTED for value in rmse],
+        height=0.55,
+    )
+    left.invert_yaxis()
+    left.set_xlabel("RMSE on validation (lower is better)")
+    left.set_title("Squared error", fontsize=11, fontweight="bold", loc="left")
+    for bar, value in zip(bars, rmse, strict=False):
+        left.text(
+            value + max(rmse) * 0.02,
             bar.get_y() + bar.get_height() / 2,
-            f"{value:.1%}",
+            f"{value:.2f}",
             va="center",
             fontsize=10,
             color=TEXT,
             fontweight="600",
         )
+    left.set_xlim(0, max(rmse) * 1.2)
+    _style(left)
 
-    axes.set_xlim(0, max(values) * 1.18)
-    _style(axes)
+    span = max(abs(value) for value in drift) or 1.0
+    best = min(abs(value) for value in drift)
+
+    def drift_color(value):
+        """Colorea el sesgo por su magnitud y no por su signo.
+
+        Entrada:
+            value: sesgo acumulado del metodo, en unidades.
+
+        Salida:
+            Color de la barra.
+
+        Funcionalidad:
+            Lo que importa aqui es cuanto se desvia, no hacia donde. Colorear
+            por signo pintaria de rojo al metodo mejor calibrado solo por
+            quedarse ligeramente largo, que es lo contrario de lo que la
+            grafica tiene que decir.
+        """
+        if abs(value) == span and span > best:
+            return DANGER
+        if abs(value) == best:
+            return SUCCESS
+        return MUTED
+
+    bars = right.barh(
+        labels,
+        drift,
+        color=[drift_color(value) for value in drift],
+        height=0.55,
+    )
+    right.invert_yaxis()
+    right.axvline(0, color=TEXT, linewidth=1)
+    right.set_xlabel("Cumulative bias over the validation (units)")
+    right.set_title("Where the stock would end up", fontsize=11, fontweight="bold", loc="left")
+    for bar, value in zip(bars, drift, strict=False):
+        offset = span * 0.03
+        right.text(
+            value + (offset if value >= 0 else -offset),
+            bar.get_y() + bar.get_height() / 2,
+            f"{value:+,.0f}",
+            va="center",
+            ha="left" if value >= 0 else "right",
+            fontsize=10,
+            color=TEXT,
+            fontweight="600",
+        )
+    right.set_xlim(-span * 1.35, span * 1.35)
+    right.tick_params(axis="y", labelleft=False)
+    _style(right)
+
+    figure.suptitle(
+        "The model against the baselines, on the two metrics that decide",
+        fontsize=12,
+        fontweight="bold",
+        x=0.008,
+        ha="left",
+        color=TEXT,
+    )
+    figure.tight_layout(rect=(0, 0, 1, 0.93))
     return _save(figure, CHART_FILES["comparison"])
 
 
@@ -156,29 +244,55 @@ def chart_predicted_vs_actual(actual, predicted):
         puntos por encima de la linea son sobreestimaciones, que producen
         exceso de existencias, y los de debajo subestimaciones, que producen
         quiebres.
+
+        Los dos ejes van en escala logaritmica. En escala lineal un pico de 860
+        unidades estira el eje entero y el 99 % de los puntos se apila contra el
+        origen en una mancha de la que no se lee nada: la grafica anterior
+        parecia decir que el modelo no acierta nunca, cuando lo que decia es que
+        habia un valor extremo. Con escala logaritmica se ve donde vive la masa,
+        que es entre una y treinta unidades al mes.
+
+        Los ceros no caben en escala logaritmica y son la mayoria de los meses,
+        asi que se cuentan aparte en el pie en vez de descartarse en silencio.
     """
     actual = np.asarray(actual, dtype=float)
     predicted = np.asarray(predicted, dtype=float)
-    top = max(actual.max(), predicted.max()) * 1.05
 
-    figure, axes = plt.subplots(figsize=(5.6, 5.2))
-    axes.plot([0, top], [0, top], color=MUTED, linewidth=1, linestyle="--", zorder=1)
+    drawable = (actual > 0) & (predicted > 0)
+    hidden = int(len(actual) - drawable.sum())
+    top = max(actual.max(), predicted.max()) * 1.3
+    floor = 0.08
+
+    figure, axes = plt.subplots(figsize=(5.8, 5.4))
+    axes.plot([floor, top], [floor, top], color=MUTED, linewidth=1, linestyle="--", zorder=1)
     axes.scatter(
-        actual,
-        predicted,
-        s=26,
+        actual[drawable],
+        predicted[drawable],
+        s=20,
         color=SECONDARY,
-        alpha=0.55,
-        edgecolor=PRIMARY,
-        linewidth=0.4,
+        alpha=0.4,
+        edgecolor="none",
         zorder=2,
     )
-    axes.set_xlabel("Actual consumption (units/month)")
-    axes.set_ylabel("Model forecast")
+    axes.set_xscale("log")
+    axes.set_yscale("log")
+    axes.set_xlim(floor, top)
+    axes.set_ylim(floor, top)
+    axes.set_xlabel("Actual consumption (units/month, log scale)")
+    axes.set_ylabel("Model forecast (log scale)")
     axes.set_title("Forecast against actual consumption", fontsize=12, fontweight="bold", loc="left")
-    axes.set_xlim(0, top)
-    axes.set_ylim(0, top)
+    axes.text(
+        0.5,
+        -0.16,
+        f"{hidden:,} of {len(actual):,} months are not shown: one of the two values is zero, "
+        "which has no place on a log axis",
+        transform=axes.transAxes,
+        ha="center",
+        fontsize=8,
+        color=MUTED,
+    )
     _style(axes)
+    figure.tight_layout()
     return _save(figure, CHART_FILES["scatter"])
 
 
@@ -196,24 +310,52 @@ def chart_error_distribution(actual, predicted):
         Un histograma centrado en cero indica un modelo sin sesgo. Si la masa se
         desplaza a un lado, el modelo compra de mas o de menos de forma
         sistematica, que es un problema distinto a equivocarse mucho.
+
+        El eje se recorta al 1 % y 99 % de los errores. Sin recortar, un pico de
+        demanda de 860 unidades que el modelo no vio llegar estira el eje hasta
+        −860 y deja las 7.600 observaciones restantes dentro de una sola barra:
+        el histograma dejaba de ser un histograma. Lo que queda fuera del
+        recorte se anota en el pie, porque es justo la cola que interesa.
     """
     error = np.asarray(predicted, dtype=float) - np.asarray(actual, dtype=float)
+    low, high = np.percentile(error, [1, 99])
+    span = max(abs(low), abs(high))
+    clipped = int((np.abs(error) > span).sum())
 
-    figure, axes = plt.subplots(figsize=(7.0, 3.4))
-    axes.hist(error, bins=28, color=LIGHT, edgecolor=SECONDARY, linewidth=0.8)
+    figure, axes = plt.subplots(figsize=(8.0, 4.0))
+    axes.hist(
+        error[np.abs(error) <= span],
+        bins=41,
+        color=LIGHT,
+        edgecolor=SECONDARY,
+        linewidth=0.8,
+        log=True,
+    )
     axes.axvline(0, color=PRIMARY, linewidth=1.4)
     axes.axvline(
         error.mean(),
         color=DANGER,
         linewidth=1.4,
         linestyle="--",
-        label=f"Mean bias {error.mean():+.2f}",
+        label=f"Mean bias {error.mean():+.2f} units/month",
     )
-    axes.set_xlabel("Forecast error (units)")
-    axes.set_ylabel("Cases")
+    axes.set_xlim(-span, span)
+    axes.set_xlabel("Forecast error (units) — over-forecast to the right, short to the left")
+    axes.set_ylabel("Months (log scale)")
     axes.set_title("Error distribution", fontsize=12, fontweight="bold", loc="left")
-    axes.legend(frameon=False, fontsize=9, labelcolor=TEXT)
+    axes.legend(frameon=False, fontsize=9, labelcolor=TEXT, loc="upper left")
+    axes.text(
+        0.0,
+        -0.30,
+        f"{clipped:,} of {len(error):,} months fall outside ±{span:,.0f} units and are not drawn:"
+        "\nthe demand spikes no method anticipates, which is what the safety stock exists for",
+        transform=axes.transAxes,
+        ha="left",
+        fontsize=8,
+        color=MUTED,
+    )
     _style(axes)
+    figure.subplots_adjust(left=0.10, right=0.98, top=0.90, bottom=0.26)
     return _save(figure, CHART_FILES["errors"])
 
 
@@ -241,6 +383,29 @@ def chart_feature_importance(importance, top: int = 12):
     return _save(figure, CHART_FILES["importance"])
 
 
+MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def month_label(period: str) -> str:
+    """Convierte un periodo AAAA-MM en una etiqueta que no se confunda con fecha.
+
+    Entrada:
+        period: periodo mensual en formato AAAA-MM.
+
+    Salida:
+        Etiqueta corta con el mes en letras y el ano.
+
+    Funcionalidad:
+        La forma anterior era MM/AA, que sobre un eje de tiempo se lee como un
+        dia: "07/29" parecia el 7 de 29 y no julio de 2029. El mes en letras no
+        admite esa lectura.
+    """
+    year, _, month = period.partition("-")
+    index = int(month) - 1 if month.isdigit() and 1 <= int(month) <= 12 else 0
+    return f"{MONTH_NAMES[index]} {year}"
+
+
 def chart_validation_series(validation, predicted, series_count: int = 4):
     """Dibuja la proyeccion mes a mes de algunas series.
 
@@ -257,11 +422,29 @@ def chart_validation_series(validation, predicted, series_count: int = 4):
         Las metricas agregadas esconden el comportamiento por pieza. Aqui se ve
         si el modelo sigue la forma de la demanda o solo acierta el promedio,
         que es lo que un revisor de negocio quiere comprobar.
+
+        Se reparten entre las dos plantas. Ordenando solo por volumen los cuatro
+        paneles salian de Obregon y con la misma forma —un pico aislado sobre
+        una linea plana—, de modo que la figura repetia cuatro veces la misma
+        observacion. Alternando planta se ve al menos que el comportamiento es
+        el mismo en las dos, que es una observacion distinta.
     """
     frame = validation.copy()
     frame["prediccion"] = predicted
-    volumes = frame.groupby(["sku_id", "city_id"])["qty_issued"].sum()
-    chosen = volumes.nlargest(series_count).index
+    volumes = frame.groupby(["sku_id", "city_id"])["qty_issued"].sum().sort_values(ascending=False)
+
+    quota = max(series_count // 2, 1)
+    taken = {}
+    chosen = []
+    for sku, city in volumes.index:
+        if taken.get(city, 0) >= quota and len(chosen) < series_count:
+            continue
+        chosen.append((sku, city))
+        taken[city] = taken.get(city, 0) + 1
+        if len(chosen) == series_count:
+            break
+    if len(chosen) < series_count:
+        chosen = list(volumes.nlargest(series_count).index)
 
     rows = (len(chosen) + 1) // 2
     figure, grid = plt.subplots(rows, 2, figsize=(11, 2.7 * rows), squeeze=False)
@@ -269,7 +452,7 @@ def chart_validation_series(validation, predicted, series_count: int = 4):
     for position, (sku, city) in enumerate(chosen):
         axes = grid[position // 2][position % 2]
         subset = frame[(frame.sku_id == sku) & (frame.city_id == city)].sort_values("period_month")
-        months = [m[-2:] + "/" + m[2:4] for m in subset["period_month"]]
+        months = [month_label(m) for m in subset["period_month"]]
         axes.plot(
             months,
             subset["qty_issued"],
@@ -361,9 +544,15 @@ def chart_cleaning_funnel(cleaning: dict):
 
         Cada barra lleva el enunciado de la regla, porque el numero sin el motivo
         no permite juzgar si el descarte estuvo bien hecho.
+
+        El titular dice la proporcion y no solo el saldo. Este recorte se lleva
+        buena parte de las lineas de la fuente —son referencias reales, pedidas
+        una sola vez en seis anos— y esa proporcion es justamente lo que hay que
+        poder defender en una revision. Un titular que dijera solo cuantas
+        quedan la escondería.
     """
     rows = [
-        (f"{_wrap(rule['rule'], 44)}\n{source['name']}", rule["rows"])
+        (_wrap(rule["rule"], 46), rule["rows"])
         for source in cleaning["sources"]
         for rule in source["rules"]
         if rule["kind"] == KIND_DISCARD
@@ -380,7 +569,7 @@ def chart_cleaning_funnel(cleaning: dict):
             axes.text(
                 value + max(values) * 0.02,
                 bar.get_y() + bar.get_height() / 2,
-                f"{value:,}".replace(",", "."),
+                f"{value:,}",
                 va="center",
                 fontsize=9,
                 color=TEXT,
@@ -398,14 +587,16 @@ def chart_cleaning_funnel(cleaning: dict):
             transform=axes.transAxes,
         )
 
-    axes.set_xlabel("Rows discarded")
+    axes.set_xlabel("Order lines discarded")
     axes.tick_params(axis="y", labelsize=8)
     _style(axes)
+
+    before = cleaning["rows_before"]
+    after = cleaning["rows_after"]
+    share = (before - after) / before if before else 0.0
     _headline(
         figure,
-        f"De {cleaning['rows_before']:,} filas crudas quedan {cleaning['rows_after']:,}".replace(
-            ",", "."
-        ),
+        f"{before:,} raw order lines become {after:,} — {share:.0%} discarded",
     )
     return _save(figure, PIPELINE_CHART_FILES["limpieza"], PIPELINE_DIR)
 
@@ -472,7 +663,7 @@ def chart_demand_history(dataset: dict):
 
 
 def chart_pattern_map(patterns: dict):
-    """Sitúa cada serie frente a los umbrales que deciden su patron.
+    """Sitúa cada serie en el cuadrante que decidio su patron.
 
     Entrada:
         patterns: resumen de la etapa de patrones, con un punto por serie y los
@@ -482,61 +673,118 @@ def chart_pattern_map(patterns: dict):
         Ruta de la imagen generada.
 
     Funcionalidad:
-        Hace auditable la clasificacion. Con los dos umbrales dibujados se ve que
-        serie quedo al filo y por cual de las dos condiciones no paso, que es
-        justo lo que hay que revisar antes de tocar un umbral.
+        Los ejes son los dos que de verdad deciden: el intervalo medio entre
+        consumos y la dispersion del tamano del evento. Son las dos cifras de la
+        regla de Syntetos, Boylan y Croston, y con sus umbrales trazados el mapa
+        se lee como lo que es —cuatro cuadrantes— en vez de como una nube.
+
+        La version anterior dibujaba coeficiente de variacion contra fuerza
+        estacional. Eran los ejes correctos para el catalogo anterior, donde las
+        series se movian todos los meses y la pregunta era si ademas tenian
+        ciclo. Sobre este catalogo no describian nada: ninguna serie se
+        clasifica por esos umbrales, asi que el mapa mostraba dos lineas que no
+        cortaban a nadie y todos los puntos del mismo color.
+
+        El intervalo va en escala logaritmica porque va de moverse todos los
+        meses a moverse una vez cada dos anos, y en escala lineal la mitad del
+        catalogo se apila contra el eje.
     """
     colors = {
-        "Estable": SECONDARY,
-        "Volatil": WARNING,
-        "Estacional": SUCCESS,
-        "Tendencia": PRIMARY,
-        "Insuficiente": DANGER,
+        "Intermitente": SECONDARY,
+        "Irregular": WARNING,
+        "Estable": SUCCESS,
+        "Volatil": DANGER,
+        "Estacional": PRIMARY,
+        "Tendencia": "#7B4EA8",
+        "Insuficiente": MUTED,
     }
 
-    figure, axes = plt.subplots(figsize=(7.6, 4.8))
+    markers = {"Intermitente": "o", "Irregular": "^"}
 
-    for label in sorted({point["pattern"] for point in patterns["points"]}):
-        subset = [point for point in patterns["points"] if point["pattern"] == label]
+    figure, axes = plt.subplots(figsize=(7.8, 5.0))
+    thresholds = patterns["thresholds"]
+    adi_cut = thresholds["adi_intermittent"]
+    cv2_cut = thresholds["cv2_lumpy"]
+
+    points = patterns["points"]
+    for label in sorted({point["pattern"] for point in points}):
+        subset = [point for point in points if point["pattern"] == label]
         axes.scatter(
-            [point["cv"] for point in subset],
-            [point["seasonal_strength"] for point in subset],
-            s=44,
-            alpha=0.75,
+            [max(point["adi"], 1.0) for point in subset],
+            [point["cv_squared"] for point in subset],
+            s=30,
+            alpha=0.62,
             label=f"{PATTERN_LABELS.get(label, label)} ({len(subset)})",
             color=colors.get(label, MUTED),
+            marker=markers.get(label, "o"),
             edgecolor=SURFACE,
-            linewidth=0.6,
+            linewidth=0.4,
         )
 
-    thresholds = patterns["thresholds"]
-    axes.axvline(thresholds["cv_volatile"], color=MUTED, linewidth=1, linestyle="--")
-    axes.axhline(thresholds["seasonal_strength"], color=MUTED, linewidth=1, linestyle="--")
+    axes.set_xscale("log")
+    axes.axvline(adi_cut, color=TEXT, linewidth=1.1, linestyle="--")
+    axes.axhline(cv2_cut, color=TEXT, linewidth=1.1, linestyle="--")
+
+    top = max((point["cv_squared"] for point in points), default=1.0)
+    right = max((point["adi"] for point in points), default=2.0)
+    axes.set_ylim(0, top * 1.18)
+    axes.set_xlim(0.9, right * 1.15)
+
+    corners = [
+        (0.015, 0.03, "Smooth", "classical estimators", "left", "bottom"),
+        (0.015, 0.99, "Erratic", "size unpredictable", "left", "top"),
+        (0.985, 0.03, "Intermittent", "Croston", "right", "bottom"),
+        (0.985, 0.99, "Lumpy", "Croston-SBA", "right", "top"),
+    ]
+    for x, y, name, method, ha, va in corners:
+        axes.text(
+            x,
+            y,
+            f"{name}\n{method}",
+            transform=axes.transAxes,
+            ha=ha,
+            va=va,
+            fontsize=8,
+            color=MUTED,
+            linespacing=1.4,
+        )
+
     axes.text(
-        thresholds["cv_volatile"],
-        axes.get_ylim()[1],
-        f" volatile if CV > {thresholds['cv_volatile']}",
-        color=MUTED,
+        adi_cut * 1.06,
+        top * 0.62,
+        f"ADI {adi_cut}",
+        color=TEXT,
         fontsize=8,
-        va="top",
+        rotation=90,
+        va="center",
+        fontweight="600",
     )
     axes.text(
-        axes.get_xlim()[0],
-        thresholds["seasonal_strength"],
-        f" seasonal if strength >= {thresholds['seasonal_strength']} and p < "
-        f"{thresholds['seasonal_pvalue']}",
-        color=MUTED,
+        right * 1.1,
+        cv2_cut,
+        f"CV² {cv2_cut} ",
+        color=TEXT,
         fontsize=8,
+        ha="right",
         va="bottom",
+        fontweight="600",
     )
 
-    axes.set_xlabel("Coefficient of variation (sigma/mu)")
-    axes.set_ylabel("Seasonal strength")
+    axes.set_xlabel("Average demand interval — months between consumptions (log scale)")
+    axes.set_ylabel("CV² of the event size")
     axes.set_title(
         "Why each series landed in its pattern", fontsize=12, fontweight="bold", loc="left"
     )
-    axes.legend(frameon=False, fontsize=8, labelcolor=TEXT, loc="upper right")
+    axes.legend(
+        frameon=False,
+        fontsize=9,
+        labelcolor=TEXT,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=len({point["pattern"] for point in points}) or 1,
+    )
     _style(axes)
+    figure.tight_layout()
     return _save(figure, PIPELINE_CHART_FILES["patrones"], PIPELINE_DIR)
 
 
@@ -595,7 +843,7 @@ def chart_decision_breakdown(optimization: dict):
 
 
 def chart_optimizer_saving(optimization: dict):
-    """Compara lo que costo cada compra con la peor oferta disponible.
+    """Resume lo que aporta elegir proveedor, por planta y por caso destacado.
 
     Entrada:
         optimization: resumen de la etapa de optimizacion, con el ahorro por
@@ -608,58 +856,123 @@ def chart_optimizer_saving(optimization: dict):
         Es la lectura honesta de que aporta el optimizador. La referencia no es
         no comprar nada, sino haber elegido mal entre las ofertas que si podian
         surtir el caso, que es el error que el sistema evita.
+
+        Dos paneles, porque la pregunta tiene dos alturas. El de la izquierda
+        responde cuanto y donde: una barra por planta con lo comprometido frente
+        a lo que habria costado la peor oferta aplicable. El de la derecha
+        responde en que casos concretos se gano mas, que es lo unico del detalle
+        por pieza que sirve para algo.
+
+        La version anterior dibujaba una barra por compra. Con setenta y tres
+        compras la figura media cinco mil doscientos pixeles de alto: habia que
+        desplazarse por ella como por un listado, ninguna barra se podia comparar
+        con otra porque nunca estaban en pantalla a la vez, y el total —lo unico
+        que se queria saber— no aparecia por ningun lado. Un grafico que solo se
+        puede leer una fila cada vez es una tabla mal impresa.
     """
     savings = optimization["savings"]
+    figure, (left, right) = plt.subplots(
+        1, 2, figsize=(11.2, 4.2), gridspec_kw={"width_ratios": [1, 1.25]}
+    )
 
-    figure, axes = plt.subplots(figsize=(8.6, 1.2 + 0.5 * max(len(savings), 1)))
+    if not savings:
+        for axes in (left, right):
+            axes.text(
+                0.5,
+                0.5,
+                "No purchase had more than one applicable offer",
+                ha="center",
+                va="center",
+                color=MUTED,
+                transform=axes.transAxes,
+            )
+            axes.set_axis_off()
+        figure.suptitle(
+            "Supplier choice avoids nothing this run",
+            fontsize=12, fontweight="bold", x=0.008, ha="left", color=TEXT,
+        )
+        return _save(figure, PIPELINE_CHART_FILES["ahorro"], PIPELINE_DIR)
 
-    if savings:
-        labels = [f"{item['sku_id']} · {item['city_id']}" for item in savings]
-        chosen = [item["chosen_cost_usd"] for item in savings]
-        worst = [item["worst_cost_usd"] for item in savings]
-        positions = range(len(savings))
+    plants = {}
+    for item in savings:
+        plant = plants.setdefault(item["city_id"], {"chosen": 0.0, "worst": 0.0, "orders": 0})
+        plant["chosen"] += item["chosen_cost_usd"]
+        plant["worst"] += item["worst_cost_usd"]
+        plant["orders"] += 1
 
-        axes.barh(list(positions), worst, color=LIGHT, height=0.62, label="Worst applicable offer")
-        axes.barh(list(positions), chosen, color=SECONDARY, height=0.62, label="Chosen offer")
-        axes.set_yticks(list(positions))
-        axes.set_yticklabels(labels, fontsize=8)
-        axes.invert_yaxis()
+    names = sorted(plants)
+    spots = range(len(names))
+    worst = [plants[name]["worst"] for name in names]
+    chosen = [plants[name]["chosen"] for name in names]
 
-        for position, item in zip(positions, savings, strict=False):
-            if item["saving_usd"] > 0:
-                axes.text(
-                    item["worst_cost_usd"] * 1.01,
-                    position,
-                    f"−{item['saving_usd']:,.0f} USD".replace(",", "."),
-                    va="center",
-                    fontsize=8,
-                    color=SUCCESS,
-                    fontweight="600",
-                )
+    left.barh(list(spots), worst, color=LIGHT, height=0.5, label="Worst applicable offer")
+    left.barh(list(spots), chosen, color=SECONDARY, height=0.5, label="What was committed")
+    left.set_yticks(list(spots))
+    left.set_yticklabels(
+        [f"{name}\n{plants[name]['orders']} purchases" for name in names], fontsize=9
+    )
+    left.invert_yaxis()
 
-        axes.set_xlim(0, max(worst) * 1.22)
-        axes.legend(frameon=False, fontsize=9, labelcolor=TEXT, loc="lower right")
-    else:
-        axes.text(
-            0.5,
-            0.5,
-            "No purchase had more than one applicable offer",
-            ha="center",
+    for spot, name in zip(spots, names, strict=False):
+        gap = plants[name]["worst"] - plants[name]["chosen"]
+        share = gap / plants[name]["worst"] if plants[name]["worst"] else 0.0
+        left.text(
+            plants[name]["worst"] * 1.02,
+            spot,
+            f"−{gap:,.0f} USD  ({share:.0%})",
             va="center",
-            color=MUTED,
-            transform=axes.transAxes,
+            fontsize=9,
+            color=SUCCESS,
+            fontweight="700",
         )
 
-    axes.set_xlabel("Total order cost (USD)")
-    axes.set_title(
-        f"Supplier choice avoids {optimization['saving_usd']:,.0f} USD of overspend".replace(
-            ",", "."
-        ),
+    left.set_xlim(0, max(worst) * 1.42)
+    left.set_xlabel("Total order cost (USD)")
+    left.set_title("Where the saving is", fontsize=11, fontweight="bold", loc="left")
+    left.legend(frameon=False, fontsize=8, labelcolor=TEXT, loc="lower right")
+    _style(left)
+
+    top = sorted(savings, key=lambda item: -item["saving_usd"])[:12]
+    spots = range(len(top))
+    right.barh(
+        list(spots),
+        [item["saving_usd"] for item in top],
+        color=SUCCESS,
+        height=0.6,
+    )
+    right.set_yticks(list(spots))
+    right.set_yticklabels(
+        [f"{item['sku_id']} · {item['city_id']}" for item in top], fontsize=8
+    )
+    right.invert_yaxis()
+
+    for spot, item in zip(spots, top, strict=False):
+        right.text(
+            item["saving_usd"] * 1.02,
+            spot,
+            f"{item['saving_usd']:,.0f}",
+            va="center",
+            fontsize=8,
+            color=TEXT,
+            fontweight="600",
+        )
+
+    right.set_xlim(0, max(item["saving_usd"] for item in top) * 1.18)
+    right.set_xlabel("Saved against the worst applicable offer (USD)")
+    right.set_title(
+        f"The 12 that saved most, of {len(savings)}", fontsize=11, fontweight="bold", loc="left"
+    )
+    _style(right)
+
+    figure.suptitle(
+        f"Supplier choice avoids {optimization['saving_usd']:,.0f} USD of overspend",
         fontsize=12,
         fontweight="bold",
-        loc="left",
+        x=0.008,
+        ha="left",
+        color=TEXT,
     )
-    _style(axes)
+    figure.tight_layout(rect=(0, 0, 1, 0.93))
     return _save(figure, PIPELINE_CHART_FILES["ahorro"], PIPELINE_DIR)
 
 

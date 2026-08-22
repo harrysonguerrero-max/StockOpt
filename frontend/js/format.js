@@ -65,6 +65,8 @@ export function months(value) {
 
 /** El patron viaja en español dentro del CSV; en pantalla es texto para leer. */
 const PATTERNS = {
+  intermitente: "intermittent",
+  irregular: "lumpy",
   volatil: "volatile",
   estacional: "seasonal",
   estable: "stable",

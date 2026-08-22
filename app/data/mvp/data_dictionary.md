@@ -1,17 +1,28 @@
 # Data dictionary - MRO Spare Parts Optimizer MVP
 
-Amounts in USD (1 USD = 83 INR).
-Scope: 20 MRO parts x 2 cities x 5 suppliers, monthly demand.
+Amounts in USD.
+Source: B2B-Parts-Rec, the order book of industrial spare parts for food and
+beverage manufacturers (Zenodo 19492687, CC-BY-4.0). One customer is used as the
+company and split by production line into two plants.
 Cities: Nava (Coahuila) and Ciudad Obregon (Sonora).
-History is shifted to end at the configured horizon and extended backwards with
-simulated months, flagged with `is_synthetic`, up to 72 months.
+History is 72 observed months. Nothing is simulated backwards, so `is_synthetic`
+is zero on every row.
+
+What comes from the source and what is built on top:
+  OBSERVED   unit price, machines the part is used on, month of each order
+  DERIVED    criticality (from how many machines depend on the part) and family
+             (from the price rank against a declared catalogue composition)
+  SYNTHETIC  order quantity and commercial description, which the source does
+             not carry. The original descriptions were anonymised into quantized
+             embeddings and cannot be recovered.
 
 ## Sources
 | Generated table | Raw source |
 |---|---|
-| parts_master, demand_history, inventory_current | `synthetic_industrial_machine_data.csv` |
-| suppliers, supplier_offers | `Procurement KPI Analysis Dataset.csv` |
-| cities | `fixed plant_code mapping` |
+| parts_master, demand_history | `20NN_full_anonymus_v2_final.csv (B2B-Parts-Rec)` |
+| inventory_current | `derived from the demand statistics of each series` |
+| suppliers, supplier_offers, supplier_coverage | `declared supply tiers: OEM, national, local` |
+| cities | `fixed LINE_ID split of one customer` |
 
 ## Keys
 - `sku_id` -> parts_master (PK). Referenced by inventory, demand and offers.
@@ -38,20 +49,22 @@ The 3 plants in the raw data are consolidated into 2 cities: two go to Nava, the
 
 ## parts_master.csv - Parts master
 
-Catalogue of the 20 spare parts in scope.
+Catalogue of the spare parts in scope, filtered to those with enough activity.
 
 | Column | Type | Unit | Origin | Description |
 |---|---|---|---|---|
-| sku_id | str | - | part_no (real) | Part code. Primary key. |
-| description | str | - | real | Commercial description of the part. |
-| category | str | - | part_family (real) | Family the part belongs to. |
-| criticality | str A/B/C | - | real | Operating criticality. Sets the service level and the stockout cost. |
-| uom | str | - | real | Unit of measure it is bought in. |
-| unit_cost_usd | float | USD | real, converted from INR | Book unit cost. Drives the holding cost in the economic order quantity. |
+| sku_id | str | - | ITEM_ID of the source, anonymised | Part code. Primary key. Keeps the anonymous hash on purpose: it is not a manufacturer part number and should not be looked up as one. |
+| description | str | - | synthetic, generated within the family | Plausible commercial name. The real one was lost when the source encoded descriptions as irreversible embeddings. |
+| category | str | - | derived from the price rank | Family. Assigned by splitting the catalogue by unit cost against a declared composition, from fasteners up to control gear. |
+| criticality | str A/B/C | - | derived from machine coverage | Operating criticality. Sets the service level and the stockout cost. A part serving many machines stops more when it is missing, so the number of machines that depend on it ranks the catalogue: top 8 % A, next 30 % B. |
+| uom | str | - | fixed EA | Unit of measure it is bought in. |
+| unit_cost_usd | float | USD | real, median PRICE_EXACT of the source | Book unit cost. Drives the holding cost in the economic order quantity. |
 | currency | str | - | fixed USD | Currency of the amounts. |
 | shelf_life_days | int | days | synthetic, by family | Shelf life. Caps how much can be bought at once. |
 
 Shelf life by family: Lubrication 180, Filter 365, Seal & Gasket 730, Drive Belt 1095, Bearing 1825, Coupling 2555, Electrical 1825, Sensor 1825, Fastener 3650.
+
+Parts with no price in the source are dropped before anything else. Holding cost derives from the value of the part, so with a value of zero the economic order quantity diverges and comparing offers loses meaning.
 
 ---
 
@@ -72,7 +85,7 @@ Stock on hand by part and city at the last month of history.
 | stock_value_usd | float | USD | on_hand_qty * unit_cost_usd | Capital tied up in that combination. |
 | below_reorder | int 0/1 | - | on_hand_qty < reorder_point | Flags whether it is already below the reorder point. |
 
-on_hand_qty = round(reorder_point * coverage), with coverage ~ U(0.35, 1.75).
+on_hand_qty = round(reorder_point * coverage), with coverage ~ U(0.35, 1.75). The source is an order book and carries no stock levels, so the snapshot is derived from the demand statistics of each series.
 
 reorder_point = ceil(mu + z*sigma), where mu and sigma are the mean and standard deviation of monthly qty_issued per sku x city, and z is 1.65 for criticality A, 1.28 for B and 0.84 for C.
 
@@ -87,12 +100,12 @@ Monthly consumption by part and city, with the operating signal beside it.
 | sku_id | str | - | FK parts_master | Part. |
 | city_id | str | - | FK cities | City. |
 | period_month | str | YYYY-MM | real | Month the consumption belongs to. |
-| qty_issued | int | units | real, monthly sum | Units consumed in the month. |
-| issue_events | int | days | real | Days in the month with any consumption. Measures intermittency. |
-| breakdown_events | int | events | real | Breakdowns recorded in the month. |
-| is_synthetic | int 0/1 | - | extend_history | Flags whether the month was simulated to lengthen the history. |
+| qty_issued | int | units | synthetic, negative binomial on the price | Units consumed in the month. The source records that a part was ordered but not how many, so the size of each event is generated. |
+| issue_events | int | events | real, order lines of the month | Order lines recorded in the month. This is the observed intermittency signal and the reason for using this source. |
+| breakdown_events | int | events | not available in the source | Always zero. The source has no breakdown flag, so the model feature that reads it is inert. |
+| is_synthetic | int 0/1 | - | always 0 | Every month is observed. Nothing is simulated backwards any more. |
 
-Half of the rows are simulated months: the real ones end at the configured horizon and the history is extended backwards to reach the 72 months that detecting seasonality requires.
+The grid is dense on purpose: months with no order appear with a zero instead of being absent. In a spare-parts catalogue those zeros are most of the data —around three in four months nothing moves— and they are what decides the demand pattern and how much buffer the part needs.
 
 ---
 

@@ -6,7 +6,7 @@ de machine learning, resuelve la compra óptima con programación entera y entre
 cada decisión con su justificación para que un comprador la apruebe o la
 rechace.
 
-Dos decisiones de política gobiernan el modelo:
+Tres decisiones de política gobiernan el modelo:
 
 - **La continuidad de producción es una restricción dura.** Las reposiciones de
   criticidad A se financian antes de que compita nada discrecional, y el
@@ -15,6 +15,15 @@ Dos decisiones de política gobiernan el modelo:
 - **Cuánto pedir sale de la fórmula de Wilson,** que equilibra el flete contra
   el costo de mantener en bodega, en lugar de una cobertura en meses fijada a
   dedo.
+- **Cuándo reponer sale del cuantil de una distribución de conteo,** no de
+  media más `z·sigma`. Con demanda intermitente la aproximación normal pone un
+  39 % de su masa en demanda negativa e infla el inventario mínimo un 49 %.
+
+El dato es el libro de pedidos real de repuestos industriales de empresas de
+alimentos y bebidas ([B2B-Parts-Rec](https://zenodo.org/records/19492687),
+CC-BY-4.0): **876 referencias, 72 meses observados, nada simulado**. Tres de
+cada cuatro meses una pieza no se mueve, que es el régimen para el que existen
+Croston y SBA.
 
 La interfaz está en inglés; los códigos internos siguen en español porque
 viajan en los CSV y en la base de aprobaciones. La formulación matemática

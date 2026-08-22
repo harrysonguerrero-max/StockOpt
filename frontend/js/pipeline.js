@@ -16,10 +16,20 @@
  */
 
 import { api, apiUrl, state } from "./api.js";
+import { whileLoading } from "./cargando.js";
 import { count, decisionWord, escape, pattern as patternWord, percent } from "./format.js";
 import { renderTheory } from "./formulas.js";
 
 const money = (value) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+
+/* Los nombres de las referencias vienen del codigo en castellano, y en la
+   pantalla tienen que leerse en el idioma de la pantalla. */
+const BASELINE_NAMES = {
+  ultimo_mes: "Repeat last month",
+  promedio_movil: "Moving average, 6 months",
+};
+
+const baselineName = (name) => BASELINE_NAMES[name] || name.replace(/_/g, " ");
 const pct = (value, digits = 1) => `${((value || 0) * 100).toFixed(digits)}%`;
 
 const figureCard = (label, value, sub, tone = "") => `
@@ -38,37 +48,126 @@ const dataTable = (headers, rows) => `
 const panel = (title, inner) => `
   <section class="subpanel"><h3>${escape(title)}</h3>${inner}</section>`;
 
-function verdict(metrics) {
-  const gain = metrics.mejora_vs_promedio_movil || 0;
-  const naive = metrics.mejora_vs_ultimo_mes || 0;
-  if (gain < 0.05) {
-    return `The model improves ${pct(naive, 0)} over repeating last month, but only `
-      + `${pct(gain, 1)} over the moving average. That is an honest result: two thirds of `
-      + `the series are flat and there is no structure to learn there. That is why the `
-      + `final forecast averages both methods instead of betting everything on the model.`;
-  }
-  return `The model improves ${pct(gain, 0)} over the moving average and ${pct(naive, 0)} `
-    + `over repeating last month. The final forecast combines both methods.`;
+/* El detalle fila a fila se pliega.
+ *
+ * Setenta y tres compras, una por linea, no es una explicacion: es el mismo dato
+ * que ya esta en la tabla de piezas, repetido aqui y empujando fuera de pantalla
+ * lo que si es propio de esta etapa. Y sin embargo hay momentos en que se quiere
+ * ver una pieza concreta, asi que borrarlo tampoco vale.
+ *
+ * Plegado resuelve las dos cosas: por defecto se ve el resumen, que es lo que
+ * responde la pregunta de la etapa, y quien quiera bajar al caso lo abre. El
+ * contador va en el resumen para que se sepa cuanto hay dentro antes de abrir.
+ */
+const drilldown = (label, rows, inner) => `
+  <details class="drill">
+    <summary class="drill__head">
+      <span>${escape(label)}</span>
+      <span class="drill__count mono">${count(rows)}</span>
+    </summary>
+    <div class="drill__body">${inner}</div>
+  </details>`;
+
+/** Agrupa las compras por planta y las resume. Es la unidad en que se decide:
+ *  cada planta tiene sus proveedores y su bodega, y un ahorro total sin repartir
+ *  no dice cual de las dos lo consiguio. */
+function savingsByPlant(savings) {
+  const plants = new Map();
+  savings.forEach((item) => {
+    const plant = plants.get(item.city_id) || { chosen: 0, worst: 0, orders: 0, choices: 0 };
+    plant.chosen += item.chosen_cost_usd;
+    plant.worst += item.worst_cost_usd;
+    plant.orders += 1;
+    plant.choices += item.offers > 1 ? 1 : 0;
+    plants.set(item.city_id, plant);
+  });
+
+  const rows = [...plants.entries()].sort();
+  const all = rows.reduce((sum, [, plant]) => ({
+    chosen: sum.chosen + plant.chosen,
+    worst: sum.worst + plant.worst,
+    orders: sum.orders + plant.orders,
+    choices: sum.choices + plant.choices,
+  }), { chosen: 0, worst: 0, orders: 0, choices: 0 });
+
+  return [...rows, ["All plants", all]];
+}
+
+/* El veredicto sobre el modelo tiene que decir dos cosas a la vez: cuanto mejora
+   y por que su error absoluto no se puede leer como se leeria en otro problema.
+   Con demanda intermitente el WMAPE supera el 100 % para cualquier metodo,
+   incluido no hacer nada, porque lo domina el mes en que se proyecta algo y no
+   ocurre nada. Callarlo dejaria una cifra que parece un fracaso. */
+function verdict(metrics, baselines) {
+  const rivals = Object.entries(baselines || {});
+  const best = rivals.reduce(
+    (winner, [name, r]) => (r.rmse < winner.rmse ? { name, rmse: r.rmse } : winner),
+    { name: null, rmse: Infinity },
+  );
+
+  const wins = (metrics.rmse || Infinity) <= best.rmse;
+  const worst = rivals.reduce(
+    (found, [name, r]) => (Math.abs(r.cumulative_bias || 0) > Math.abs(found.drift || 0)
+      ? { name, drift: r.cumulative_bias || 0 } : found),
+    { name: null, drift: 0 },
+  );
+
+  const scale = (metrics.wmape || 0) > 1
+    ? " The weighted error above 100% is not a verdict on the model: on intermittent demand "
+      + "every method lands there, including doing nothing, because the error is dominated by "
+      + "the months where something is forecast and nothing is ordered."
+    : "";
+
+  const drift = worst.name && Math.abs(worst.drift) > Math.abs(metrics.cumulative_bias || 0) * 3
+    ? ` And the gap that matters is not the error but the drift: ${baselineName(worst.name)} `
+      + `ends the validation ${count(Math.abs(Math.round(worst.drift)))} units `
+      + `${worst.drift < 0 ? "short" : "long"}, against `
+      + `${count(Math.abs(Math.round(metrics.cumulative_bias || 0)))} for the model. `
+      + "Six months of that is a warehouse that does not match the plant."
+    : "";
+
+  const head = wins
+    ? `The model has the lowest squared error of the three (${(metrics.rmse || 0).toFixed(2)} `
+      + `against ${best.rmse.toFixed(2)} for the closest baseline), which is the comparison `
+      + "that counts: squared error is minimised by the mean, and the mean is what the "
+      + "reorder point is built from."
+    : `The model does not have the lowest squared error (${(metrics.rmse || 0).toFixed(2)} `
+      + `against ${best.rmse.toFixed(2)}). That is an honest result, and it is why the final `
+      + "forecast averages the model with the statistical method instead of betting "
+      + "everything on it.";
+
+  return head + drift + scale;
 }
 
 const CHART_INFO = {
   limpieza: ["What was discarded and why",
-    "Rows removed from each source, grouped by the rule that removed them."],
+    "Order lines removed from the source, grouped by the rule that removed them. The tail of "
+    + "references ordered once in six years is real data, and dropping it is a decision worth "
+    + "seeing stated."],
   dataset: ["The history available",
-    "Aggregate monthly consumption, separating observed months from simulated ones."],
-  patrones: ["Pattern map", "Each series placed by its variability and its seasonal strength."],
+    "Aggregate monthly consumption across the catalogue, month by month."],
+  patrones: ["Pattern map",
+    "Each series placed on the two figures that decide its pattern: how many months pass "
+    + "between consumptions, and how much the size of each consumption varies. The dashed "
+    + "lines are the thresholds, so the four quadrants are the classification itself."],
   decisiones: ["Where each series ended up",
-    "How the forty combinations split across the decisions."],
+    "Each of the 1,283 part-and-plant combinations falls into exactly one cause. The bar "
+    + "length is how many, and the label is the reason the optimiser gave."],
   ahorro: ["What choosing the supplier saved",
-    "Difference between the chosen offer and the worst applicable one, per purchase."],
-  comparison: ["Error against the baselines",
-    "The model against repeating last month and against the moving average."],
+    "On the left, what each plant committed against what the worst applicable offer would "
+    + "have cost. On the right, the individual purchases where that gap was widest."],
+  comparison: ["The model against the baselines",
+    "On the left the squared error, minimised by the mean the inventory policy consumes. On "
+    + "the right where the stock would end up after six months. Both matter; neither is the "
+    + "weighted error."],
   series: ["Forecast against actual consumption",
-    "Month by month on the highest-volume series during validation."],
+    "Month by month on the highest-volume series of each plant during validation."],
   scatter: ["Predicted against observed",
-    "Each point is a month. Above the diagonal it overestimates; below, it underestimates."],
+    "Each point is one month, on log axes so the mass is visible instead of one spike "
+    + "stretching everything. Above the diagonal it over-forecasts; below, it falls short."],
   errors: ["Error distribution",
-    "Centred on zero means it does not systematically buy too much or too little."],
+    "Centred on zero means it does not systematically buy too much or too little. The count "
+    + "axis is logarithmic so the tails can be seen at all."],
   importance: ["Weight of each feature", "How much the error worsens when each one is shuffled."],
 };
 
@@ -104,18 +203,27 @@ const STAGE_INFO = {
 
   dataset: {
     step: "1",
-    carries: "72 months × 40 series",
+    carries: (s) => `${s.months} months × ${s.series} series`,
     headline: (s) => `${s.months} months · ${s.series} series`,
-    note: (s) => `Of the ${count(s.synthetic_rows + s.real_rows)} rows of history, `
-      + `${count(s.synthetic_rows)} are months simulated backwards. They were generated `
-      + "because detecting seasonality needs at least two full cycles and the observed "
-      + "data did not reach that far. Worth saying before anyone asks: the decisions are "
-      + "correct given that data, but half of the history did not happen.",
+    note: (s) => (s.synthetic_rows
+      ? `Of the ${count(s.synthetic_rows + s.real_rows)} rows of history, `
+        + `${count(s.synthetic_rows)} are months simulated backwards, generated because `
+        + "detecting seasonality needs two full cycles and the observed data did not reach "
+        + "that far. Worth saying before anyone asks: the decisions are correct given that "
+        + "data, but part of the history did not happen."
+      : `All ${count(s.real_rows)} rows of history are observed months — nothing is `
+        + "simulated backwards. The source is a real order book of industrial spare parts "
+        + `for food and beverage plants, and its ${s.months} months are exactly what the `
+        + "pipeline needs to look for a yearly cycle. The grid is dense on purpose: a month "
+        + "with no order appears as a zero rather than being absent, and in a spare-parts "
+        + "catalogue those zeros are most of the data."),
     figures: (s) => [
       figureCard("Months of history", s.months, `${s.first_month} to ${s.last_month}`),
       figureCard("Series", s.series, `${s.parts} parts × ${s.cities} plants`),
-      figureCard("Simulated rows", count(s.synthetic_rows),
-        `of ${count(s.synthetic_rows + s.real_rows)}`, "hold"),
+      s.synthetic_rows
+        ? figureCard("Simulated rows", count(s.synthetic_rows),
+          `of ${count(s.synthetic_rows + s.real_rows)}`, "hold")
+        : figureCard("Observed rows", count(s.real_rows), "none simulated", "go"),
       figureCard("Suppliers", s.suppliers, `${s.offers} offers`),
     ],
     detail: (s) => panel("Tables generated", dataTable(["Table", "Rows"],
@@ -127,49 +235,62 @@ const STAGE_INFO = {
     carries: "pattern per series",
     headline: (s) => `${Object.keys(s.counts).length} patterns`,
     note: (s) => "Classification is per part and plant, not per part alone: the same spare "
-      + "can be stable in Nava and volatile in Obregón. Seasonal requires two conditions "
-      + `at once, strength ≥ ${s.thresholds.seasonal_strength} and a significant month `
-      + `effect (p < ${s.thresholds.seasonal_pvalue}), because strength on its own labels `
-      + "even pure noise as seasonal.",
+      + "can behave differently in Nava and in Obregón. Intermittency is asked first, "
+      + `before anything else: a series that only moves in ${pct(1 / 4, 0)} of its months `
+      + "gives the seasonal and trend tests almost nothing but zeros to work on, so they "
+      + "would be measuring the pattern of gaps rather than a cycle. The cut is the one "
+      + "from Syntetos, Boylan and Croston — average interval above "
+      + `${s.thresholds.adi_intermittent ?? 1.32}, and lumpy on top of that when the size `
+      + `of each event varies with CV² above ${s.thresholds.cv2_lumpy ?? 0.49}. Seasonal `
+      + `still requires two conditions at once, strength ≥ ${s.thresholds.seasonal_strength} `
+      + `and a significant month effect (p < ${s.thresholds.seasonal_pvalue}), because `
+      + "strength on its own labels even pure noise as seasonal.",
     figures: (s) => {
       const tones = { Estable: "go", Volatil: "hold", Estacional: "" };
       return Object.entries(s.counts)
         .map(([name, value]) =>
           figureCard(patternWord(name), value, "series", tones[name]))
-        .concat(figureCard("Volatility threshold",
-          `CV > ${s.thresholds.cv_volatile}`, "σ over μ"));
+        .concat(figureCard("Intermittency cut",
+          `ADI > ${s.thresholds.adi_intermittent ?? 1.32}`,
+          `lumpy if CV² > ${s.thresholds.cv2_lumpy ?? 0.49}`));
     },
-    detail: (s) => panel("Most volatile series", dataTable(
-      ["Series", "Pattern", "CV", "Seasonal strength", "p-value", "Confidence"],
-      s.points.slice().sort((a, b) => b.cv - a.cv).slice(0, 10).map((p) => [
-        `<span class="mono">${escape(p.sku_id)} · ${escape(p.city_id)}</span>`,
-        `<span class="pill">${escape(patternWord(p.pattern))}</span>`,
-        `<span class="mono num">${p.cv.toFixed(2)}</span>`,
-        `<span class="mono num">${p.seasonal_strength.toFixed(2)}</span>`,
-        `<span class="mono num">${p.seasonal_pvalue.toFixed(3)}</span>`,
-        `<span class="mono num">${p.confidence.toFixed(2)}</span>`,
-      ]))),
+    detail: (s) => panel("The series that move least", dataTable(
+      ["Series", "Pattern", "ADI", "CV²", "Months with no demand", "Confidence"],
+      s.points.slice()
+        .sort((a, b) => (b.adi ?? b.cv) - (a.adi ?? a.cv))
+        .slice(0, 10).map((p) => [
+          `<span class="mono">${escape(p.sku_id)} · ${escape(p.city_id)}</span>`,
+          `<span class="pill">${escape(patternWord(p.pattern))}</span>`,
+          `<span class="mono num">${(p.adi ?? 0).toFixed(2)}</span>`,
+          `<span class="mono num">${(p.cv_squared ?? 0).toFixed(2)}</span>`,
+          `<span class="mono num">${pct(p.zero_ratio ?? 0, 0)}</span>`,
+          `<span class="mono num">${p.confidence.toFixed(2)}</span>`,
+        ]))),
   },
 
   modelo: {
     step: "3",
     carries: "forecast and reorder point",
-    headline: (s) => (s.metrics.wmape ? `WMAPE ${pct(s.metrics.wmape)}` : "not trained"),
-    note: (s) => (s.metrics.wmape
-      ? `${verdict(s.metrics)} This stage also settles the reorder point of every part: `
-        + `${s.policy.demand_lead_time_avg} units of demand during the `
+    headline: (s) => (s.metrics.rmse ? `RMSE ${s.metrics.rmse.toFixed(1)}` : "not trained"),
+    note: (s) => (s.metrics.rmse
+      ? `${verdict(s.metrics, s.baselines)} This stage also settles the reorder point of every `
+        + `part: ${s.policy.demand_lead_time_avg} units of demand during the `
         + `${s.policy.lead_time_days}-day lead time plus a buffer of `
-        + `${s.policy.safety_stock_avg} units on average. Half of that buffer is not there `
-        + `for the demand but for the supplier: the lead time swings with a deviation of `
+        + `${s.policy.safety_stock_avg} units on average. A good part of that buffer is not `
+        + `there for the demand but for the supplier: the lead time swings with a deviation of `
         + `${s.policy.lead_time_std_days} days.`
       : "The model has not been trained yet. Run: python -m app.services.train_model"),
     figures: (s) => [
-      figureCard("Model error", s.metrics.wmape ? pct(s.metrics.wmape) : "—",
-        "WMAPE on validation", "go"),
-      figureCard("Over last month", pct(s.metrics.mejora_vs_ultimo_mes, 0), "trivial baseline"),
-      figureCard("Over moving average", pct(s.metrics.mejora_vs_promedio_movil, 1),
-        "method in production", "hold"),
-      figureCard("Bias", (s.metrics.bias || 0).toFixed(2), "units per month"),
+      figureCard("Squared error", s.metrics.rmse ? s.metrics.rmse.toFixed(2) : "—",
+        "RMSE · the metric that ranks correctly here", "go"),
+      figureCard("Cumulative bias", `${(s.metrics.cumulative_bias || 0) >= 0 ? "+" : ""}${
+        count(Math.round(s.metrics.cumulative_bias || 0))}`,
+      "units over or short across the validation"),
+      figureCard("Scaled error", s.metrics.mase ? s.metrics.mase.toFixed(2) : "—",
+        "MASE · under 1 beats the naive", (s.metrics.mase || 9) < 1 ? "go" : "hold"),
+      figureCard("Weighted error", s.metrics.wmape ? pct(s.metrics.wmape) : "—",
+        "WMAPE · read the note before judging it", "hold"),
+      figureCard("Bias per month", (s.metrics.bias || 0).toFixed(2), "units per month"),
       figureCard("Planning lead time", `${s.policy.lead_time_days} d`,
         `± ${s.policy.lead_time_std_days} d of deviation`),
       figureCard("Total reorder point", count(s.policy.inventory_min_total),
@@ -179,17 +300,25 @@ const STAGE_INFO = {
       ["Family", "Features"],
       s.families.map((f) => [escape(f.family),
         `<span class="mono meta">${f.features.map(escape).join(", ")}</span>`])))
-      + panel("What comes out · one forecast per series and month", dataTable(
-        ["Method", "WMAPE", "MAE", "Bias"],
-        [["Global model", s.metrics.wmape, s.metrics.mae, s.metrics.bias]]
-          .concat(Object.entries(s.baselines).map(([name, r]) =>
-            [name.replace(/_/g, " "), r.wmape, r.mae, r.bias]))
-          .map(([name, wmape, mae, bias]) => [
-            escape(name),
-            `<span class="mono num">${pct(wmape)}</span>`,
-            `<span class="mono num">${(mae || 0).toFixed(2)}</span>`,
-            `<span class="mono num">${(bias || 0).toFixed(2)}</span>`,
-          ])))
+      + panel("What comes out · one forecast per series and month",
+        `<p class="meta subpanel__lead">Ordered by the metrics that decide. RMSE is minimised by
+          the <b>mean</b>, which is what the inventory policy consumes. Cumulative bias says in
+          units how short or long the plants would end up. The two on the right are built on
+          absolute error, which is minimised by the <b>median</b> — and on these series the
+          median is zero, so they reward the method that forecasts least.</p>`
+        + dataTable(
+          ["Method", "RMSE", "Cumulative bias", "MASE", "WMAPE", "MAE"],
+          [["Global model", s.metrics, true]]
+            .concat(Object.entries(s.baselines).map(([name, r]) => [baselineName(name), r, false]))
+            .map(([name, m, isModel]) => [
+              isModel ? `<b>${escape(name)}</b>` : escape(name),
+              `<span class="mono num"><b>${(m.rmse || 0).toFixed(2)}</b></span>`,
+              `<span class="mono num">${(m.cumulative_bias || 0) >= 0 ? "+" : ""}${
+                count(Math.round(m.cumulative_bias || 0))}</span>`,
+              `<span class="mono num meta">${(m.mase || 0).toFixed(2)}</span>`,
+              `<span class="mono num meta">${pct(m.wmape)}</span>`,
+              `<span class="mono num meta">${(m.mae || 0).toFixed(2)}</span>`,
+            ])))
       + panel("Where the final figure comes from", dataTable(
         ["Source", "Series"],
         Object.entries(s.policy.sources).map(([name, value]) => [
@@ -247,15 +376,36 @@ const STAGE_INFO = {
           `<span class="mono num">${r.count}</span>`,
           `<span class="meta mono">${escape(r.examples.map((e) => `${e.sku_id}·${e.city_id}`).join(", "))}</span>`,
         ])))
-      + (s.savings && s.savings.length ? panel("What each purchase saved", dataTable(
-        ["Series", "Offers", "Chosen", "Worst applicable", "Difference"],
-        s.savings.map((i) => [
-          `<span class="mono">${escape(i.sku_id)} · ${escape(i.city_id)}</span>`,
-          `<span class="mono num">${i.offers}</span>`,
-          `<span class="mono num">${money(i.chosen_cost_usd)}</span>`,
-          `<span class="mono num meta">${money(i.worst_cost_usd)}</span>`,
-          `<span class="mono num gain">−${money(i.saving_usd)}</span>`,
-        ]))) : ""),
+      + (s.savings && s.savings.length ? panel("What choosing the supplier saved",
+        `<p class="meta subpanel__lead">Every purchase is priced against the worst offer that
+          would also have satisfied its constraints. The gap is what the supplier choice is
+          worth — not a projection, a comparison between offers already on the table.</p>`
+        + dataTable(
+          ["Plant", "Purchases", "With a real choice", "Committed", "Worst applicable",
+            "Saved", "Saved %"],
+          savingsByPlant(s.savings).map(([plant, p], index, all) => {
+            const gap = p.worst - p.chosen;
+            const strong = index === all.length - 1 ? "b" : "span";
+            return [
+              `<${strong} class="mono">${escape(plant)}</${strong}>`,
+              `<span class="mono num">${p.orders}</span>`,
+              `<span class="mono num meta">${p.choices}</span>`,
+              `<span class="mono num">${money(p.chosen)}</span>`,
+              `<span class="mono num meta">${money(p.worst)}</span>`,
+              `<span class="mono num gain">−${money(gap)}</span>`,
+              `<span class="mono num">${percent(p.worst ? gap / p.worst : 0, 1)}</span>`,
+            ];
+          }))
+        + drilldown("See the purchases one by one", s.savings.length, dataTable(
+          ["Part", "Plant", "Offers", "Chosen", "Worst applicable", "Difference"],
+          s.savings.map((i) => [
+            `<span class="mono">${escape(i.sku_id)}</span>`,
+            `<span class="mono">${escape(i.city_id)}</span>`,
+            `<span class="mono num">${i.offers}</span>`,
+            `<span class="mono num">${money(i.chosen_cost_usd)}</span>`,
+            `<span class="mono num meta">${money(i.worst_cost_usd)}</span>`,
+            `<span class="mono num gain">−${money(i.saving_usd)}</span>`,
+          ])))) : ""),
   },
 };
 
@@ -303,13 +453,17 @@ function paintTrack() {
     const info = STAGE_INFO[stage.id];
     if (!info) return "";
     const link = index < pipeline.stages.length - 1
-      ? `<li class="pipe__link" aria-hidden="true"><span>${escape(info.carries)}</span></li>` : "";
+      ? `<li class="pipe__link" aria-hidden="true"><span>${
+        escape(typeof info.carries === "function" ? info.carries(stage) : info.carries)
+      }</span></li>` : "";
     return `<li class="pipe__step">
       <button type="button" class="pipe__btn${stage.id === pipeline.current ? " pipe__btn--on" : ""}"
               data-stage="${stage.id}" aria-current="${stage.id === pipeline.current}">
-        <span class="pipe__num">${info.step}</span>
+        <span class="pipe__num">Step ${info.step}</span>
         <span class="pipe__name">${escape(stage.title)}</span>
         <span class="pipe__fig">${escape(info.headline(stage))}</span>
+        <span class="pipe__go">${stage.id === pipeline.current
+          ? "Showing this step" : "See this step →"}</span>
       </button>
     </li>${link}`;
   }).join("");
@@ -333,11 +487,20 @@ function selectStage(id) {
   el("stage-detail").innerHTML = info.detail(stage);
   el("stage-theory").innerHTML = renderTheory(stage.id, stage.parameters);
 
+  /* Sin carga diferida. `loading="lazy"` decide si pedir la imagen segun la
+     posicion del elemento respecto del viewport, y esta pantalla vive dentro de
+     una vista que se muestra y se oculta con `hidden`: cuando la vista aparece,
+     el navegador ya calculo que estas imagenes no hacian falta y no vuelve a
+     evaluarlo. Cuatro de las cinco graficas se quedaban pedidas para siempre y
+     lo que se veia en su lugar era el texto alternativo, que repite el titulo.
+     Son cinco imagenes y son el contenido de la pantalla: diferirlas no ahorra
+     nada que merezca ese riesgo. */
   el("stage-charts").innerHTML = (stage.charts || []).map((chart) => {
     const [title, note] = CHART_INFO[chart.key] || [chart.key, ""];
     return `<section class="card"><h3>${escape(title)}</h3>
       <p class="meta">${escape(note)}</p>
-      <img src="${apiUrl(`/${chart.source}/charts/${chart.key}`)}" alt="${escape(title)}" loading="lazy">
+      <img src="${apiUrl(`/${chart.source}/charts/${chart.key}`)}" alt="${escape(title)}"
+           decoding="async">
     </section>`;
   }).join("");
 
@@ -504,27 +667,103 @@ function renderTrace(trace) {
       <p class="meta">${escape(decision.reason)}</p>`);
 }
 
+/* Las plantas de una pieza son las plantas **de esa pieza**, y no las del
+   catalogo entero. De las 876 referencias solo 407 se consumen en las dos: una
+   pieza que solo mueve Obregon no tiene serie en Nava, y ofrecer esa combinacion
+   es ofrecer un recorrido que no existe. Antes las dos listas se llenaban por
+   separado y la seleccion inicial —primera pieza, primera planta— caia en un par
+   inexistente, de modo que la pantalla abria con un error en lugar de con un
+   ejemplo. */
+const tracerPlants = new Map();
+const tracerParts = [];
+
+function fillPlants() {
+  const citySelect = el("tr-city");
+  const plants = tracerPlants.get(el("tr-sku").value) || new Map();
+  const previous = citySelect.value;
+
+  citySelect.innerHTML = [...plants.entries()].sort()
+    .map(([value, label]) => `<option value="${escape(value)}">${escape(label)}</option>`).join("");
+
+  if (plants.has(previous)) citySelect.value = previous;
+}
+
+/* Solo se busca por texto, y a proposito.
+ *
+ * Hubo tambien filtros por decision y por criticidad, y estaban mal planteados:
+ * el desplegable elige una **pieza**, pero la decision pertenece a la serie
+ * —pieza y planta—. Una referencia que se compra en Nava y no se toca en
+ * Obregon pasa el filtro "Buy" y despues muestra el recorrido de Obregon, que
+ * dice "No action". El filtro no mentia sobre la pieza; mentia sobre lo que se
+ * iba a ver, que es peor.
+ *
+ * Arreglarlo pedia que el filtro eligiera la serie y arrastrara el selector de
+ * planta con ella, y eso son dos controles gobernando un tercero para una
+ * pantalla cuyo trabajo es explicar el pipeline con un ejemplo. La busqueda por
+ * codigo o descripcion resuelve el caso real —"quiero ver esta pieza"— sin
+ * inventar ninguna de esas reglas.
+ */
+function matchingParts() {
+  const search = el("tr-search").value.trim().toLowerCase();
+  if (!search) return tracerParts;
+  return tracerParts.filter((part) => part.label.toLowerCase().includes(search));
+}
+
+/** Rellena el desplegable con lo que sobrevive a la busqueda, conservando la
+ *  seleccion si sigue estando: escribir para buscar otra cosa no tiene por que
+ *  recargar el recorrido que se estaba mirando. */
+function fillParts() {
+  const skuSelect = el("tr-sku");
+  const previous = skuSelect.value;
+  const visible = matchingParts();
+
+  skuSelect.innerHTML = visible
+    .map((part) => `<option value="${escape(part.sku_id)}">${escape(part.label)}</option>`)
+    .join("");
+  skuSelect.disabled = !visible.length;
+
+  el("tr-matches").textContent = visible.length === tracerParts.length
+    ? `· ${count(tracerParts.length)} parts`
+    : `· ${count(visible.length)} of ${count(tracerParts.length)}`;
+
+  if (visible.some((part) => part.sku_id === previous)) {
+    skuSelect.value = previous;
+    return false;
+  }
+  return visible.length > 0;
+}
+
 function fillTracer() {
   const skuSelect = el("tr-sku");
-  const citySelect = el("tr-city");
   if (skuSelect.dataset.ready || !state.items.length) return;
 
-  const parts = new Map();
-  const cities = new Map();
+  const byPart = new Map();
   state.items.forEach((item) => {
-    parts.set(item.sku_id, `${item.sku_id} · ${item.description}`);
-    cities.set(item.city_id, item.city_name);
+    if (!byPart.has(item.sku_id)) {
+      byPart.set(item.sku_id, {
+        sku_id: item.sku_id,
+        label: `${item.sku_id} · ${item.description}`,
+      });
+    }
+    if (!tracerPlants.has(item.sku_id)) tracerPlants.set(item.sku_id, new Map());
+    tracerPlants.get(item.sku_id).set(item.city_id, item.city_name);
   });
 
-  const fill = (node, entries) => {
-    node.innerHTML = entries
-      .map(([value, label]) => `<option value="${escape(value)}">${escape(label)}</option>`).join("");
-  };
+  tracerParts.length = 0;
+  tracerParts.push(...[...byPart.values()].sort((a, b) => a.label.localeCompare(b.label)));
 
-  fill(skuSelect, [...parts.entries()].sort());
-  fill(citySelect, [...cities.entries()].sort());
+  fillParts();
+  fillPlants();
   skuSelect.dataset.ready = "1";
   loadTrace();
+}
+
+/** Escribir en la busqueda solo recarga el recorrido si cambio la pieza. */
+function applyFilters() {
+  if (fillParts()) {
+    fillPlants();
+    loadTrace();
+  }
 }
 
 export async function loadTrace() {
@@ -532,19 +771,26 @@ export async function loadTrace() {
   const city = el("tr-city").value;
   if (!sku || !city) return;
 
-  const box = el("trace");
-  box.innerHTML = '<p class="meta">Walking the pipeline…</p>';
-  try {
-    box.innerHTML = renderTrace(await api(
-      `/pipeline/trace/${encodeURIComponent(sku)}/${encodeURIComponent(city)}`));
-  } catch (error) {
-    box.innerHTML = `<p class="meta">${escape(error.message)}</p>`;
-  }
+  await whileLoading(
+    { into: "trace", key: `traza:${sku}:${city}`, message: `Walking ${sku} through the pipeline…` },
+    async () => {
+      try {
+        el("trace").innerHTML = renderTrace(await api(
+          `/pipeline/trace/${encodeURIComponent(sku)}/${encodeURIComponent(city)}`));
+      } catch (error) {
+        el("trace").innerHTML = `<p class="meta">${escape(error.message)}</p>`;
+      }
+    },
+  );
 }
 
 export function initPipeline() {
-  el("tr-sku").addEventListener("change", loadTrace);
+  el("tr-sku").addEventListener("change", () => {
+    fillPlants();
+    loadTrace();
+  });
   el("tr-city").addEventListener("change", loadTrace);
+  el("tr-search").addEventListener("input", applyFilters);
 }
 
 export function refreshTracer() { fillTracer(); }

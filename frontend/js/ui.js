@@ -4,6 +4,7 @@ import { decimal, escape, leadTime, months, pattern, units, usd } from "./format
 
 export const PENDING = "Pendiente aprobacion";
 export const ADVANCED = ["Aprobado", "Contactado proveedor", "Orden confirmada"];
+export const REJECTED = "Rechazado";
 
 /* El semaforo de la pantalla. Las cinco decisiones no piden lo mismo y la
    interfaz tiene que decirlo antes que ninguna otra cosa:
@@ -27,106 +28,47 @@ const SEMAPHORE = {
 
 export const semaphore = (item) => SEMAPHORE[item.decision] || SEMAPHORE.NO_COMPRAR;
 
-/** Medidor de existencias: stock sobre la escala del nivel de reposicion, con
- *  marca en el punto de reorden. Codifica en una sola lectura la tension que
- *  decide cada caso. */
+/** Medidor de existencias, dibujado como la escala que es.
+ *
+ *  La version anterior era una barra roja medio llena y una frase debajo con
+ *  tres numeros. La barra no decia donde estaba cada cosa y la frase obligaba a
+ *  releerla para emparejar cada cifra con su sitio, de modo que ninguna de las
+ *  dos servia sola y juntas eran redundantes.
+ *
+ *  Ahora las cifras estan **sobre la escala, en su posicion**: el stock actual
+ *  donde termina el relleno, el punto de reorden sobre su marca negra, y el
+ *  nivel de reposicion al final. Se lee de un vistazo si el stock esta antes o
+ *  despues del punto que dispara la orden, que es la unica pregunta que el
+ *  medidor tiene que responder.
+ */
 export function gauge(item, size = "") {
   const g = item.gauge;
+  const reorder = Math.min(Math.max(g.minimum_pct, 0), 100);
+  const fill = Math.min(Math.max(g.fill_pct, 0), 100);
+
+  /* La etiqueta del stock se ancla por el lado que no se salga del medidor:
+     pegada al cero se desbordaria por la izquierda, y al maximo por la derecha. */
+  const anchor = fill < 12 ? "start" : fill > 88 ? "end" : "mid";
+
   return `
     <span class="gauge ${size}">
-      <span class="gauge__track">
-        <span class="gauge__fill gauge__fill--${g.zone}" style="width:${g.fill_pct}%"></span>
-        <span class="gauge__min" style="left:${g.minimum_pct}%" title="Reorder point"></span>
+      <span class="gauge__scale">
+        <span class="gauge__now gauge__now--${anchor}" style="left:${fill}%">
+          <b>${units(item.on_hand_qty)}</b> on hand
+        </span>
       </span>
-      <span class="gauge__read">
-        <b>${units(item.on_hand_qty)}</b> on hand · reorder at <b>${units(item.inventory_min)}</b>
-        · refill to <b>${units(item.inventory_max)}</b>
+      <span class="gauge__track">
+        <span class="gauge__fill gauge__fill--${g.zone}" style="width:${fill}%"></span>
+        <span class="gauge__min" style="left:${reorder}%"></span>
+      </span>
+      <span class="gauge__scale gauge__scale--under">
+        <span class="gauge__zero">0</span>
+        <span class="gauge__mark" style="left:${reorder}%">
+          <b>${units(item.inventory_min)}</b> reorder
+        </span>
+        <span class="gauge__max"><b>${units(item.inventory_max)}</b> refill to</span>
       </span>
     </span>`;
-}
-
-/** La accion en forma de verbo. La etiqueta COMPRAR / REVISAR es el nombre
- *  interno de la decision, no lo que la persona tiene que hacer. */
-export function actionLine(item) {
-  if (item.decision === "ESCALAR") {
-    return { text: `Escalate: ${usd(item.total_cost_usd)} USD of extra budget`, tone: "escalate" };
-  }
-  if (item.decision === "COMPRAR") {
-    return { text: `Buy ${units(item.recommended_qty)} — automatic`, tone: "go" };
-  }
-  if (item.decision === "REVISAR") {
-    return { text: `Decide: minimum lot of ${units(item.recommended_qty)}`, tone: "hold" };
-  }
-  if (item.decision === "APLAZADO") {
-    return { text: `Deferred: ${usd(item.total_cost_usd)} USD`, tone: "stop" };
-  }
-  return { text: "No action", tone: "none" };
-}
-
-/* En los casos que exigen criterio, el sistema no se calla: dice que haria y
-   por que, y deja la decision. El beneficio neto ya lo calcula el optimizador
-   —lo que cuesta el quiebre que se evita, menos lo que cuesta evitarlo— asi que
-   la recomendacion sale del dato y no de una regla inventada aqui. La vida util
-   manda por encima: comprar algo que caduca antes de consumirse no se recomienda
-   aunque el numero salga a favor. */
-export function recommendation(item) {
-  if (item.decision !== "REVISAR") return null;
-
-  const shelfMonths = item.shelf_life_days / 30.4;
-  const expires = item.coverage_months > shelfMonths;
-  const benefit = Number(item.net_benefit_usd || 0);
-
-  if (expires) {
-    return {
-      buy: false,
-      headline: "I would not buy",
-      why: `The lot leaves ${months(item.coverage_months)} of stock and the part expires `
-        + `after ${months(shelfMonths)}.`,
-    };
-  }
-  if (benefit > 0) {
-    return {
-      buy: true,
-      headline: "I would buy",
-      why: `It prevents ${usd(item.stockout_cost_usd)} USD of stockout and costs `
-        + `${usd(item.total_cost_usd)}: ${usd(benefit)} USD in favour.`,
-    };
-  }
-  return {
-    buy: false,
-    headline: "I would not buy",
-    why: `It costs ${usd(item.total_cost_usd)} USD and only prevents `
-      + `${usd(item.stockout_cost_usd)} of stockout: ${usd(Math.abs(benefit))} USD against.`,
-  };
-}
-
-/** Una linea que explica la tension, no que repite la etiqueta. */
-export function whyLine(item) {
-  const gap = item.inventory_min - item.on_hand_qty;
-
-  // El limite que bloquea no es la capacidad de la bodega sino el maximo
-  // permitido, que ya descuenta lo que caducaria antes de consumirse.
-  if (item.decision === "ESCALAR") {
-    return `Criticality ${escape(item.criticality)}: running out stops a line. `
-      + `Covering it needs ${usd(item.total_cost_usd)} USD beyond the authorised budget.`;
-  }
-  if (item.decision === "REVISAR") {
-    return `${escape(item.supplier_name || "The supplier")} does not sell fewer than `
-      + `${units(item.recommended_qty)} and the allowed maximum is `
-      + `${units(item.max_allowed_qty)}.`;
-  }
-  if (item.decision === "APLAZADO") {
-    const risk = item.stockout_cost_usd
-      ? ` It leaves ${usd(item.stockout_cost_usd)} USD of stockout risk uncovered.` : "";
-    return `Production continuity took the budget of this run first.${risk}`;
-  }
-  if (item.decision === "COMPRAR") {
-    const short = gap > 0
-      ? `${units(gap)} short of the reorder point.`
-      : "Right at the reorder point.";
-    return `${short} At the current rate there is ${runway(item)} left on the shelf.`;
-  }
-  return `Covers its minimum with ${units(item.on_hand_qty)} on hand; lasts ${runway(item)}.`;
 }
 
 /** Cuanto dura el stock actual al consumo proyectado. */
@@ -134,16 +76,113 @@ export function runway(item) {
   return months(item.on_hand_qty / Math.max(item.demand_monthly, 0.01));
 }
 
-/** Pie de la tarjeta: a quien, cuanto y en cuanto tiempo. */
-export function footLine(item) {
-  if (!item.supplier_id) {
-    return `<span>${decimal(item.demand_monthly)} u/month</span>`
-      + `<span>${pattern(item.pattern)}</span>`;
+/* ---------- Los dos bloques de la tarjeta ---------- */
+
+const CONSEQUENCE = {
+  A: "Stops a production line",
+  B: "Degrades output",
+  C: "Tolerable until the next run",
+};
+
+/** 1. El riesgo: que pasa si falta, y cuanto queda antes de que falte.
+ *
+ *  Va primero y sin cifras en dolares: lo que decide la urgencia es el tiempo y
+ *  la consecuencia, no el importe. Una pieza de 238 USD que para una linea es
+ *  mas urgente que una de 2.000 que no.
+ *
+ *  Tampoco repite las unidades. El medidor que va justo debajo ya dice cuanto
+ *  hay, en que punto se dispara la orden y hasta donde se repone, y decirlo dos
+ *  veces obligaba a comprobar que las dos versiones coincidian.
+ */
+export function riskLine(item) {
+  const consequence = CONSEQUENCE[item.criticality] || CONSEQUENCE.C;
+  const left = `about <b>${runway(item)}</b> left at the current rate`;
+
+  if (item.decision === "NO_COMPRAR") {
+    return { level: "off", text: `Covers its minimum — ${left}.` };
   }
-  return `
-    <span>${escape(item.supplier_name)}</span>
-    <span><b>${usd(item.total_cost_usd)}</b> USD</span>
-    <span>${leadTime(item.lead_time_days)}</span>`;
+  if (item.decision === "ESCALAR") {
+    return {
+      level: "escalate",
+      text: `${consequence}. ${left}, and the run cannot fund it even with the overrun.`,
+    };
+  }
+  if (item.decision === "APLAZADO") {
+    return {
+      level: "stop",
+      text: `${consequence}. ${left}, and nothing is on order: the budget went elsewhere.`,
+    };
+  }
+  return {
+    level: item.decision === "COMPRAR" ? "go" : "hold",
+    text: `${consequence}. Below the reorder point, ${left}.`,
+  };
+}
+
+/** 2. El plan: que hacer, a quien, por cuanto y cuando llega.
+ *
+ *  El proveedor lleva su etiqueta de mejor candidato porque no es el unico: el
+ *  optimizador comparo las ofertas aplicables y esta gano. Sin decirlo, el
+ *  nombre parece un dato administrativo en vez de una eleccion.
+ */
+export function planLine(item) {
+  if (item.decision === "NO_COMPRAR") {
+    return { label: "What to do", text: "Nothing this run." };
+  }
+  if (!item.supplier_id) {
+    return { label: "What to do", text: "No offer meets the constraints for this plant." };
+  }
+
+  const pick = item.alternatives_evaluated > 1
+    ? `<span class="pick">best of ${item.alternatives_evaluated}</span>`
+    : '<span class="pick">only offer</span>';
+
+  const head = `<b>${units(item.recommended_qty)}</b> from `
+    + `<b>${escape(item.supplier_name)}</b> ${pick} · <b>${usd(item.total_cost_usd)} USD</b> · `
+    + `${leadTime(item.lead_time_days)}`;
+
+  if (item.decision === "REVISAR") {
+    return {
+      label: "What to decide",
+      text: `${head}<span class="case__snag">Their minimum lot is `
+        + `${units(item.recommended_qty)} and the part only holds `
+        + `${units(item.max_allowed_qty)}.</span>`,
+    };
+  }
+  return { label: "What to do", text: head };
+}
+
+/** 3. El veredicto: que haria el sistema, en dos palabras.
+ *
+ *  Solo el titular. El razonamiento completo —cuanto quiebre evita, cuantas
+ *  veces el costo del lote, si caduca antes de consumirse— vive en el panel de
+ *  detalle, que es donde se lee cuando ya se decidio mirar el caso. En la
+ *  tarjeta ocupaba tres lineas para sostener una decision que no se toma
+ *  leyendo un parrafo, sino viendo el riesgo y el precio, que estan justo
+ *  encima.
+ *
+ *  El beneficio neto lo calcula el optimizador —lo que cuesta el quiebre que se
+ *  evita menos lo que cuesta evitarlo— asi que la recomendacion sale del dato.
+ *  La vida util manda por encima: comprar algo que caduca antes de consumirse no
+ *  se recomienda aunque el numero salga a favor.
+ */
+export function verdictLine(item) {
+  if (!["REVISAR", "APLAZADO", "ESCALAR"].includes(item.decision)) return null;
+
+  if (item.decision === "ESCALAR") {
+    return { tone: "stop", headline: "Needs budget released" };
+  }
+  if (item.decision === "APLAZADO") {
+    return { tone: "stop", headline: "Left uncovered this run" };
+  }
+
+  const shelfMonths = item.shelf_life_days / 30.4;
+  if (item.coverage_months > shelfMonths) {
+    return { tone: "hold", headline: "I would not buy — it expires first" };
+  }
+  return Number(item.net_benefit_usd || 0) > 0
+    ? { tone: "go", headline: "I would buy" }
+    : { tone: "hold", headline: "I would not buy" };
 }
 
 export function critChip(item) {

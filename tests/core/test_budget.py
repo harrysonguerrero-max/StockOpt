@@ -312,3 +312,91 @@ def test_the_service_floor_gives_way_before_declaring_the_model_infeasible():
 
     assert len(chosen["approved"]) == 1
     assert chosen["escalated"] == set()
+
+
+def rationed_table():
+    """Arma una corrida que ya viene con filas aplazadas y escaladas.
+
+    Entrada:
+        Ninguna.
+
+    Salida:
+        DataFrame de recomendaciones tal como lo dejaria una corrida previa.
+
+    Funcionalidad:
+        Es el caso que importa para el control de presupuesto de la pantalla: el
+        CSV no trae compras limpias sino el resultado de un reparto anterior, y
+        volver a repartir sobre el sin restaurar seria acumulativo.
+    """
+    return pd.DataFrame(
+        [
+            recommendation("CRIT-1", DECISION_ESCALATE, 900.0, 400.0, criticality="A"),
+            recommendation("FLEX-1", DECISION_DEFERRED, 400.0, 900.0, criticality="B"),
+            recommendation("FLEX-2", DECISION_BUY, 400.0, 850.0, criticality="B"),
+            recommendation("QUIET", DECISION_HOLD, 0.0, 0.0, criticality="C"),
+        ],
+        columns=COLUMNS,
+    )
+
+
+def test_raising_the_budget_lets_a_deferred_row_compete_again():
+    """Repartir de nuevo no puede ser acumulativo.
+
+    Si una fila aplazada por un presupuesto bajo no volviera a competir al
+    subirlo, la pantalla mentiria en la direccion mas facil de creer: que el
+    dinero adicional no sirve de nada.
+    """
+    from app.services.recommendations import reallocate
+
+    result = reallocate(rationed_table(), budget=10000.0, overrun_max=5000.0)
+    decisions = dict(zip(result.sku_id, result.decision, strict=False))
+
+    assert decisions["CRIT-1"] == DECISION_BUY
+    assert decisions["FLEX-1"] == DECISION_BUY
+    assert decisions["FLEX-2"] == DECISION_BUY
+
+
+def test_lowering_the_budget_escalates_instead_of_deferring_the_critical_row():
+    """Con el dinero justo, lo critico escala y lo discrecional cede."""
+    from app.services.recommendations import reallocate
+
+    result = reallocate(rationed_table(), budget=300.0, overrun_max=0.0)
+    decisions = dict(zip(result.sku_id, result.decision, strict=False))
+
+    assert decisions["CRIT-1"] == DECISION_ESCALATE
+    assert decisions["FLEX-1"] == DECISION_DEFERRED
+
+
+def test_a_row_that_was_never_a_purchase_survives_the_reallocation():
+    """Repartir dinero no puede resucitar lo que no procedia."""
+    from app.services.recommendations import reallocate
+
+    result = reallocate(rationed_table(), budget=99999.0, overrun_max=0.0)
+    quiet = result[result.sku_id == "QUIET"].iloc[0]
+
+    assert quiet.decision == DECISION_HOLD
+
+
+def test_without_a_budget_the_table_is_returned_untouched():
+    """None significa dejar el reparto que trae la corrida del pipeline."""
+    from app.services.recommendations import reallocate
+
+    original = rationed_table()
+    pd.testing.assert_frame_equal(reallocate(original, None, 0.0), original)
+
+
+def test_the_overrun_reported_never_exceeds_its_own_ceiling():
+    """Publicar un excedente mayor que su tope es una frase sin significado.
+
+    Ocurria cuando el reparto del CSV se habia horneado con un presupuesto y el
+    resumen aplicaba otro: las dos mitades de la pantalla hablaban de politicas
+    distintas y la resta daba un numero imposible.
+    """
+    for budget, ceiling in ((1000.0, 200.0), (500.0, 0.0), (5000.0, 1000.0)):
+        result = apply_budget(critical_table(), budget, overrun_max=ceiling)
+        summary = budget_allocation_summary(result, budget, ceiling)
+
+        assert summary["overrun_usd"] <= ceiling + 1e-9, (
+            f"excedente {summary['overrun_usd']} sobre un tope de {ceiling}"
+        )
+        assert summary["invested_usd"] <= budget + ceiling + 1e-9

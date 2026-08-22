@@ -1,0 +1,8 @@
+{
+  "max_iter": 300,
+  "learning_rate": 0.06,
+  "max_depth": 5,
+  "min_samples_leaf": 12,
+  "l2_regularization": 1.0,
+  "random_state": 20260803
+}

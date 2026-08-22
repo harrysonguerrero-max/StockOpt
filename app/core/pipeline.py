@@ -20,7 +20,7 @@ from pathlib import Path
 import pandas as pd
 
 from app.core.cleaning import MIN_DAYS_PER_MONTH
-from app.core.forecast import QUANTILE_Z
+from app.core.forecast import CROSTON_ALPHA, QUANTILE_Z
 from app.core.inventory import DAYS_PER_MONTH, Z_BY_CRITICALITY, planning_lead_time
 from app.core.optimization import (
     BUDGET_OVERRUN_MAX_USD,
@@ -38,6 +38,7 @@ from app.core.optimization import (
     REASON_INFEASIBLE,
     REASON_LOW_CONFIDENCE,
     REASON_NO_SUPPLIER,
+    REASON_NOT_WORTH_IT,
     REASON_OVER_BUDGET,
     REASON_SHELF_LIFE_BLOCK,
     SCENARIO_BUDGET_USD,
@@ -48,6 +49,8 @@ from app.core.optimization import (
     offer_costs,
 )
 from app.core.patterns import (
+    ADI_INTERMITTENT,
+    CV2_LUMPY,
     CV_VOLATILE,
     MIN_PERIODS,
     SEASONAL_PERIOD,
@@ -106,7 +109,7 @@ STAGE_TITLES = {
 
 RESULT_RULE = "RESULTADO"
 
-DISCARD_PREFIXES = ("Descartar", "Conservar solo")
+DISCARD_PREFIXES = ("Descartar", "Conservar solo", "Discard", "Keep only")
 
 KIND_DISCARD = "descarte"
 KIND_ADJUST = "ajuste"
@@ -119,7 +122,14 @@ CAUSE_BY_DECISION = {
     DECISION_ESCALATE: REASON_ESCALATE,
 }
 
-HOLD_CAUSES = (REASON_ABOVE_MINIMUM, REASON_NO_SUPPLIER, REASON_SHELF_LIFE_BLOCK, REASON_INFEASIBLE)
+HOLD_CAUSES = (
+    REASON_ABOVE_MINIMUM,
+    REASON_NO_SUPPLIER,
+    REASON_SHELF_LIFE_BLOCK,
+    REASON_INFEASIBLE,
+    REASON_NOT_WORTH_IT,
+    REASON_LOW_CONFIDENCE,
+)
 
 FEATURE_FAMILIES = [
     ("Lags of the series itself", ("lag_",)),
@@ -148,6 +158,12 @@ def _rule_kind(label: str) -> str:
         descarte reducen filas; rellenar un nulo o marcar una lectura atipica
         toca muchas filas sin eliminar ninguna, y sumarlas al embudo daria la
         impresion de que se tiro la mitad del dato.
+
+        `DISCARD_PREFIXES` reconoce los dos idiomas a proposito. El constructor
+        del dataset actual enuncia sus reglas en ingles, que es el idioma de la
+        pantalla, y el perfilado de las fuentes anteriores las enuncia en
+        castellano. Si un prefijo no se reconoce, su descarte se contabiliza como
+        ajuste y desaparece del embudo sin avisar.
     """
     if label == RESULT_RULE:
         return KIND_RESULT
@@ -308,6 +324,9 @@ def pattern_summary(patterns: pd.DataFrame) -> dict:
             "sku_id": row["sku_id"],
             "city_id": row["city_id"],
             "cv": float(row["cv"]),
+            "adi": float(row.get("adi", 0.0)),
+            "cv_squared": float(row.get("cv_squared", 0.0)),
+            "zero_ratio": float(row.get("zero_ratio", 0.0)),
             "seasonal_strength": float(row["seasonal_strength"]),
             "seasonal_pvalue": float(row["seasonal_pvalue"]),
             "confidence": float(row["confidence"]),
@@ -327,9 +346,13 @@ def pattern_summary(patterns: pd.DataFrame) -> dict:
             "cv_volatile": CV_VOLATILE,
             "seasonal_strength": SEASONAL_STRENGTH_MIN,
             "seasonal_pvalue": SEASONAL_PVALUE_MAX,
+            "adi_intermittent": ADI_INTERMITTENT,
+            "cv2_lumpy": CV2_LUMPY,
         },
         "parameters": {
             "cv_volatile": CV_VOLATILE,
+            "adi_intermittent": ADI_INTERMITTENT,
+            "cv2_lumpy": CV2_LUMPY,
             "seasonal_strength_min": SEASONAL_STRENGTH_MIN,
             "seasonal_pvalue_max": SEASONAL_PVALUE_MAX,
             "seasonal_period": SEASONAL_PERIOD,
@@ -441,6 +464,8 @@ def model_summary(
             "days_per_month": DAYS_PER_MONTH,
             "z_by_criticality": dict(Z_BY_CRITICALITY),
             "quantile_z": QUANTILE_Z,
+            "croston_alpha": CROSTON_ALPHA,
+            "sba_correction": round(1.0 - CROSTON_ALPHA / 2.0, 3),
             "blend_weight": blend_weight,
             "lead_time_days": round(lead_time, 2),
             "lead_time_std_days": round(lead_time_std, 2),
@@ -468,6 +493,15 @@ def reason_cause(decision: str, reason: str) -> str:
         Las no compras si se distinguen por su motivo, porque ahi el optimizador
         usa enunciados fijos y la diferencia entre no necesitar reposicion y no
         tener proveedor es justo lo que hay que ver.
+
+        `HOLD_CAUSES` tiene que listar **todos** los motivos que continuan con
+        cifras propias de la fila. Uno que falte no se reconoce por prefijo y
+        cada caso se convierte en su propio grupo, que es lo contrario de lo que
+        esta funcion existe para hacer. Faltaba el de la reposicion que no
+        compensa, que es el unico que redacta dos importes al final, y por eso la
+        tabla de causas publicaba 254 filas de las que 248 eran esa misma causa
+        con numeros distintos. La grafica de decisiones dibujaba una barra por
+        cada una y dejaba de ser legible.
     """
     if decision in CAUSE_BY_DECISION:
         return CAUSE_BY_DECISION[decision]

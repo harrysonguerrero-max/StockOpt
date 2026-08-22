@@ -17,10 +17,13 @@ Funcionalidad:
 """
 
 import numpy as np
+from scipy import stats
 
 DAYS_PER_MONTH = 30
 
 Z_BY_CRITICALITY = {"A": 1.65, "B": 1.28, "C": 0.84}
+
+SERVICE_LEVEL_BY_Z = {1.65: 0.95, 1.28: 0.90, 0.84: 0.80}
 
 
 def safety_stock(
@@ -67,6 +70,70 @@ def monthly_to_daily(monthly_mean: float, monthly_std: float) -> tuple:
     return (monthly_mean / days, monthly_std / np.sqrt(days))
 
 
+def service_level(z: float) -> float:
+    """Traduce el factor de servicio al nivel de servicio que representa.
+
+    Entrada:
+        z: factor de seguridad de la criticidad.
+
+    Salida:
+        Probabilidad de no quedarse sin existencias durante el ciclo.
+
+    Funcionalidad:
+        Los tres `z` del sistema son la unica declaracion de politica de
+        servicio que existe, y estan escritos como factores normales. Para tomar
+        un cuantil sobre una distribucion que no es normal hace falta el nivel
+        que esos factores representan, no el factor en si.
+
+        Se resuelve por tabla y no por la inversa de la normal para que el nivel
+        declarado sea exactamente el que dice la documentacion —95, 90 y 80 por
+        ciento— en lugar de un numero con decimales que nadie escribio.
+    """
+    known = SERVICE_LEVEL_BY_Z.get(round(float(z), 2))
+    return known if known is not None else float(stats.norm.cdf(z))
+
+
+def demand_quantile(mean: float, variance: float, level: float) -> float:
+    """Toma el cuantil de la demanda acumulada durante el plazo de entrega.
+
+    Entrada:
+        mean: demanda esperada durante el plazo.
+        variance: varianza de esa demanda.
+        level: nivel de servicio deseado.
+
+    Salida:
+        Unidades por debajo de las cuales queda la demanda con esa probabilidad.
+
+    Funcionalidad:
+        Sustituye a la aproximacion `media + z * desviacion`, que supone que la
+        demanda durante el plazo es normal. Con consumo intermitente no lo es:
+        la mayoria de los meses no se pide nada y de vez en cuando se pide un
+        lote, asi que la distribucion esta sesgada a la derecha y la
+        aproximacion normal deja el servicio real por debajo del nominal. Es
+        exactamente la limitacion que Eppen y Martin (1988) describen y que el
+        sistema declaraba sin corregir.
+
+        Se elige una binomial negativa cuando la varianza supera a la media, que
+        es el caso normal en refacciones y el motivo de que a esta distribucion
+        se la llame Poisson sobredispersada. Sus dos parametros se resuelven
+        igualando media y varianza a las observadas, de modo que el colchon
+        recoja la misma incertidumbre que antes pero repartida con la forma
+        correcta.
+
+        Si la varianza no supera a la media, la binomial negativa no esta
+        definida y se recurre a una Poisson, que es su limite. Y si no hay ni
+        media ni varianza, no hay nada que cubrir.
+    """
+    if mean <= 0:
+        return 0.0
+    if variance <= mean:
+        return float(stats.poisson.ppf(level, mean))
+
+    probability = mean / variance
+    successes = mean * probability / (1.0 - probability)
+    return float(stats.nbinom.ppf(level, successes, probability))
+
+
 def inventory_minimum(
     monthly_mean: float, monthly_std: float, lead_time: float, lead_time_std: float, z: float
 ) -> tuple:
@@ -83,13 +150,32 @@ def inventory_minimum(
         Tupla (demanda_durante_entrega, colchon_seguridad, minimo_redondeado).
 
     Funcionalidad:
-        Traduce la demanda mensual al horizonte real de reposicion y le suma el
-        colchon de seguridad. El minimo se redondea hacia arriba porque las
-        piezas se compran en unidades enteras.
+        Traduce la demanda mensual al horizonte real de reposicion y busca el
+        nivel que cubre esa demanda con la probabilidad que declara la
+        criticidad de la pieza.
+
+        La varianza se compone igual que antes, sumando la incertidumbre de la
+        demanda y la del plazo de entrega. Lo que cambia es como se convierte esa
+        varianza en unidades: en lugar de multiplicarla por un factor normal, se
+        toma el cuantil de una distribucion sesgada a la derecha, que es la forma
+        que de verdad tiene la demanda de una refaccion durante un plazo.
+
+        El colchon de seguridad se sigue reportando como la diferencia entre ese
+        nivel y la demanda esperada, de modo que las dos mitades del minimo
+        —lo que se consume mientras se espera y lo que absorbe la variabilidad—
+        se puedan leer por separado como hasta ahora.
+
+        El minimo se redondea hacia arriba porque las piezas se compran en
+        unidades enteras. En las series de mucho volumen el resultado coincide
+        practicamente con la formula normal, que es lo esperable: la binomial
+        negativa converge a la normal cuando la media crece.
     """
     daily_demand, daily_std = monthly_to_daily(monthly_mean, monthly_std)
     demand_lead_time = daily_demand * lead_time
-    buffer = safety_stock(daily_demand, daily_std, lead_time, lead_time_std, z)
+    variance = lead_time * daily_std**2 + (daily_demand**2) * (lead_time_std**2)
+
+    level = demand_quantile(demand_lead_time, max(variance, 0.0), service_level(z))
+    buffer = max(0.0, level - demand_lead_time)
     return (demand_lead_time, buffer, int(np.ceil(demand_lead_time + buffer)))
 
 

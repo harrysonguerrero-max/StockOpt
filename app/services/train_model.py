@@ -21,6 +21,7 @@ from app.core.training import (
     feature_columns,
     moving_average_baseline,
     naive_baseline,
+    naive_scale,
     permutation_importance,
     temporal_split,
 )
@@ -67,6 +68,7 @@ def main() -> None:
     observer = MLObserver(project=training.PROJECT, version="v1", env="local")
     model = DemandModel(observer=observer)
     model.baselines = baselines
+    model.scale = naive_scale(validation)
 
     run_id = model.fit_and_save(
         X={"train": train[columns], "val": validation[columns]},

@@ -16,6 +16,7 @@ from app.core.dataset import OUT_DIR
 from app.core.explanation import build_explanation
 from app.core.optimization import (
     BUDGET_OVERRUN_MAX_USD,
+    apply_budget,
     DECISION_BUY,
     DECISION_DEFERRED,
     DECISION_ESCALATE,
@@ -155,11 +156,56 @@ def build_alternatives(record: dict, offers, coverage, suppliers) -> list:
     )
 
 
-def build_queue(refresh: bool = False) -> list:
+def reallocate(recommendations: pd.DataFrame, budget, overrun_max) -> pd.DataFrame:
+    """Vuelve a repartir el dinero de la corrida con otro presupuesto.
+
+    Entrada:
+        recommendations: tabla de decisiones tal como la publico el pipeline.
+        budget: presupuesto a aplicar, o None para dejar la tabla como esta.
+        overrun_max: excedente autorizado para cubrir lo critico.
+
+    Salida:
+        La tabla con las decisiones de reparto recalculadas.
+
+    Funcionalidad:
+        El reparto se hornea en el CSV cuando corre el pipeline, pero no hace
+        falta volver a correrlo para cambiarlo. La mochila solo necesita cuatro
+        columnas —el costo de la orden, el beneficio neto, la criticidad y el
+        quiebre que evita— y las cuatro estan ya escritas. Todo lo caro, que es
+        proyectar mil doscientas series y resolver un modelo entero por cada una,
+        no depende del presupuesto.
+
+        Por eso se llama en cada peticion y no solo cuando alguien mueve el
+        control: es tambien lo que sincroniza el archivo con la politica vigente
+        si el presupuesto del dominio cambio despues de generarlo.
+
+        Eso permite que el presupuesto sea un control de la pantalla y no una
+        constante: se mueve el numero y se ve en el momento que reposiciones
+        pasan a aplazadas y cuales obligan a escalar. Es la unica forma de
+        ensenar la restriccion de continuidad funcionando, porque con el
+        presupuesto holgado no se dispara nunca.
+
+        Antes de repartir se restauran las filas que una corrida previa dejo
+        aplazadas o escaladas. Sin eso el reparto seria acumulativo: una fila
+        aplazada con un presupuesto bajo no volveria a competir al subirlo, y la
+        pantalla mentiria en la direccion mas facil de creer.
+    """
+    if budget is None or recommendations.empty:
+        return recommendations
+
+    restored = recommendations.copy()
+    rationed = restored["decision"].isin([DECISION_DEFERRED, DECISION_ESCALATE])
+    restored.loc[rationed, "decision"] = DECISION_BUY
+    return apply_budget(restored, budget, overrun_max)
+
+
+def build_queue(refresh: bool = False, budget=None, overrun_max=None) -> list:
     """Arma la cola de decisiones que muestra la interfaz.
 
     Entrada:
         refresh: fuerza recargar los archivos del pipeline.
+        budget: presupuesto con el que repartir. None usa el vigente del dominio.
+        overrun_max: excedente autorizado. None usa el declarado en el dominio.
 
     Salida:
         Lista de diccionarios, uno por pieza y ciudad, listos para serializar.
@@ -176,6 +222,18 @@ def build_queue(refresh: bool = False) -> list:
         refaccion: un rodamiento y una correa no se reconocen por el codigo, se
         reconocen por su forma.
 
+        El reparto del dinero se recalcula **siempre**, tambien cuando nadie
+        pide un presupuesto concreto. El CSV trae el reparto de la corrida en que
+        se genero, y si desde entonces cambio el presupuesto del dominio, esa
+        parte del archivo queda vieja mientras el resto sigue valiendo: la
+        cantidad, el proveedor, el costo y el quiebre no dependen del dinero.
+
+        Recalcular siempre es lo que impide que las dos mitades de la pantalla
+        hablen de presupuestos distintos. Cuando no se recalculaba, el resumen
+        aplicaba la politica vigente sobre un reparto horneado con otra y podia
+        publicar un excedente mayor que su propio tope, que es una frase que no
+        significa nada.
+
         La redaccion con modelo de lenguaje no ocurre aqui a proposito. Generar
         las cuarenta explicaciones al construir la pantalla suponia cuarenta
         llamadas HTTP en serie por cada carga y por cada aprobacion. La tabla se
@@ -183,7 +241,11 @@ def build_queue(refresh: bool = False) -> list:
         la redaccion del modelo solo para la fila que el comprador abre.
     """
     sources = load_sources(refresh)
-    recommendations = sources["purchase_recommendations.csv"]
+    recommendations = reallocate(
+        sources["purchase_recommendations.csv"],
+        SCENARIO_BUDGET_USD if budget is None else budget,
+        BUDGET_OVERRUN_MAX_USD if overrun_max is None else overrun_max,
+    )
     patterns = sources["demand_patterns.csv"][["sku_id", "city_id", "pattern"]]
     suppliers = sources["suppliers.csv"]
     cities = sources["cities.csv"]
@@ -210,13 +272,42 @@ def build_queue(refresh: bool = False) -> list:
         DECISION_HOLD: 4,
     }
 
+    def initial_state(decision: str) -> str:
+        """Estado con que nace una fila que nadie ha tocado todavia.
+
+        Entrada:
+            decision: decision del optimizador para esa fila.
+
+        Salida:
+            Estado inicial del flujo de aprobacion.
+
+        Funcionalidad:
+            Una compra automatica nace **comprometida**, no pendiente. Se llama
+            automatica precisamente porque el optimizador la resolvio sin
+            ambiguedad: el stock esta por debajo del minimo, hay oferta que
+            cumple y cabe en el presupuesto. Pedirle a una persona que apruebe
+            setenta y tres veces lo que no admite discusion no es control, es
+            ruido, y el ruido es lo que hace que se apruebe sin mirar.
+
+            Lo que si nace pendiente es lo que exige criterio: el lote minimo
+            que no cabe en bodega, la pieza critica que no entra en el
+            presupuesto y la que se aplazo. Ahi la firma humana significa algo.
+
+            La traza no se pierde: la fila queda como aprobada por el sistema y
+            el registro dice bajo que regla. Y sigue siendo reversible, porque
+            rechazar una compra automatica es una transicion valida desde
+            aprobado.
+        """
+        return STATE_APPROVED if decision == DECISION_BUY else STATE_PENDING
+
     queue = []
     for record in merged.to_dict(orient="records"):
         clean = {key: (None if pd.isna(value) else value) for key, value in record.items()}
         clean["pattern"] = clean.get("pattern") or "Sin clasificar"
         stored = states.get((clean["sku_id"], clean["city_id"]))
 
-        clean["state"] = stored["state"] if stored else STATE_PENDING
+        clean["state"] = stored["state"] if stored else initial_state(clean["decision"])
+        clean["decided_by_system"] = stored is None and clean["decision"] == DECISION_BUY
         clean["rejection_reason"] = stored["rejection_reason"] if stored else None
         clean["comment"] = stored["comment"] if stored else None
         clean["purchase_order"] = stored["purchase_order"] if stored else None
@@ -238,7 +329,7 @@ def build_queue(refresh: bool = False) -> list:
     return queue
 
 
-def build_summary(queue: list) -> dict:
+def build_summary(queue: list, budget=None, overrun_max=None) -> dict:
     """Resume el estado global de la cola.
 
     Entrada:
@@ -279,7 +370,9 @@ def build_summary(queue: list) -> dict:
             for item in queue
         ]
     )
-    allocation = budget_allocation_summary(frame, SCENARIO_BUDGET_USD, BUDGET_OVERRUN_MAX_USD)
+    applied = SCENARIO_BUDGET_USD if budget is None else budget
+    ceiling = BUDGET_OVERRUN_MAX_USD if overrun_max is None else overrun_max
+    allocation = budget_allocation_summary(frame, applied, ceiling)
 
     return {
         "total": len(queue),
@@ -293,8 +386,9 @@ def build_summary(queue: list) -> dict:
         "investment_usd": round(sum(item["total_cost_usd"] for item in to_buy), 2),
         "deferred_usd": round(sum(item["total_cost_usd"] for item in deferred), 2),
         "escalated_usd": round(sum(item["total_cost_usd"] for item in escalated), 2),
-        "budget_usd": SCENARIO_BUDGET_USD,
-        "overrun_max_usd": BUDGET_OVERRUN_MAX_USD,
+        "budget_usd": applied,
+        "overrun_max_usd": ceiling,
+        "budget_default_usd": SCENARIO_BUDGET_USD,
         "overrun_usd": allocation["overrun_usd"],
         "continuity_protected": allocation["continuity_protected"],
         "service": allocation["service"],
